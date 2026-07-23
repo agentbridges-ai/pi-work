@@ -40,11 +40,11 @@ export const Navbar = () => {
       <header className="mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-4 px-6">
         <div className="flex items-center gap-4">
           <NextLink className="flex items-center gap-1" href="/">
-            <img src="/pi-work.svg" alt="pi-work" className="h-9 w-auto dark:hidden" />
+            <img src="/pi-work.svg" alt="pi-work" className="h-7 w-auto dark:hidden" />
             <img
               src="/pi-work-dark.svg"
               alt="pi-work"
-              className="hidden h-9 w-auto dark:block"
+              className="hidden h-7 w-auto dark:block"
             />
           </NextLink>
           <ul className="hidden lg:flex gap-4 ml-2">
