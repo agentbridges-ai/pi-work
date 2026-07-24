@@ -1,0 +1,24 @@
+# Codex local environment for pi-work.
+version = 1
+name = "pi-work"
+
+[setup]
+script = """
+set -euo pipefail
+npm install
+"""
+
+[[actions]]
+name = "启动开发环境"
+icon = "run"
+command = "npm run dev"
+
+[[actions]]
+name = "代码检查"
+icon = "test"
+command = "npm run lint"
+
+[[actions]]
+name = "生产构建"
+icon = "run"
+command = "npm run build"
