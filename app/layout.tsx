@@ -49,7 +49,7 @@ export default function RootLayout({
             <footer className="w-full flex items-center justify-center py-3">
               <a
                 className="flex items-center gap-1 text-current no-underline"
-                href="https://agent-bridges.com/"
+                href="https://github.com/agentbridges-ai/pi-work"
                 rel="noopener noreferrer"
                 target="_blank"
               >

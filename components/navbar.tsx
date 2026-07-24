@@ -95,10 +95,10 @@ export const Navbar = () => {
             <Button
               className="text-sm font-normal"
               variant="tertiary"
-              onPress={() => window.open(siteConfig.links.sponsor, "_blank")}
+              onPress={() => window.open(siteConfig.links.twitter, "_blank")}
             >
               <HeartFilledIcon className="text-danger" />
-              Sponsor
+              Follow us
             </Button>
           </div>
         </div>

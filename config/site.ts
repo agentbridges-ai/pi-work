@@ -1,7 +1,7 @@
 export type SiteConfig = typeof siteConfig;
 
 export const siteConfig = {
-  name: "Next.js + HeroUI",
+  name: "pi-work",
   description: "All-in-One Paperwork Agent Workspace",
   navItems: [
     {
@@ -60,10 +60,8 @@ export const siteConfig = {
     },
   ],
   links: {
-    github: "https://github.com/heroui-inc/heroui",
-    twitter: "https://twitter.com/hero_ui",
-    docs: "https://heroui.com",
-    discord: "https://discord.gg/9b6yyZKmH4",
-    sponsor: "https://patreon.com/jrgarciadev",
+    github: "https://github.com/agentbridges-ai/pi-work",
+    twitter: "https://x.com/getpiwork",
+    discord: "https://discord.gg/9Z7Ut4SG",
   },
 };

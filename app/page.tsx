@@ -17,11 +17,11 @@ export default function Home() {
       <div className="flex gap-3">
         <a
           className="button button--primary button--md rounded-full"
-          href={siteConfig.links.docs}
+          href={siteConfig.links.twitter}
           rel="noopener noreferrer"
           target="_blank"
         >
-          Documentation
+          Follow us on X
         </a>
         <a
           className="button button--tertiary button--md rounded-full"
