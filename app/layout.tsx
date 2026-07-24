@@ -54,7 +54,7 @@ export default function RootLayout({
                 target="_blank"
               >
                 <span className="text-muted">Powered by</span>
-                <p className="text-accent">HeroUI</p>
+                <p className="text-accent">AgentBridges AI</p>
               </a>
             </footer>
           </div>
