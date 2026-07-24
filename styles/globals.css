@@ -7,11 +7,3 @@
 	--font-sans: "font", sans-serif;
 	--font-mono: "monospace", monospace;
 }
-
-.site-logo {
-	filter: invert(1);
-}
-
-.dark .site-logo {
-	filter: none;
-}
