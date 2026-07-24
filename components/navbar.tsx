@@ -46,7 +46,7 @@ export const Navbar = () => {
               className="h-7 w-auto dark:hidden"
             />
             <img
-              src="/pi-work.svg"
+              src="/pi-work-dark.svg"
               alt="pi-work"
               className="hidden h-7 w-auto dark:block"
             />
