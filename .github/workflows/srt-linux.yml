@@ -1,0 +1,68 @@
+name: Linux SRT
+
+on:
+  pull_request:
+    paths: &srt_paths
+      - ".github/workflows/srt-linux.yml"
+      - ".github/actions/setup-toolchain/action.yml"
+      - "Makefile"
+      - "scripts/verify-native-pi-dependencies.mjs"
+      - "scripts/verify-pi-only-runtime.sh"
+      - "web/bin/user-space.ts"
+      - "web/bun.lock"
+      - "web/package.json"
+      - "web/scripts/pi-rpc-probe.ts"
+      - "web/scripts/verify-pi-rpc-contract.ts"
+      - "web/scripts/verify-srt-pi-rpc.ts"
+      - "web/scripts/verify-srt-isolation.ts"
+      - "web/scripts/verify-srt-user-space-transport.ts"
+      - "web/server/network-security.ts"
+      - "web/server/path-resolver.ts"
+      - "web/server/pi-bootstrap-channel.ts"
+      - "web/server/pi-rpc-contract.ts"
+      - "web/server/pi-rpc-transport.ts"
+      - "web/server/pi-*.ts"
+      - "web/server/managed-mcp.ts"
+      - "web/server/srt-policy.ts"
+      - "web/src/user-space-shell-contract.ts"
+  push:
+    branches: [main]
+    paths: *srt_paths
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  srt-production-canaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Install Linux SRT dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap ripgrep socat
+
+      - name: Enable capability-bearing user namespaces for SRT
+        run: |
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
+          fi
+
+      - name: Install frozen dependencies
+        run: make install
+
+      - name: Verify exact native Pi dependencies
+        run: make verify-pi-versions verify-pi-only-runtime
+
+      - name: Verify native Pi RPC and protected-file isolation
+        run: make test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport

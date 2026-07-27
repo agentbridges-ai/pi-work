@@ -1,0 +1,13 @@
+Date,Region,Format,Opens,Saves,Fidelity,Status
+2026-01-05,North,Document,128,74,0.94,Healthy
+2026-01-12,South,Spreadsheet,156,82,0.91,Healthy
+2026-01-19,East,Presentation,118,69,0.88,Watch
+2026-01-26,West,Document,172,91,0.96,Healthy
+2026-02-02,North,Spreadsheet,184,95,0.92,Healthy
+2026-02-09,South,Presentation,143,77,0.86,Watch
+2026-02-16,East,Document,201,108,0.97,Healthy
+2026-02-23,West,Spreadsheet,194,102,0.9,Healthy
+2026-03-02,North,Presentation,167,88,0.84,Risk
+2026-03-09,South,Document,219,116,0.98,Healthy
+2026-03-16,East,Spreadsheet,208,111,0.93,Healthy
+2026-03-23,West,Presentation,181,97,0.89,Watch

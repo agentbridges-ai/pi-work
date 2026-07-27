@@ -1,0 +1,172 @@
+{
+  "policyVersion": 2,
+  "boundaries": [
+    {
+      "path": "web/bin/cli.ts",
+      "reason": "The public process entrypoint delegates commands through real Bun child-process execution, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/cli.test.ts"
+      },
+      "evidence": [
+        "web/server/cli.test.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/bin/user-space.ts",
+      "reason": "The public CLI is exercised as a real Bun child process against a scoped test server, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/user-space-cli.test.ts"
+      },
+      "evidence": ["web/server/user-space-cli.test.ts"]
+    },
+    {
+      "path": "web/scripts/migrate-local-data-to-tenants.ts",
+      "reason": "This one-shot data migration is exercised as an isolated Bun process against a disposable data root, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/migrate-local-data-to-tenants.test.ts"
+      },
+      "evidence": [
+        "web/server/migrate-local-data-to-tenants.test.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/verify-srt-isolation.ts",
+      "reason": "This file is itself a real SRT filesystem isolation canary and must execute through its CI make target.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-srt-isolation"
+      },
+      "evidence": ["Makefile", ".github/workflows/verify.yml"]
+    },
+    {
+      "path": "web/scripts/verify-srt-user-space-ipc.ts",
+      "reason": "This file is itself a real SRT Unix-socket IPC canary and must execute through its CI make target.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-srt-user-space-ipc"
+      },
+      "evidence": ["Makefile", ".github/workflows/verify.yml"]
+    },
+    {
+      "path": "web/scripts/verify-srt-user-space-transport.ts",
+      "reason": "This file is itself a real neutral Piwork protected-file TLS/CONNECT canary and must execute through its CI make target.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-srt-user-space-transport"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/verify.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/pi-rpc-probe.ts",
+      "reason": "This helper drives the real native Pi subprocess and is exercised outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-pi-rpc-contract"
+      },
+      "evidence": [
+        "Makefile",
+        "web/scripts/verify-pi-rpc-contract.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/verify-pi-rpc-contract.ts",
+      "reason": "This file is the real native Pi JSONL subprocess contract probe and must execute through its CI make target.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-pi-rpc-contract"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/verify.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/verify-srt-pi-rpc.ts",
+      "reason": "This file launches real native Pi rpc-entry inside Linux SRT and must execute through its CI make target.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-srt-pi"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/srt-linux.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/server/index.ts",
+      "reason": "The Bun server entrypoint is executed by the authenticated Playwright job rather than inside Vitest V8 coverage.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-e2e"
+      },
+      "evidence": [
+        "Makefile",
+        "web/playwright.config.ts",
+        "web/e2e/better-auth.spec.ts",
+        "web/scripts/run-better-auth-e2e.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/server/internal-file-connect-proxy.ts",
+      "reason": "The loopback CONNECT proxy is exercised by the real Linux protected-file SRT canary because its socket lifecycle runs outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-srt-user-space-transport"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/verify.yml",
+        "web/scripts/verify-srt-user-space-transport.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/server/posix-dirfd-open.c",
+      "reason": "The fixed-ABI C wrapper is compiled by Bun FFI and exercised in the real child-process POSIX canary.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/posix-dirfd.test.ts"
+      },
+      "evidence": ["web/server/posix-dirfd.test.ts"]
+    },
+    {
+      "path": "web/server/posix-dirfd.ts",
+      "reason": "Bun FFI and libc calls run in a real child process that Vitest V8 LCOV cannot instrument.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/posix-dirfd.test.ts"
+      },
+      "evidence": ["web/server/posix-dirfd.test.ts"]
+    },
+    {
+      "path": "web/vite.config.ts",
+      "reason": "Vitest 4.1.8 hard-codes vite.config.ts in its non-overridable coverage exclusions; the real exported configuration is imported and asserted by the critical test.",
+      "runner": {
+        "kind": "critical-test",
+        "test": "web/server/vite-config.test.ts"
+      },
+      "evidence": ["web/server/vite-config.test.ts"]
+    }
+  ]
+}

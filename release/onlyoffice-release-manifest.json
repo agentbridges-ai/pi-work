@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-07-22T17:16:28.000Z",
+  "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
+  "repositories": {
+    "onlyoffice-x2t-wasm": {
+      "url": "https://github.com/agentbridges-ai/onlyoffice-x2t-wasm.git",
+      "version": "9.3.0+0",
+      "tag": "v9.3.0+0",
+      "commitSha": "a8d2869f949f022fbdd45054a8a6dc49a7bede97"
+    },
+    "onlyoffice-browser": {
+      "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
+      "version": "0.3.34",
+      "commitSha": "d15d12b6945be4d8b0f3aa1806120e740d2950ee"
+    },
+    "Piwork": {
+      "url": "https://github.com/agentbridges-ai/Piwork.git",
+      "version": "0.95.0",
+      "commitSha": "cccf6b3d5c18e47ff1415624de517685d70da5ed"
+    }
+  },
+  "npmPackage": {
+    "name": "@agentbridges-ai/onlyoffice-browser",
+    "version": "0.3.34",
+    "publish": true
+  },
+  "runtimeIdentity": {
+    "packageVersion": "0.3.34",
+    "hostBuildId": "office-host-0.3.34-r1",
+    "assetManifestDigest": "3bdbcf7609a7b84e2c95a7f09920938b942693f86eeacd58c4a45f9d7397804c"
+  },
+  "lockfiles": [
+    {
+      "repository": "Piwork",
+      "path": "web/bun.lock",
+      "sha256": "b5a36e9ab65def5af9e392b5915b283a5ae42a29b180fe29ff23630cddc5d085"
+    },
+    {
+      "repository": "onlyoffice-browser",
+      "path": "pnpm-lock.yaml",
+      "sha256": "3e0af012664be4e69fe1b34f54a0bd145a66ea009d9efc5ce832a754154c5c5c"
+    }
+  ],
+  "artifacts": [
+    {
+      "repository": "onlyoffice-browser",
+      "kind": "npm-proxy-api",
+      "path": "dist/npm/public-api.js",
+      "sha256": "3f4d99d16005a028aa0a3991cf5f70c4c6605c093d34372d4a31a9d92ccbc477"
+    },
+    {
+      "repository": "onlyoffice-browser",
+      "kind": "editor-host-bundle",
+      "path": "dist/assets/officeHost-C3IATDYk.js",
+      "sha256": "85d8ad04c592da88f2caa963bc7383d41f4db34ba3be7847772ee7b97e800963"
+    },
+    {
+      "repository": "onlyoffice-browser",
+      "kind": "compact-asset-manifest",
+      "path": "dist/onlyoffice-runtime-assets.json",
+      "sha256": "3bdbcf7609a7b84e2c95a7f09920938b942693f86eeacd58c4a45f9d7397804c"
+    },
+    {
+      "repository": "onlyoffice-browser",
+      "kind": "x2t-javascript",
+      "path": "public/wasm/x2t/x2t.js",
+      "sha256": "e2f79cf6b71d10a7b5db695dcb4043afb1c5e0412520201bf71d6f12f97648d7"
+    },
+    {
+      "repository": "onlyoffice-browser",
+      "kind": "x2t-wasm",
+      "path": "public/wasm/x2t/x2t.wasm",
+      "sha256": "93ea4ce8f375b041258c80e19989c1ffd6c5c5ac26bdb2d2c1bc4c5cb9f2d285"
+    }
+  ]
+}

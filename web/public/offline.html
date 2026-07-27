@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b2145" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>派活 · 本地服务未连接</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #f4f7fb;
+        color: #10203b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+          max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+        background:
+          radial-gradient(circle at 18% 8%, rgba(90, 153, 239, 0.22), transparent 34%),
+          linear-gradient(135deg, #f8fbff, #edf3fb);
+      }
+      main {
+        width: min(100%, 640px);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #183c73;
+        font-size: 14px;
+        font-weight: 750;
+        letter-spacing: 0.02em;
+      }
+      .brand svg {
+        width: 36px;
+        height: 36px;
+        padding: 7px;
+        border-radius: 10px;
+        background: #1d5fd1;
+        color: #f8fbff;
+      }
+      .eyebrow {
+        margin: 72px 0 16px;
+        color: #356aa8;
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1 {
+        max-width: 560px;
+        margin: 0;
+        font-size: clamp(32px, 5vw, 56px);
+        line-height: 1.06;
+        letter-spacing: -0.035em;
+      }
+      p {
+        max-width: 590px;
+        margin: 22px 0 0;
+        color: #50627c;
+        font-size: 16px;
+        line-height: 1.75;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-top: 32px;
+      }
+      .actions form {
+        margin: 0;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 12px;
+        background: #1d5fd1;
+        color: #f8fbff;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #174fae;
+      }
+      button:focus-visible {
+        outline: 3px solid rgba(29, 95, 209, 0.38);
+        outline-offset: 3px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #667790;
+        font-size: 13px;
+      }
+      .status::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #d97706;
+        content: "";
+      }
+      small {
+        display: block;
+        max-width: 560px;
+        margin-top: 56px;
+        color: #718098;
+        line-height: 1.6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #07101f;
+          color: #edf5ff;
+        }
+        body {
+          background:
+            radial-gradient(circle at 18% 8%, rgba(48, 110, 205, 0.3), transparent 34%), #07101f;
+        }
+        .brand {
+          color: #c8dfff;
+        }
+        .eyebrow {
+          color: #78adf4;
+        }
+        p {
+          color: #a8b8ce;
+        }
+        .status,
+        small {
+          color: #8fa1ba;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.341 6.484A10 10 0 0 1 10.266 21.85" />
+          <path d="M3.659 17.516A10 10 0 0 1 13.74 2.152" />
+          <circle cx="12" cy="12" r="3" />
+          <circle cx="19" cy="5" r="2" />
+          <circle cx="5" cy="19" r="2" />
+        </svg>
+        派活
+      </div>
+      <div class="eyebrow">Local service unavailable</div>
+      <h1>本地服务暂时没有响应</h1>
+      <p>
+        出于账户与文件隔离考虑，派活
+        不会在断线时展示缓存会话、文件或排队操作。请确认本地服务正在运行，然后重新连接。
+      </p>
+      <div class="actions">
+        <form action="/" method="get"><button type="submit">重新连接工作台</button></form>
+        <span class="status" role="status">等待本地服务</span>
+      </div>
+      <small>此离线页只包含应用身份与恢复说明，不包含账号、会话或用户空间数据。</small>
+    </main>
+  </body>
+</html>

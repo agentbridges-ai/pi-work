@@ -1,0 +1,22 @@
+{
+  "include": [
+    "AGENTS.md",
+    "README.md",
+    "docs/pi-rpc.md",
+    "docs/compatibility-matrix.md"
+  ],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.min.*",
+    "**/*.png",
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.svg",
+    "**/*.ico",
+    "**/*.lock",
+    "CHANGELOG.md",
+    "web/CHANGELOG.md",
+    "web/server/recording-hub/**/*.jsonl"
+  ]
+}

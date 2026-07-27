@@ -1,24 +1,58 @@
-# Codex local environment for pi-work.
+# Codex local environment for Piwork worktrees.
 version = 1
-name = "pi-work"
+name = "Piwork"
 
 [setup]
 script = """
 set -euo pipefail
-npm install
+make install
+make agent-browser
+make onlyoffice-browser
+"""
+
+[cleanup]
+script = """
+set -euo pipefail
+make dev-fast-stop
+make clean-runtime
 """
 
 [[actions]]
 name = "启动开发环境"
 icon = "run"
-command = "npm run dev"
+command = "make dev"
 
 [[actions]]
-name = "代码检查"
+name = "停止开发环境"
+icon = "tool"
+command = "make dev-fast-stop"
+
+[[actions]]
+name = "查看服务状态"
+icon = "tool"
+command = "make status"
+
+[[actions]]
+name = "快速检查"
 icon = "test"
-command = "npm run lint"
+command = "make check"
 
 [[actions]]
-name = "生产构建"
+name = "运行目标测试"
+icon = "test"
+command = "make test-targeted"
+
+[[actions]]
+name = "类型检查"
+icon = "test"
+command = "make typecheck"
+
+[[actions]]
+name = "构建前端"
 icon = "run"
-command = "npm run build"
+command = "make build"
+
+[[actions]]
+name = "完整验证"
+icon = "test"
+command = "make verify"
