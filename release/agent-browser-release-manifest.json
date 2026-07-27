@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/agentbridges-ai/agent-browser.git",
+  "sourceBranch": "feat/chrome-extension-connection",
+  "commitSha": "987743050264d3ec27d83af96f284ddcced02202",
+  "fetchRepository": "https://github.com/2217173240/agent-browser.git",
+  "fetchBranch": "xinyu/browser-control-loop",
+  "upstreamPullRequest": "https://github.com/agentbridges-ai/agent-browser/pull/1",
+  "cliVersion": "0.31.1",
+  "providerPackage": "packages/@agent-browser/chrome-extension-provider",
+  "bridgeProtocolVersion": 1,
+  "defaultBridgePort": 19826
+}

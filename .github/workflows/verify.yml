@@ -1,0 +1,104 @@
+name: verify
+
+on:
+  pull_request:
+    paths-ignore: &non_runtime_paths
+      - "**/*.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+  push:
+    branches: [main]
+    paths-ignore: *non_runtime_paths
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Install frozen dependencies
+        run: make install
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Lint maintained source
+        run: make lint
+
+      - name: Check types and dead code
+        run: make typecheck deadcode
+
+      - name: Check duplication
+        run: make dry-check
+
+      - name: Run the critical test suite
+        run: make verify-pi-only-runtime test-targeted test-pi-rpc-contract
+
+      - name: Build the production frontend
+        run: make build
+
+  better-auth-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: piwork
+          POSTGRES_PASSWORD: piwork
+          POSTGRES_DB: piwork_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U piwork -d piwork_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      HOST: 127.0.0.1
+      PORT: "3457"
+      VITE_PORT: "3458"
+      PIWORK_E2E_DATABASE_URL: postgres://piwork:piwork@127.0.0.1:5432/piwork_e2e
+      BETTER_AUTH_SECRET: piwork-e2e-secret-that-is-longer-than-thirty-two-characters
+      BETTER_AUTH_URL: http://127.0.0.1:3457
+      PIWORK_RUNTIME_MODE: local
+      PIWORK_SERVE_FRONTEND: "0"
+      PIWORK_RECORD: "0"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Install frozen dependencies
+        run: make install
+
+      - name: Install pinned Playwright Chromium
+        run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Run isolated Better Auth E2E with migrations, API, Vite, and Chromium
+        run: make test-e2e
+
+      - name: Upload Playwright diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-better-auth-${{ github.run_id }}
+          path: |
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 14

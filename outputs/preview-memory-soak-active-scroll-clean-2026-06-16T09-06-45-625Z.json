@@ -1,0 +1,2435 @@
+{
+  "version": 3,
+  "kind": "active-scroll-tab-create-close-churn",
+  "startedAt": "2026-06-16T09:06:50.236Z",
+  "files": [
+    "预览 a2ce64ab8907fb246c6f870d58b39f11.jpg",
+    "预览 会议设备.xlsx",
+    "预览 6469ec4f5df511ab956d6d5c38dff5ab.jpg",
+    "预览 f6804a9a37f89b0eb09fdaa502e192b0.png",
+    "预览 b4be6bc0dfac72bec3fa607476144de1.jpg",
+    "预览 cd4b0d18386ea6520f3ffec4c50a1d68.jpg",
+    "预览 dcf03e15abef16c8b042d5fc8f1464f7.jpg",
+    "预览 e7586de9d9b5f60319ea53de48b8a726.jpg",
+    "预览 e7586de9d9b5f60319ea53de48b8a726.png",
+    "预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls",
+    "预览 东临公安分局七里岗派出所LCD拼接屏系统-科达数字报价单.xlsx",
+    "预览 hello.jpg",
+    "预览 单线图差异与一致性校验报告.pdf",
+    "预览 东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls",
+    "预览 科达数字客户标杆案例_PPT版.pptx",
+    "预览 录制于 2026-06-16 13.49.13.mp3",
+    "预览 录制于 2026-06-16 13.49.13.mp4",
+    "预览 package.json",
+    "预览 snake.html",
+    "预览 vLLM模型.docx"
+  ],
+  "samples": [
+    {
+      "phase": "baseline",
+      "label": "baseline-active-full",
+      "ts": "2026-06-16T09:06:50.236Z",
+      "heapUsed": 887789780,
+      "heapTotal": 970260480,
+      "backingStorageSize": 485194822,
+      "embedderHeapUsedSize": 201563760,
+      "jsHeapUsedSize": 887789040,
+      "jsHeapTotalSize": 970260480,
+      "nodes": 239143,
+      "documents": 146,
+      "frames": 114,
+      "jsEventListeners": 10106,
+      "arrayBufferContents": 774,
+      "resources": 480,
+      "detachedScriptStates": 147,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 656,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 1,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-1",
+      "ts": "2026-06-16T09:07:30.425Z",
+      "heapUsed": 979825388,
+      "heapTotal": 1061978112,
+      "backingStorageSize": 432103305,
+      "embedderHeapUsedSize": 275316696,
+      "jsHeapUsedSize": 979823576,
+      "jsHeapTotalSize": 1061978112,
+      "nodes": 308555,
+      "documents": 461,
+      "frames": 119,
+      "jsEventListeners": 11979,
+      "arrayBufferContents": 1457,
+      "resources": 571,
+      "detachedScriptStates": 163,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 2,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-2",
+      "ts": "2026-06-16T09:07:30.747Z",
+      "heapUsed": 980379488,
+      "heapTotal": 1062125568,
+      "backingStorageSize": 432103305,
+      "embedderHeapUsedSize": 275863424,
+      "jsHeapUsedSize": 980377664,
+      "jsHeapTotalSize": 1062125568,
+      "nodes": 308555,
+      "documents": 461,
+      "frames": 119,
+      "jsEventListeners": 11979,
+      "arrayBufferContents": 1457,
+      "resources": 571,
+      "detachedScriptStates": 163,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 3,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-3",
+      "ts": "2026-06-16T09:07:35.240Z",
+      "heapUsed": 1075408316,
+      "heapTotal": 1155776512,
+      "backingStorageSize": 509057625,
+      "embedderHeapUsedSize": 326098800,
+      "jsHeapUsedSize": 1075407584,
+      "jsHeapTotalSize": 1155776512,
+      "nodes": 342041,
+      "documents": 607,
+      "frames": 121,
+      "jsEventListeners": 17108,
+      "arrayBufferContents": 1525,
+      "resources": 605,
+      "detachedScriptStates": 171,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 4,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-4",
+      "ts": "2026-06-16T09:07:35.568Z",
+      "heapUsed": 1075921536,
+      "heapTotal": 1155923968,
+      "backingStorageSize": 509057625,
+      "embedderHeapUsedSize": 326850272,
+      "jsHeapUsedSize": 1075920804,
+      "jsHeapTotalSize": 1155923968,
+      "nodes": 342041,
+      "documents": 607,
+      "frames": 121,
+      "jsEventListeners": 17108,
+      "arrayBufferContents": 1525,
+      "resources": 605,
+      "detachedScriptStates": 171,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 5,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-5",
+      "ts": "2026-06-16T09:07:35.881Z",
+      "heapUsed": 1076448752,
+      "heapTotal": 1156087808,
+      "backingStorageSize": 509057625,
+      "embedderHeapUsedSize": 327317304,
+      "jsHeapUsedSize": 1076447288,
+      "jsHeapTotalSize": 1156087808,
+      "nodes": 342041,
+      "documents": 607,
+      "frames": 121,
+      "jsEventListeners": 17108,
+      "arrayBufferContents": 1525,
+      "resources": 605,
+      "detachedScriptStates": 171,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 6,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-6",
+      "ts": "2026-06-16T09:07:40.626Z",
+      "heapUsed": 1053775316,
+      "heapTotal": 1203830784,
+      "backingStorageSize": 451079785,
+      "embedderHeapUsedSize": 249340608,
+      "jsHeapUsedSize": 1053773852,
+      "jsHeapTotalSize": 1203830784,
+      "nodes": 296776,
+      "documents": 162,
+      "frames": 123,
+      "jsEventListeners": 6910,
+      "arrayBufferContents": 738,
+      "resources": 527,
+      "detachedScriptStates": 179,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 7,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-7",
+      "ts": "2026-06-16T09:07:40.945Z",
+      "heapUsed": 1054309716,
+      "heapTotal": 1203994624,
+      "backingStorageSize": 451079785,
+      "embedderHeapUsedSize": 249748944,
+      "jsHeapUsedSize": 1054308984,
+      "jsHeapTotalSize": 1203994624,
+      "nodes": 296776,
+      "documents": 162,
+      "frames": 123,
+      "jsEventListeners": 6910,
+      "arrayBufferContents": 738,
+      "resources": 527,
+      "detachedScriptStates": 179,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 8,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-8",
+      "ts": "2026-06-16T09:07:41.270Z",
+      "heapUsed": 1054831828,
+      "heapTotal": 1207894016,
+      "backingStorageSize": 451079785,
+      "embedderHeapUsedSize": 250263200,
+      "jsHeapUsedSize": 1054831096,
+      "jsHeapTotalSize": 1207894016,
+      "nodes": 296776,
+      "documents": 162,
+      "frames": 123,
+      "jsEventListeners": 6910,
+      "arrayBufferContents": 738,
+      "resources": 527,
+      "detachedScriptStates": 179,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 9,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-9",
+      "ts": "2026-06-16T09:07:45.625Z",
+      "heapUsed": 1129622296,
+      "heapTotal": 1214693376,
+      "backingStorageSize": 528163550,
+      "embedderHeapUsedSize": 300677096,
+      "jsHeapUsedSize": 1129621584,
+      "jsHeapTotalSize": 1214693376,
+      "nodes": 330262,
+      "documents": 308,
+      "frames": 125,
+      "jsEventListeners": 12039,
+      "arrayBufferContents": 806,
+      "resources": 562,
+      "detachedScriptStates": 187,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 10,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-10",
+      "ts": "2026-06-16T09:07:45.949Z",
+      "heapUsed": 1130144996,
+      "heapTotal": 1214840832,
+      "backingStorageSize": 528163550,
+      "embedderHeapUsedSize": 301214888,
+      "jsHeapUsedSize": 1130143544,
+      "jsHeapTotalSize": 1214840832,
+      "nodes": 330262,
+      "documents": 308,
+      "frames": 125,
+      "jsEventListeners": 12039,
+      "arrayBufferContents": 806,
+      "resources": 562,
+      "detachedScriptStates": 187,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 11,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-11",
+      "ts": "2026-06-16T09:07:46.274Z",
+      "heapUsed": 1130667576,
+      "heapTotal": 1215004672,
+      "backingStorageSize": 528163550,
+      "embedderHeapUsedSize": 301733600,
+      "jsHeapUsedSize": 1130666844,
+      "jsHeapTotalSize": 1215004672,
+      "nodes": 330262,
+      "documents": 308,
+      "frames": 125,
+      "jsEventListeners": 12039,
+      "arrayBufferContents": 806,
+      "resources": 562,
+      "detachedScriptStates": 187,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 12,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-12",
+      "ts": "2026-06-16T09:07:52.893Z",
+      "heapUsed": 1209399256,
+      "heapTotal": 1299169280,
+      "backingStorageSize": 604037553,
+      "embedderHeapUsedSize": 355502752,
+      "jsHeapUsedSize": 1209398524,
+      "jsHeapTotalSize": 1299169280,
+      "nodes": 363754,
+      "documents": 454,
+      "frames": 127,
+      "jsEventListeners": 17172,
+      "arrayBufferContents": 874,
+      "resources": 596,
+      "detachedScriptStates": 195,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 13,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-13",
+      "ts": "2026-06-16T09:07:53.213Z",
+      "heapUsed": 1209914696,
+      "heapTotal": 1299316736,
+      "backingStorageSize": 604037553,
+      "embedderHeapUsedSize": 356111944,
+      "jsHeapUsedSize": 1209913264,
+      "jsHeapTotalSize": 1299316736,
+      "nodes": 363754,
+      "documents": 454,
+      "frames": 127,
+      "jsEventListeners": 17172,
+      "arrayBufferContents": 874,
+      "resources": 596,
+      "detachedScriptStates": 195,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 14,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-14",
+      "ts": "2026-06-16T09:07:53.519Z",
+      "heapUsed": 1210444332,
+      "heapTotal": 1299464192,
+      "backingStorageSize": 604037553,
+      "embedderHeapUsedSize": 356592616,
+      "jsHeapUsedSize": 1210443600,
+      "jsHeapTotalSize": 1299464192,
+      "nodes": 363754,
+      "documents": 454,
+      "frames": 127,
+      "jsEventListeners": 17172,
+      "arrayBufferContents": 874,
+      "resources": 596,
+      "detachedScriptStates": 195,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 15,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-15",
+      "ts": "2026-06-16T09:07:57.739Z",
+      "heapUsed": 1284605404,
+      "heapTotal": 1378451456,
+      "backingStorageSize": 679887035,
+      "embedderHeapUsedSize": 407466672,
+      "jsHeapUsedSize": 1284603960,
+      "jsHeapTotalSize": 1378451456,
+      "nodes": 397243,
+      "documents": 600,
+      "frames": 129,
+      "jsEventListeners": 22303,
+      "arrayBufferContents": 942,
+      "resources": 630,
+      "detachedScriptStates": 203,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 16,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-16",
+      "ts": "2026-06-16T09:07:58.069Z",
+      "heapUsed": 1285121536,
+      "heapTotal": 1378598912,
+      "backingStorageSize": 679887035,
+      "embedderHeapUsedSize": 408048192,
+      "jsHeapUsedSize": 1285120072,
+      "jsHeapTotalSize": 1378598912,
+      "nodes": 397243,
+      "documents": 600,
+      "frames": 129,
+      "jsEventListeners": 22303,
+      "arrayBufferContents": 942,
+      "resources": 630,
+      "detachedScriptStates": 203,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 17,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-17",
+      "ts": "2026-06-16T09:07:58.383Z",
+      "heapUsed": 1285645788,
+      "heapTotal": 1378746368,
+      "backingStorageSize": 679887035,
+      "embedderHeapUsedSize": 408448064,
+      "jsHeapUsedSize": 1285644336,
+      "jsHeapTotalSize": 1378746368,
+      "nodes": 397243,
+      "documents": 600,
+      "frames": 129,
+      "jsEventListeners": 22303,
+      "arrayBufferContents": 942,
+      "resources": 630,
+      "detachedScriptStates": 203,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 18,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-18",
+      "ts": "2026-06-16T09:08:02.492Z",
+      "heapUsed": 1346810776,
+      "heapTotal": 1451196416,
+      "backingStorageSize": 755293338,
+      "embedderHeapUsedSize": 432230392,
+      "jsHeapUsedSize": 1346804032,
+      "jsHeapTotalSize": 1451196416,
+      "nodes": 410249,
+      "documents": 631,
+      "frames": 131,
+      "jsEventListeners": 24181,
+      "arrayBufferContents": 1005,
+      "resources": 634,
+      "detachedScriptStates": 211,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 19,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-19",
+      "ts": "2026-06-16T09:08:02.812Z",
+      "heapUsed": 1347324032,
+      "heapTotal": 1451343872,
+      "backingStorageSize": 755293338,
+      "embedderHeapUsedSize": 432853320,
+      "jsHeapUsedSize": 1347322568,
+      "jsHeapTotalSize": 1451343872,
+      "nodes": 410249,
+      "documents": 631,
+      "frames": 131,
+      "jsEventListeners": 24181,
+      "arrayBufferContents": 1005,
+      "resources": 634,
+      "detachedScriptStates": 211,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 20,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-20",
+      "ts": "2026-06-16T09:08:03.105Z",
+      "heapUsed": 1347847300,
+      "heapTotal": 1451491328,
+      "backingStorageSize": 755293338,
+      "embedderHeapUsedSize": 433221024,
+      "jsHeapUsedSize": 1347845836,
+      "jsHeapTotalSize": 1451491328,
+      "nodes": 410249,
+      "documents": 631,
+      "frames": 131,
+      "jsEventListeners": 24181,
+      "arrayBufferContents": 1005,
+      "resources": 634,
+      "detachedScriptStates": 211,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 21,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-21",
+      "ts": "2026-06-16T09:08:07.539Z",
+      "heapUsed": 1305978460,
+      "heapTotal": 1431977984,
+      "backingStorageSize": 596624787,
+      "embedderHeapUsedSize": 262507552,
+      "jsHeapUsedSize": 1305977728,
+      "jsHeapTotalSize": 1431977984,
+      "nodes": 357888,
+      "documents": 208,
+      "frames": 133,
+      "jsEventListeners": 4934,
+      "arrayBufferContents": 890,
+      "resources": 548,
+      "detachedScriptStates": 219,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 22,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-22",
+      "ts": "2026-06-16T09:08:07.870Z",
+      "heapUsed": 1306500204,
+      "heapTotal": 1432141824,
+      "backingStorageSize": 596624787,
+      "embedderHeapUsedSize": 262999048,
+      "jsHeapUsedSize": 1306498740,
+      "jsHeapTotalSize": 1432141824,
+      "nodes": 357888,
+      "documents": 208,
+      "frames": 133,
+      "jsEventListeners": 4934,
+      "arrayBufferContents": 890,
+      "resources": 548,
+      "detachedScriptStates": 219,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 23,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-23",
+      "ts": "2026-06-16T09:08:08.222Z",
+      "heapUsed": 1307032096,
+      "heapTotal": 1436041216,
+      "backingStorageSize": 596624787,
+      "embedderHeapUsedSize": 263619784,
+      "jsHeapUsedSize": 1307031364,
+      "jsHeapTotalSize": 1436041216,
+      "nodes": 357888,
+      "documents": 208,
+      "frames": 133,
+      "jsEventListeners": 4934,
+      "arrayBufferContents": 890,
+      "resources": 548,
+      "detachedScriptStates": 219,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 24,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-24",
+      "ts": "2026-06-16T09:08:12.670Z",
+      "heapUsed": 1386632624,
+      "heapTotal": 1475346432,
+      "backingStorageSize": 673570568,
+      "embedderHeapUsedSize": 314481704,
+      "jsHeapUsedSize": 1386631160,
+      "jsHeapTotalSize": 1475346432,
+      "nodes": 391374,
+      "documents": 354,
+      "frames": 135,
+      "jsEventListeners": 10065,
+      "arrayBufferContents": 958,
+      "resources": 582,
+      "detachedScriptStates": 227,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 25,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-25",
+      "ts": "2026-06-16T09:08:13.006Z",
+      "heapUsed": 1387145588,
+      "heapTotal": 1475510272,
+      "backingStorageSize": 673570568,
+      "embedderHeapUsedSize": 315011360,
+      "jsHeapUsedSize": 1387144868,
+      "jsHeapTotalSize": 1475510272,
+      "nodes": 391374,
+      "documents": 354,
+      "frames": 135,
+      "jsEventListeners": 10065,
+      "arrayBufferContents": 958,
+      "resources": 582,
+      "detachedScriptStates": 227,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 26,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-26",
+      "ts": "2026-06-16T09:08:13.317Z",
+      "heapUsed": 1387667356,
+      "heapTotal": 1479409664,
+      "backingStorageSize": 673570568,
+      "embedderHeapUsedSize": 315526768,
+      "jsHeapUsedSize": 1387666624,
+      "jsHeapTotalSize": 1479409664,
+      "nodes": 391374,
+      "documents": 354,
+      "frames": 135,
+      "jsEventListeners": 10065,
+      "arrayBufferContents": 958,
+      "resources": 582,
+      "detachedScriptStates": 227,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    },
+    {
+      "phase": "cycle",
+      "cycle": 27,
+      "segmentIndex": 1,
+      "label": "active-full-cycle-27",
+      "ts": "2026-06-16T09:08:18.061Z",
+      "heapUsed": 1464663752,
+      "heapTotal": 1554530304,
+      "backingStorageSize": 749430295,
+      "embedderHeapUsedSize": 367331208,
+      "jsHeapUsedSize": 1464662288,
+      "jsHeapTotalSize": 1554530304,
+      "nodes": 424860,
+      "documents": 500,
+      "frames": 137,
+      "jsEventListeners": 15194,
+      "arrayBufferContents": 1026,
+      "resources": 616,
+      "detachedScriptStates": 235,
+      "page": {
+        "activePreviewTexts": [],
+        "blobRefs": 0,
+        "blobSrcs": [],
+        "closeButtons": 0,
+        "domElements": 434,
+        "htmlIframes": [],
+        "iframes": 0,
+        "officeIframes": [],
+        "previewBodies": 0,
+        "previewTabs": 0,
+        "ranutsPreloadHints": 6
+      },
+      "errors": [
+        "This method is not supported through raw CDP."
+      ]
+    }
+  ],
+  "cycles": [
+    {
+      "cycle": 1,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 3898,
+      "durationMs": 3898,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-1",
+        "ts": "2026-06-16T09:07:30.425Z",
+        "heapUsed": 979825388,
+        "heapTotal": 1061978112,
+        "backingStorageSize": 432103305,
+        "embedderHeapUsedSize": 275316696,
+        "jsHeapUsedSize": 979823576,
+        "jsHeapTotalSize": 1061978112,
+        "nodes": 308555,
+        "documents": 461,
+        "frames": 119,
+        "jsEventListeners": 11979,
+        "arrayBufferContents": 1457,
+        "resources": 571,
+        "detachedScriptStates": 163,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 2,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 4225,
+      "durationMs": 326,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-2",
+        "ts": "2026-06-16T09:07:30.747Z",
+        "heapUsed": 980379488,
+        "heapTotal": 1062125568,
+        "backingStorageSize": 432103305,
+        "embedderHeapUsedSize": 275863424,
+        "jsHeapUsedSize": 980377664,
+        "jsHeapTotalSize": 1062125568,
+        "nodes": 308555,
+        "documents": 461,
+        "frames": 119,
+        "jsEventListeners": 11979,
+        "arrayBufferContents": 1457,
+        "resources": 571,
+        "detachedScriptStates": 163,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 3,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 8727,
+      "durationMs": 4501,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-3",
+        "ts": "2026-06-16T09:07:35.240Z",
+        "heapUsed": 1075408316,
+        "heapTotal": 1155776512,
+        "backingStorageSize": 509057625,
+        "embedderHeapUsedSize": 326098800,
+        "jsHeapUsedSize": 1075407584,
+        "jsHeapTotalSize": 1155776512,
+        "nodes": 342041,
+        "documents": 607,
+        "frames": 121,
+        "jsEventListeners": 17108,
+        "arrayBufferContents": 1525,
+        "resources": 605,
+        "detachedScriptStates": 171,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 4,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 9041,
+      "durationMs": 314,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-4",
+        "ts": "2026-06-16T09:07:35.568Z",
+        "heapUsed": 1075921536,
+        "heapTotal": 1155923968,
+        "backingStorageSize": 509057625,
+        "embedderHeapUsedSize": 326850272,
+        "jsHeapUsedSize": 1075920804,
+        "jsHeapTotalSize": 1155923968,
+        "nodes": 342041,
+        "documents": 607,
+        "frames": 121,
+        "jsEventListeners": 17108,
+        "arrayBufferContents": 1525,
+        "resources": 605,
+        "detachedScriptStates": 171,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 5,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 9353,
+      "durationMs": 311,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-5",
+        "ts": "2026-06-16T09:07:35.881Z",
+        "heapUsed": 1076448752,
+        "heapTotal": 1156087808,
+        "backingStorageSize": 509057625,
+        "embedderHeapUsedSize": 327317304,
+        "jsHeapUsedSize": 1076447288,
+        "jsHeapTotalSize": 1156087808,
+        "nodes": 342041,
+        "documents": 607,
+        "frames": 121,
+        "jsEventListeners": 17108,
+        "arrayBufferContents": 1525,
+        "resources": 605,
+        "detachedScriptStates": 171,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 6,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 14109,
+      "durationMs": 4755,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-6",
+        "ts": "2026-06-16T09:07:40.626Z",
+        "heapUsed": 1053775316,
+        "heapTotal": 1203830784,
+        "backingStorageSize": 451079785,
+        "embedderHeapUsedSize": 249340608,
+        "jsHeapUsedSize": 1053773852,
+        "jsHeapTotalSize": 1203830784,
+        "nodes": 296776,
+        "documents": 162,
+        "frames": 123,
+        "jsEventListeners": 6910,
+        "arrayBufferContents": 738,
+        "resources": 527,
+        "detachedScriptStates": 179,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 7,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 14429,
+      "durationMs": 320,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-7",
+        "ts": "2026-06-16T09:07:40.945Z",
+        "heapUsed": 1054309716,
+        "heapTotal": 1203994624,
+        "backingStorageSize": 451079785,
+        "embedderHeapUsedSize": 249748944,
+        "jsHeapUsedSize": 1054308984,
+        "jsHeapTotalSize": 1203994624,
+        "nodes": 296776,
+        "documents": 162,
+        "frames": 123,
+        "jsEventListeners": 6910,
+        "arrayBufferContents": 738,
+        "resources": 527,
+        "detachedScriptStates": 179,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 8,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 14731,
+      "durationMs": 301,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-8",
+        "ts": "2026-06-16T09:07:41.270Z",
+        "heapUsed": 1054831828,
+        "heapTotal": 1207894016,
+        "backingStorageSize": 451079785,
+        "embedderHeapUsedSize": 250263200,
+        "jsHeapUsedSize": 1054831096,
+        "jsHeapTotalSize": 1207894016,
+        "nodes": 296776,
+        "documents": 162,
+        "frames": 123,
+        "jsEventListeners": 6910,
+        "arrayBufferContents": 738,
+        "resources": 527,
+        "detachedScriptStates": 179,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 9,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 19109,
+      "durationMs": 4378,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-9",
+        "ts": "2026-06-16T09:07:45.625Z",
+        "heapUsed": 1129622296,
+        "heapTotal": 1214693376,
+        "backingStorageSize": 528163550,
+        "embedderHeapUsedSize": 300677096,
+        "jsHeapUsedSize": 1129621584,
+        "jsHeapTotalSize": 1214693376,
+        "nodes": 330262,
+        "documents": 308,
+        "frames": 125,
+        "jsEventListeners": 12039,
+        "arrayBufferContents": 806,
+        "resources": 562,
+        "detachedScriptStates": 187,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 10,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 19432,
+      "durationMs": 321,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-10",
+        "ts": "2026-06-16T09:07:45.949Z",
+        "heapUsed": 1130144996,
+        "heapTotal": 1214840832,
+        "backingStorageSize": 528163550,
+        "embedderHeapUsedSize": 301214888,
+        "jsHeapUsedSize": 1130143544,
+        "jsHeapTotalSize": 1214840832,
+        "nodes": 330262,
+        "documents": 308,
+        "frames": 125,
+        "jsEventListeners": 12039,
+        "arrayBufferContents": 806,
+        "resources": 562,
+        "detachedScriptStates": 187,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 11,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 19756,
+      "durationMs": 324,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-11",
+        "ts": "2026-06-16T09:07:46.274Z",
+        "heapUsed": 1130667576,
+        "heapTotal": 1215004672,
+        "backingStorageSize": 528163550,
+        "embedderHeapUsedSize": 301733600,
+        "jsHeapUsedSize": 1130666844,
+        "jsHeapTotalSize": 1215004672,
+        "nodes": 330262,
+        "documents": 308,
+        "frames": 125,
+        "jsEventListeners": 12039,
+        "arrayBufferContents": 806,
+        "resources": 562,
+        "detachedScriptStates": 187,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 12,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 26375,
+      "durationMs": 6618,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-12",
+        "ts": "2026-06-16T09:07:52.893Z",
+        "heapUsed": 1209399256,
+        "heapTotal": 1299169280,
+        "backingStorageSize": 604037553,
+        "embedderHeapUsedSize": 355502752,
+        "jsHeapUsedSize": 1209398524,
+        "jsHeapTotalSize": 1299169280,
+        "nodes": 363754,
+        "documents": 454,
+        "frames": 127,
+        "jsEventListeners": 17172,
+        "arrayBufferContents": 874,
+        "resources": 596,
+        "detachedScriptStates": 195,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 13,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 26677,
+      "durationMs": 302,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-13",
+        "ts": "2026-06-16T09:07:53.213Z",
+        "heapUsed": 1209914696,
+        "heapTotal": 1299316736,
+        "backingStorageSize": 604037553,
+        "embedderHeapUsedSize": 356111944,
+        "jsHeapUsedSize": 1209913264,
+        "jsHeapTotalSize": 1299316736,
+        "nodes": 363754,
+        "documents": 454,
+        "frames": 127,
+        "jsEventListeners": 17172,
+        "arrayBufferContents": 874,
+        "resources": 596,
+        "detachedScriptStates": 195,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 14,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 26991,
+      "durationMs": 314,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-14",
+        "ts": "2026-06-16T09:07:53.519Z",
+        "heapUsed": 1210444332,
+        "heapTotal": 1299464192,
+        "backingStorageSize": 604037553,
+        "embedderHeapUsedSize": 356592616,
+        "jsHeapUsedSize": 1210443600,
+        "jsHeapTotalSize": 1299464192,
+        "nodes": 363754,
+        "documents": 454,
+        "frames": 127,
+        "jsEventListeners": 17172,
+        "arrayBufferContents": 874,
+        "resources": 596,
+        "detachedScriptStates": 195,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 15,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 31228,
+      "durationMs": 4236,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-15",
+        "ts": "2026-06-16T09:07:57.739Z",
+        "heapUsed": 1284605404,
+        "heapTotal": 1378451456,
+        "backingStorageSize": 679887035,
+        "embedderHeapUsedSize": 407466672,
+        "jsHeapUsedSize": 1284603960,
+        "jsHeapTotalSize": 1378451456,
+        "nodes": 397243,
+        "documents": 600,
+        "frames": 129,
+        "jsEventListeners": 22303,
+        "arrayBufferContents": 942,
+        "resources": 630,
+        "detachedScriptStates": 203,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 16,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 31543,
+      "durationMs": 314,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-16",
+        "ts": "2026-06-16T09:07:58.069Z",
+        "heapUsed": 1285121536,
+        "heapTotal": 1378598912,
+        "backingStorageSize": 679887035,
+        "embedderHeapUsedSize": 408048192,
+        "jsHeapUsedSize": 1285120072,
+        "jsHeapTotalSize": 1378598912,
+        "nodes": 397243,
+        "documents": 600,
+        "frames": 129,
+        "jsEventListeners": 22303,
+        "arrayBufferContents": 942,
+        "resources": 630,
+        "detachedScriptStates": 203,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 17,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 31863,
+      "durationMs": 319,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-17",
+        "ts": "2026-06-16T09:07:58.383Z",
+        "heapUsed": 1285645788,
+        "heapTotal": 1378746368,
+        "backingStorageSize": 679887035,
+        "embedderHeapUsedSize": 408448064,
+        "jsHeapUsedSize": 1285644336,
+        "jsHeapTotalSize": 1378746368,
+        "nodes": 397243,
+        "documents": 600,
+        "frames": 129,
+        "jsEventListeners": 22303,
+        "arrayBufferContents": 942,
+        "resources": 630,
+        "detachedScriptStates": 203,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 18,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 35976,
+      "durationMs": 4113,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-18",
+        "ts": "2026-06-16T09:08:02.492Z",
+        "heapUsed": 1346810776,
+        "heapTotal": 1451196416,
+        "backingStorageSize": 755293338,
+        "embedderHeapUsedSize": 432230392,
+        "jsHeapUsedSize": 1346804032,
+        "jsHeapTotalSize": 1451196416,
+        "nodes": 410249,
+        "documents": 631,
+        "frames": 131,
+        "jsEventListeners": 24181,
+        "arrayBufferContents": 1005,
+        "resources": 634,
+        "detachedScriptStates": 211,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 19,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 36272,
+      "durationMs": 295,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-19",
+        "ts": "2026-06-16T09:08:02.812Z",
+        "heapUsed": 1347324032,
+        "heapTotal": 1451343872,
+        "backingStorageSize": 755293338,
+        "embedderHeapUsedSize": 432853320,
+        "jsHeapUsedSize": 1347322568,
+        "jsHeapTotalSize": 1451343872,
+        "nodes": 410249,
+        "documents": 631,
+        "frames": 131,
+        "jsEventListeners": 24181,
+        "arrayBufferContents": 1005,
+        "resources": 634,
+        "detachedScriptStates": 211,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 20,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 36576,
+      "durationMs": 303,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-20",
+        "ts": "2026-06-16T09:08:03.105Z",
+        "heapUsed": 1347847300,
+        "heapTotal": 1451491328,
+        "backingStorageSize": 755293338,
+        "embedderHeapUsedSize": 433221024,
+        "jsHeapUsedSize": 1347845836,
+        "jsHeapTotalSize": 1451491328,
+        "nodes": 410249,
+        "documents": 631,
+        "frames": 131,
+        "jsEventListeners": 24181,
+        "arrayBufferContents": 1005,
+        "resources": 634,
+        "detachedScriptStates": 211,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 21,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 41031,
+      "durationMs": 4455,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-21",
+        "ts": "2026-06-16T09:08:07.539Z",
+        "heapUsed": 1305978460,
+        "heapTotal": 1431977984,
+        "backingStorageSize": 596624787,
+        "embedderHeapUsedSize": 262507552,
+        "jsHeapUsedSize": 1305977728,
+        "jsHeapTotalSize": 1431977984,
+        "nodes": 357888,
+        "documents": 208,
+        "frames": 133,
+        "jsEventListeners": 4934,
+        "arrayBufferContents": 890,
+        "resources": 548,
+        "detachedScriptStates": 219,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 22,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 41365,
+      "durationMs": 333,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-22",
+        "ts": "2026-06-16T09:08:07.870Z",
+        "heapUsed": 1306500204,
+        "heapTotal": 1432141824,
+        "backingStorageSize": 596624787,
+        "embedderHeapUsedSize": 262999048,
+        "jsHeapUsedSize": 1306498740,
+        "jsHeapTotalSize": 1432141824,
+        "nodes": 357888,
+        "documents": 208,
+        "frames": 133,
+        "jsEventListeners": 4934,
+        "arrayBufferContents": 890,
+        "resources": 548,
+        "detachedScriptStates": 219,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 23,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 41701,
+      "durationMs": 335,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-23",
+        "ts": "2026-06-16T09:08:08.222Z",
+        "heapUsed": 1307032096,
+        "heapTotal": 1436041216,
+        "backingStorageSize": 596624787,
+        "embedderHeapUsedSize": 263619784,
+        "jsHeapUsedSize": 1307031364,
+        "jsHeapTotalSize": 1436041216,
+        "nodes": 357888,
+        "documents": 208,
+        "frames": 133,
+        "jsEventListeners": 4934,
+        "arrayBufferContents": 890,
+        "resources": 548,
+        "detachedScriptStates": 219,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 24,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 46152,
+      "durationMs": 4451,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-24",
+        "ts": "2026-06-16T09:08:12.670Z",
+        "heapUsed": 1386632624,
+        "heapTotal": 1475346432,
+        "backingStorageSize": 673570568,
+        "embedderHeapUsedSize": 314481704,
+        "jsHeapUsedSize": 1386631160,
+        "jsHeapTotalSize": 1475346432,
+        "nodes": 391374,
+        "documents": 354,
+        "frames": 135,
+        "jsEventListeners": 10065,
+        "arrayBufferContents": 958,
+        "resources": 582,
+        "detachedScriptStates": 227,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 25,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 46474,
+      "durationMs": 321,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 hello.jpg, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-25",
+        "ts": "2026-06-16T09:08:13.006Z",
+        "heapUsed": 1387145588,
+        "heapTotal": 1475510272,
+        "backingStorageSize": 673570568,
+        "embedderHeapUsedSize": 315011360,
+        "jsHeapUsedSize": 1387144868,
+        "jsHeapTotalSize": 1475510272,
+        "nodes": 391374,
+        "documents": 354,
+        "frames": 135,
+        "jsEventListeners": 10065,
+        "arrayBufferContents": 958,
+        "resources": 582,
+        "detachedScriptStates": 227,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 26,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 46792,
+      "durationMs": 317,
+      "didGc": false,
+      "action": {
+        "opened": [],
+        "error": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-26",
+        "ts": "2026-06-16T09:08:13.317Z",
+        "heapUsed": 1387667356,
+        "heapTotal": 1479409664,
+        "backingStorageSize": 673570568,
+        "embedderHeapUsedSize": 315526768,
+        "jsHeapUsedSize": 1387666624,
+        "jsHeapTotalSize": 1479409664,
+        "nodes": 391374,
+        "documents": 354,
+        "frames": 135,
+        "jsEventListeners": 10065,
+        "arrayBufferContents": 958,
+        "resources": 582,
+        "detachedScriptStates": 227,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    },
+    {
+      "cycle": 27,
+      "segmentIndex": 1,
+      "elapsedSegmentMs": 51584,
+      "durationMs": 4791,
+      "didGc": false,
+      "action": {
+        "opened": [
+          "预览 vLLM模型.docx"
+        ],
+        "error": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0"
+      },
+      "sample": {
+        "label": "active-full-cycle-27",
+        "ts": "2026-06-16T09:08:18.061Z",
+        "heapUsed": 1464663752,
+        "heapTotal": 1554530304,
+        "backingStorageSize": 749430295,
+        "embedderHeapUsedSize": 367331208,
+        "jsHeapUsedSize": 1464662288,
+        "jsHeapTotalSize": 1554530304,
+        "nodes": 424860,
+        "documents": 500,
+        "frames": 137,
+        "jsEventListeners": 15194,
+        "arrayBufferContents": 1026,
+        "resources": 616,
+        "detachedScriptStates": 235,
+        "page": {
+          "activePreviewTexts": [],
+          "blobRefs": 0,
+          "blobSrcs": [],
+          "closeButtons": 0,
+          "domElements": 434,
+          "htmlIframes": [],
+          "iframes": 0,
+          "officeIframes": [],
+          "previewBodies": 0,
+          "previewTabs": 0,
+          "ranutsPreloadHints": 6
+        },
+        "errors": [
+          "This method is not supported through raw CDP."
+        ]
+      }
+    }
+  ],
+  "anomalies": [
+    {
+      "cycle": 1,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:30.220Z"
+    },
+    {
+      "cycle": 2,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:30.557Z"
+    },
+    {
+      "cycle": 3,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:07:35.042Z"
+    },
+    {
+      "cycle": 4,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:35.376Z"
+    },
+    {
+      "cycle": 5,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:35.691Z"
+    },
+    {
+      "cycle": 6,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:07:40.421Z"
+    },
+    {
+      "cycle": 7,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:40.755Z"
+    },
+    {
+      "cycle": 8,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:41.079Z"
+    },
+    {
+      "cycle": 9,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:07:45.413Z"
+    },
+    {
+      "cycle": 10,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:45.758Z"
+    },
+    {
+      "cycle": 11,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:46.082Z"
+    },
+    {
+      "cycle": 12,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:07:52.688Z"
+    },
+    {
+      "cycle": 13,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:53.023Z"
+    },
+    {
+      "cycle": 14,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:53.327Z"
+    },
+    {
+      "cycle": 15,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:07:57.544Z"
+    },
+    {
+      "cycle": 16,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:07:57.877Z"
+    },
+    {
+      "cycle": 17,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:07:58.192Z"
+    },
+    {
+      "cycle": 18,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:08:02.297Z"
+    },
+    {
+      "cycle": 19,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:08:02.620Z"
+    },
+    {
+      "cycle": 20,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:08:02.914Z"
+    },
+    {
+      "cycle": 21,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:08:07.343Z"
+    },
+    {
+      "cycle": 22,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:08:07.680Z"
+    },
+    {
+      "cycle": 23,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:08:08.018Z"
+    },
+    {
+      "cycle": 24,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:08:12.469Z"
+    },
+    {
+      "cycle": 25,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 hello.jpg, got 0",
+      "ts": "2026-06-16T09:08:12.815Z"
+    },
+    {
+      "cycle": 26,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 f6804a9a37f89b0eb09fdaa502e192b0.png, got 0",
+      "ts": "2026-06-16T09:08:13.125Z"
+    },
+    {
+      "cycle": 27,
+      "segmentIndex": 1,
+      "type": "action-error",
+      "message": "Expected one button 预览 5.26科达数字—东临公安分局七里岗派出所LCD拼接屏系统项目报价表55寸液晶拼接报价.xls, got 0",
+      "ts": "2026-06-16T09:08:17.855Z"
+    }
+  ],
+  "lastSegmentFinishedAt": "2026-06-16T09:08:18.206Z"
+}

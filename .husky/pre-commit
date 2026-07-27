@@ -1,0 +1,2 @@
+make lint format-check deadcode dry-check typecheck
+cd web && bun run test -- --coverage

@@ -1,0 +1,15 @@
+.git
+.DS_Store
+.codex
+.agents
+node_modules
+**/node_modules
+web/dist
+web/coverage
+web/.vite
+web/.vitest
+coverage
+tmp
+*.log
+deploy/k8s/user-pod/**/*.md
+
