@@ -14,8 +14,8 @@ help:
 		  '  make install              Install web dependencies' \
 		  '  make agent-browser        Prepare the pinned agent-browser Chrome extension runtime' \
 		  '  make agent-browser-e2e    Run the real Mac Chrome extension bridge smoke test' \
-		  '  make onlyoffice-browser   Prepare the local OnlyOffice browser runtime and font assets' \
-		  '  make prepare-onlyoffice-fonts  Collect local fonts and generate repo font assets' \
+	  '  make onlyoffice-browser   Prepare the external OnlyOffice browser runtime and font assets' \
+	  '  make prepare-onlyoffice-fonts  Collect local fonts and generate external runtime assets' \
 		  '  make onlyoffice-save-e2e  Run the OnlyOffice save-flow E2E suite' \
 		  '  make onlyoffice-print-e2e Run the OnlyOffice print-flow E2E suite' \
 		  '  make dev                  Start local Bun API + Vite frontend' \
@@ -81,10 +81,10 @@ prepare-onlyoffice-fonts:
 	./scripts/prepare-onlyoffice-fonts.sh
 
 onlyoffice-save-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/fonts/onlyoffice-browser" pnpm run test:e2e:save
+	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/onlyoffice-browser/.onlyoffice-font-assets" pnpm run test:e2e:save
 
 onlyoffice-print-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/fonts/onlyoffice-browser" pnpm run test:e2e:print
+	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/onlyoffice-browser/.onlyoffice-font-assets" pnpm run test:e2e:print
 
 .PHONY: dev dev-fast dev-fast-stop status stop
 dev: dev-fast

@@ -14,8 +14,7 @@ const configuredOnlyOfficeBrowserDir = environment
 const defaultOnlyOfficeBrowserDir = configuredOnlyOfficeBrowserDir
   ? resolve(configuredOnlyOfficeBrowserDir)
   : resolve(repoRoot, "onlyoffice-browser");
-export const DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR = resolve(repoRoot, "fonts/onlyoffice-browser");
-export const LEGACY_ONLYOFFICE_FONT_ASSETS_DIR = resolve(
+export const DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR = resolve(
   defaultOnlyOfficeBrowserDir,
   ".onlyoffice-font-assets",
 );
@@ -50,8 +49,7 @@ export function resolveOnlyOfficeFontAssetsDir(): string {
     environment.value(ENV.PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR)?.trim() ||
     environment.value(ENV.ONLYOFFICE_BROWSER_FONT_ASSETS_DIR)?.trim();
   if (configured) return resolve(configured);
-  if (existsSync(DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR)) return DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR;
-  return existsSync(LEGACY_ONLYOFFICE_FONT_ASSETS_DIR) ? LEGACY_ONLYOFFICE_FONT_ASSETS_DIR : "";
+  return existsSync(DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR) ? DEFAULT_ONLYOFFICE_FONT_ASSETS_DIR : "";
 }
 
 export function resolveOnlyOfficeGeneratedFontAsset(

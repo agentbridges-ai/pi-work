@@ -272,12 +272,13 @@ make test
   signature exists in `onlyoffice-browser/dist/assets/officeHost-*.js`, then
   reload or reopen the Office iframe before Chrome verification. Stale open
   iframes keep the old host bundle even when files on disk are correct.
-- Piwork must serve the compact OnlyOffice runtime profile. The prepared
-  `onlyoffice-browser/dist` must contain `onlyoffice-runtime-assets.json` and
-  exclude bundled PDF/Visio SDKs, package fonts, FileConverter font assets,
-  non-selected dictionaries, and bundled help image trees. Generated development
-  fonts are served from `fonts/onlyoffice-browser/` as an overlay; do not
-  reintroduce the full upstream editor asset tree into the served runtime.
+- Piwork must serve the compact OnlyOffice runtime profile from the external
+  `onlyoffice-browser/` checkout. The prepared `onlyoffice-browser/dist` must
+  contain `onlyoffice-runtime-assets.json` and exclude bundled PDF/Visio SDKs,
+  package fonts, FileConverter font assets, non-selected dictionaries, and
+  bundled help image trees. Generated development fonts are served from
+  `onlyoffice-browser/.onlyoffice-font-assets/` as an overlay; do not vendor
+  them or the full upstream editor asset tree into Piwork.
 - Treat [ONLYOFFICE/DocumentServer](https://github.com/ONLYOFFICE/DocumentServer)
   as the authoritative upstream reference for OnlyOffice save, print,
   conversion, document-resource, editor iframe, and callback/storage behavior.

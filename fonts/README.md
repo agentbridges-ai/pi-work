@@ -1,11 +1,11 @@
 # OnlyOffice 本地字体资产
 
-派活的 OnlyOffice browser runtime 需要一组预生成字体资产，包含
+派活从外部 `onlyoffice-browser` checkout 读取一组预生成字体资产，包含
 `AllFonts.js`、字体缩略图、字体文件和 `font_selection.bin`。项目默认读取：
 
 ```text
-fonts/
-  onlyoffice-browser/  # 生成后的 OnlyOffice 字体资产
+onlyoffice-browser/
+  .onlyoffice-font-assets/  # 生成后的 OnlyOffice 字体资产（不纳入 Piwork）
 ```
 
 ## 目标字体
@@ -42,12 +42,12 @@ make prepare-onlyoffice-fonts
    然后扫描 `~/Library/Fonts`、`/Library/Fonts`、`/System/Library/Fonts`、
    `/System/Library/Fonts/Supplemental` 和 Apple Font MobileAsset 目录。
 2. 写入临时 source cache。
-3. 使用 `onlyoffice/documentserver:9.3.0` 的官方字体生成器生成
-   `fonts/onlyoffice-browser/`。
+3. 使用 `onlyoffice/documentserver:9.3.0` 的官方字体生成器生成外部 checkout 中的
+   `onlyoffice-browser/.onlyoffice-font-assets/`。
 4. 运行 OnlyOffice 字体资产校验。
 
 默认使用 `zh-core` 精简字体集。Office bundle 字体存在时，生成资产会保留常见
-Office 英文字体和简体中文字体，同时避免把大量系统 fallback 字体打包进仓库。
+Office 英文字体和简体中文字体，同时避免把大量系统 fallback 字体打包进 Piwork。
 需要调试广覆盖字体集时可以运行：
 
 ```bash
@@ -78,7 +78,7 @@ KaiTi
 ```
 
 `make dev`、`make build` 和 `make onlyoffice-browser` 会校验
-`fonts/onlyoffice-browser/sdkjs/common/AllFonts.js` 中的
+`onlyoffice-browser/.onlyoffice-font-assets/sdkjs/common/AllFonts.js` 中的
 `__fonts_visible_names` 必须严格等于上表。`Microsoft YaHei UI`、`NSimSun`、
 `SimSun-ExtB`、`Cambria Math`、`FangSong` 等别名或补充字体仍保留在
 OnlyOffice 字体注册表中，用于打开已有文档，但不会出现在字体下拉里。
@@ -104,7 +104,7 @@ Wingdings 3
 
 ## 项目默认路径
 
-`make dev` 和 `make build` 默认使用 `fonts/onlyoffice-browser/`。如果该目录不存在
+`make dev` 和 `make build` 默认使用 `onlyoffice-browser/.onlyoffice-font-assets/`。如果该目录不存在
 或校验失败，普通开发启动会直接失败并提示维护者重新生成；不会在其他开发者机器上
 隐式二次转换字体。
 
@@ -118,6 +118,6 @@ make onlyoffice-browser
 
 ## 授权
 
-字体文件通常有独立授权。即使仓库是闭源，也请在提交 `fonts/source/` 或
-`fonts/onlyoffice-browser/` 下的字体二进制和生成资产前确认团队拥有相应的开发、
-分发或内部共享授权。日常 clone 后只需要已有的 `fonts/onlyoffice-browser/`。
+字体文件通常有独立授权。请在 `agentbridges-ai/onlyoffice-browser` 处理字体二进制和
+生成资产的开发、分发或内部共享授权；Piwork 不提交这些资产。日常 Piwork 开发只需要
+准备好外部 checkout 中已有的 `.onlyoffice-font-assets/`。

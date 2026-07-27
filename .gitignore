@@ -29,6 +29,8 @@ web/test-results/
 /onlyoffice-browser/
 /onlyoffice-browser
 /fonts/onlyoffice-browser/
+/demo-user-space/office/
+/outputs/preview-memory-soak-*.json
 /onlyoffice-x2t-wasm/
 /agent-browser/
 /.omc/

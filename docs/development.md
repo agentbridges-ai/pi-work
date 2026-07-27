@@ -210,7 +210,7 @@ OnlyOffice browser preview needs generated font assets before Office documents
 are opened. The project default is:
 
 ```text
-fonts/onlyoffice-browser/
+onlyoffice-browser/.onlyoffice-font-assets/
 ```
 
 Maintainers can refresh this directory with:
@@ -219,8 +219,8 @@ Maintainers can refresh this directory with:
 make prepare-onlyoffice-fonts
 ```
 
-`make dev` and `make build` validate `fonts/onlyoffice-browser/` automatically.
-They do not implicitly regenerate fonts when the checked-in assets are missing or
+`make dev` and `make build` validate `onlyoffice-browser/.onlyoffice-font-assets/` automatically.
+They do not implicitly regenerate fonts when the external assets are missing or
 invalid; refresh them intentionally with the command above.
 See [../fonts/README.md](../fonts/README.md) for the target Office font list,
 fallback behavior, and licensing notes.
@@ -334,9 +334,9 @@ treats the runtime as stale unless that manifest exists and the served `dist`
 contains only the Word, Spreadsheet, Presentation, shared core, x2t, libs, and
 `en_US` dictionary profile. The guard rejects bundled PDF/Visio SDKs, bundled
 font directories, FileConverter font assets, non-selected dictionaries, and
-bundled help image trees. Generated development fonts still live under
-`fonts/onlyoffice-browser/` and are served as an overlay; they are not copied
-from the upstream package runtime.
+bundled help image trees. Generated development fonts live under
+`onlyoffice-browser/.onlyoffice-font-assets/` and are served as an overlay;
+they are not copied into the Piwork repository or from the upstream package runtime.
 
 The OnlyOffice service worker is registered at the editor host root so the
 native print iframe can fetch the generated PDF as a same-origin URL. It must

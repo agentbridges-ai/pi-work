@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FONT_ASSETS_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ROOT_DIR/fonts/onlyoffice-browser}"
+ONLYOFFICE_BROWSER_DIR="${PIWORK_ONLYOFFICE_BROWSER_DIR:-$ROOT_DIR/onlyoffice-browser}"
+FONT_ASSETS_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ONLYOFFICE_BROWSER_DIR/.onlyoffice-font-assets}"
 FONT_SET="${PIWORK_ONLYOFFICE_BROWSER_FONT_SET:-zh-core}"
 SOURCE_CACHE_CONFIGURED="${PIWORK_ONLYOFFICE_FONT_SOURCE_CACHE_DIR:-}"
 if [[ -n "$SOURCE_CACHE_CONFIGURED" ]]; then
@@ -217,7 +218,7 @@ PIWORK_ONLYOFFICE_BROWSER_FONT_SET="$FONT_SET" \
 PIWORK_ONLYOFFICE_SKIP_FONT_POLICY=1 \
   "$ROOT_DIR/scripts/ensure-onlyoffice-browser.sh"
 filter_visible_fonts
-node "$ROOT_DIR/onlyoffice-browser/scripts/verify-onlyoffice-font-assets.mjs" --input "$FONT_ASSETS_DIR"
+node "$ONLYOFFICE_BROWSER_DIR/scripts/verify-onlyoffice-font-assets.mjs" --input "$FONT_ASSETS_DIR"
 PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$FONT_ASSETS_DIR" \
   "$ROOT_DIR/scripts/ensure-onlyoffice-browser.sh"
 
