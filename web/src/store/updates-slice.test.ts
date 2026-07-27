@@ -1,0 +1,156 @@
+// @vitest-environment jsdom
+
+// vi.hoisted runs before any imports, ensuring browser globals are available when store.ts initializes.
+vi.hoisted(() => {
+  // jsdom does not implement matchMedia
+  Object.defineProperty(globalThis.window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+
+  // Node.js 22+ native localStorage may be broken (invalid --localstorage-file).
+  // Polyfill before store.ts import triggers getInitialSessionId().
+  if (
+    typeof globalThis.localStorage === "undefined" ||
+    typeof globalThis.localStorage.getItem !== "function"
+  ) {
+    const store = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, String(value));
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        clear: () => {
+          store.clear();
+        },
+        get length() {
+          return store.size;
+        },
+        key: (index: number) => [...store.keys()][index] ?? null,
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+});
+
+import { useStore } from "../store.js";
+import type { CreationProgressEvent } from "../api.js";
+
+beforeEach(() => {
+  useStore.getState().reset();
+  localStorage.clear();
+});
+
+// ─── Creation progress ───────────────────────────────────────────────────────
+
+describe("Creation progress", () => {
+  it("addCreationProgress: appends a new step when creationProgress is null", () => {
+    // clearCreation ensures no residual creation state from prior tests
+    // (reset() does not clear creationProgress)
+    useStore.getState().clearCreation();
+
+    const step: CreationProgressEvent = {
+      step: "launching_pi",
+      label: "Launching Pi",
+      status: "in_progress",
+    };
+    useStore.getState().addCreationProgress(step);
+
+    const state = useStore.getState();
+    expect(state.creationProgress).toHaveLength(1);
+    expect(state.creationProgress![0]).toEqual(step);
+  });
+
+  it("addCreationProgress: appends a second step to existing progress", () => {
+    useStore.getState().clearCreation();
+
+    const step1: CreationProgressEvent = {
+      step: "launching_pi",
+      label: "Launching Pi",
+      status: "done",
+    };
+    const step2: CreationProgressEvent = {
+      step: "waiting_for_ready",
+      label: "Connecting",
+      status: "in_progress",
+    };
+    useStore.getState().addCreationProgress(step1);
+    useStore.getState().addCreationProgress(step2);
+
+    expect(useStore.getState().creationProgress).toHaveLength(2);
+  });
+
+  it("addCreationProgress: updates existing step when same step name is used", () => {
+    // clearCreation ensures we start from null creationProgress, since
+    // reset() does not clear this field
+    useStore.getState().clearCreation();
+
+    // Simulates a step transitioning from in_progress to done
+    const stepInProgress: CreationProgressEvent = {
+      step: "launching_pi",
+      label: "Launching",
+      status: "in_progress",
+    };
+    const stepDone: CreationProgressEvent = {
+      step: "launching_pi",
+      label: "Launched",
+      status: "done",
+    };
+
+    useStore.getState().addCreationProgress(stepInProgress);
+    useStore.getState().addCreationProgress(stepDone);
+
+    const progress = useStore.getState().creationProgress!;
+    expect(progress).toHaveLength(1);
+    expect(progress[0].status).toBe("done");
+    expect(progress[0].label).toBe("Launched");
+  });
+
+  it("clearCreation: resets all creation-related state", () => {
+    useStore.getState().addCreationProgress({ step: "launching_pi", label: "x", status: "done" });
+    useStore.getState().setCreationError("something failed");
+    useStore.getState().setSessionCreating(true, "pi");
+
+    useStore.getState().clearCreation();
+
+    const state = useStore.getState();
+    expect(state.creationProgress).toBeNull();
+    expect(state.creationError).toBeNull();
+    expect(state.sessionCreating).toBe(false);
+    expect(state.sessionCreatingBackend).toBeNull();
+  });
+
+  it("setSessionCreating: sets creating state and optional backend", () => {
+    useStore.getState().setSessionCreating(true, "pi");
+    expect(useStore.getState().sessionCreating).toBe(true);
+    expect(useStore.getState().sessionCreatingBackend).toBe("pi");
+
+    // Without backend argument, defaults to null
+    useStore.getState().setSessionCreating(false);
+    expect(useStore.getState().sessionCreating).toBe(false);
+    expect(useStore.getState().sessionCreatingBackend).toBeNull();
+  });
+
+  it("setCreationError: sets and clears the error message", () => {
+    useStore.getState().setCreationError("Pi failed to start");
+    expect(useStore.getState().creationError).toBe("Pi failed to start");
+
+    useStore.getState().setCreationError(null);
+    expect(useStore.getState().creationError).toBeNull();
+  });
+});

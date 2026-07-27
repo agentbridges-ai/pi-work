@@ -1,0 +1,23 @@
+{
+  "name": "Piwork Office Bridge",
+  "guid": "asc.{7F1B98C4-21D8-4D6B-A7F0-9E8506E23A10}",
+  "version": "1.0.0",
+  "baseUrl": "",
+  "variations": [
+    {
+      "description": "Piwork background document bridge",
+      "url": "index.html",
+      "type": "system",
+      "isSystem": true,
+      "isVisual": false,
+      "isModal": false,
+      "isInsideMode": false,
+      "isViewer": true,
+      "isDisplayedInViewer": true,
+      "EditorsSupport": ["word", "cell", "slide"],
+      "initDataType": "none",
+      "initData": "",
+      "buttons": []
+    }
+  ]
+}

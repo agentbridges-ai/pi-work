@@ -1,0 +1,128 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  activatePwaUpdate,
+  disposePwaLifecycleForTests,
+  getPwaLifecycleState,
+  initializePwaLifecycle,
+  registerPwaUpdateGuard,
+  requestPwaInstall,
+} from "./lifecycle.js";
+
+function createWorker(state: ServiceWorkerState = "installed") {
+  const target = new EventTarget() as EventTarget & ServiceWorker;
+  Object.assign(target, { state, postMessage: vi.fn() });
+  return target;
+}
+
+function createRuntime(options: { waiting?: boolean; controlled?: boolean } = {}) {
+  const windowTarget = new EventTarget() as EventTarget & {
+    location: { reload: ReturnType<typeof vi.fn> };
+    document: { visibilityState: DocumentVisibilityState };
+    matchMedia: Window["matchMedia"];
+  };
+  windowTarget.location = { reload: vi.fn() };
+  windowTarget.document = { visibilityState: "visible" };
+  windowTarget.matchMedia = vi.fn(
+    () =>
+      ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }) as unknown as MediaQueryList,
+  );
+
+  const waiting = options.waiting ? createWorker() : null;
+  const registrationTarget = new EventTarget() as EventTarget & ServiceWorkerRegistration;
+  Object.assign(registrationTarget, {
+    waiting,
+    installing: null,
+    active: null,
+    update: vi.fn(async () => {}),
+    unregister: vi.fn(async () => true),
+  });
+
+  const containerTarget = new EventTarget() as EventTarget & ServiceWorkerContainer;
+  Object.assign(containerTarget, {
+    controller: options.controlled ? {} : null,
+    register: vi.fn(async () => registrationTarget),
+  });
+  const navigatorObject = {
+    onLine: true,
+    serviceWorker: containerTarget,
+  } as unknown as Navigator;
+
+  return {
+    windowObject: windowTarget as unknown as Window,
+    navigatorObject,
+    serviceWorker: containerTarget,
+    registration: registrationTarget,
+    waiting,
+  };
+}
+
+afterEach(() => disposePwaLifecycleForTests());
+
+describe("PWA lifecycle", () => {
+  it("registers only the rooted Piwork worker and leaves a waiting update under user control", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true });
+
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+
+    expect(runtime.serviceWorker.register).toHaveBeenCalledWith("/piwork-sw.js", {
+      scope: "/",
+      updateViaCache: "none",
+    });
+    expect(getPwaLifecycleState()).toMatchObject({
+      registrationStatus: "ready",
+      updateAvailable: true,
+    });
+    expect(runtime.waiting?.postMessage).not.toHaveBeenCalled();
+    expect(runtime.windowObject.location.reload).not.toHaveBeenCalled();
+  });
+
+  it("captures a browser install prompt and consumes a dismissal once", async () => {
+    const runtime = createRuntime();
+    await initializePwaLifecycle(false, runtime.windowObject, runtime.navigatorObject);
+    const event = new Event("beforeinstallprompt") as Event & {
+      prompt: ReturnType<typeof vi.fn>;
+      userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+    };
+    event.prompt = vi.fn(async () => {});
+    event.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+    const preventDefault = vi.spyOn(event, "preventDefault");
+
+    runtime.windowObject.dispatchEvent(event);
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(getPwaLifecycleState().installAvailable).toBe(true);
+    await expect(requestPwaInstall()).resolves.toBe("dismissed");
+    expect(event.prompt).toHaveBeenCalledOnce();
+    expect(getPwaLifecycleState().installAvailable).toBe(false);
+    await expect(requestPwaInstall()).resolves.toBe("unavailable");
+  });
+
+  it("does not activate a waiting worker while an editor guard blocks refresh", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true });
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    registerPwaUpdateGuard(() => false);
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("blocked");
+    expect(runtime.waiting?.postMessage).not.toHaveBeenCalled();
+    expect(runtime.windowObject.location.reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads once only after the user activates the waiting worker", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true });
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    const waiting = runtime.waiting!;
+    vi.mocked(waiting.postMessage).mockImplementation(() => {
+      Object.assign(waiting, { state: "activated" as ServiceWorkerState });
+      waiting.dispatchEvent(new Event("statechange"));
+    });
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("activated");
+
+    expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+    expect(runtime.windowObject.location.reload).toHaveBeenCalledOnce();
+  });
+});
