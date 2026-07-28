@@ -14,7 +14,7 @@ describe("OnlyOffice host URL", () => {
         fileType: "docx",
         mode: "preview",
       }),
-    ).toBe("https://first.onlyoffice.getpi.work/office-host.html");
+    ).toBe("https://office-editor-first.getpi.work/office-host.html");
     expect(
       resolvePiworkOnlyOfficeHostUrl({
         sessionId: "office-editor-b6eale6c-f44a-4866-9f4d-a728513ba815",
@@ -22,14 +22,16 @@ describe("OnlyOffice host URL", () => {
         fileType: "xlsx",
         mode: "edit",
       }),
-    ).toBe("https://b6eale6c-f44a-4866-9f4d-a728513ba815.onlyoffice.getpi.work/office-host.html");
+    ).toBe(
+      "https://office-editor-b6eale6c-f44a-4866-9f4d-a728513ba815.getpi.work/office-host.html",
+    );
   });
 
   it("uses the canonical production origin for all managed Office assets", () => {
     expect(resolvePiworkOnlyOfficeAssetBaseUrl()).toBe("https://onlyoffice.getpi.work/");
     expect(
       resolveOnlyOfficeAssetBaseUrl(
-        new URL("https://session-a.onlyoffice.getpi.work/office-host.html"),
+        new URL("https://office-editor-session-a.getpi.work/office-host.html"),
         "https://piwork.getpi.work",
       ),
     ).toBe("https://onlyoffice.getpi.work/");

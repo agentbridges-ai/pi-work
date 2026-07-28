@@ -82,7 +82,7 @@ describe("OnlyOffice dev health check", () => {
     });
 
     expect(result).toEqual({
-      hostUrl: expect.stringContaining("https://health.onlyoffice.getpi.work/office-host.html"),
+      hostUrl: expect.stringContaining("https://office-editor-health.getpi.work/office-host.html"),
       bundlePath: "/assets/officeHost-health.js",
       runtimeIdentity,
     });

@@ -23,7 +23,7 @@ vi.mock("./office-host-adapter.js", () => ({
 
 vi.mock("./onlyoffice-host-url.js", () => ({
   resolvePiworkOnlyOfficeHostUrl: vi.fn(
-    () => "https://test.onlyoffice.getpi.work/office-host.html",
+    () => "https://office-editor-test.getpi.work/office-host.html",
   ),
 }));
 

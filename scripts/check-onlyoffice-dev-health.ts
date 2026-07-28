@@ -36,7 +36,7 @@ function fail(message: string): never {
 
 function isolatedHostUrl(frontendUrl: string): URL {
   const parent = new URL(frontendUrl);
-  const host = new URL("https://health.onlyoffice.getpi.work/office-host.html");
+  const host = new URL("https://office-editor-health.getpi.work/office-host.html");
   host.searchParams.set("sessionId", healthSessionId);
   host.searchParams.set("parentOrigin", parent.origin);
   return host;

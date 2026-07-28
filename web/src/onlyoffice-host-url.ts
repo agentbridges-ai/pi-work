@@ -4,7 +4,7 @@ const ONLYOFFICE_SHARED_ASSET_ORIGIN = "https://onlyoffice.getpi.work/";
 
 export function resolvePiworkOnlyOfficeHostUrl(context: OfficeHostUrlContext): string {
   const sessionLabel = officeHostSessionLabel(context.sessionId);
-  return `https://${sessionLabel}.onlyoffice.getpi.work/office-host.html`;
+  return `https://${sessionLabel}.getpi.work/office-host.html`;
 }
 
 export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
@@ -14,7 +14,7 @@ export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
 export function resolveOnlyOfficeAssetBaseUrl(hostUrl: URL, fallbackOrigin: string): string {
   if (
     hostUrl.hostname === "onlyoffice.getpi.work" ||
-    /^[a-z0-9-]+\.onlyoffice\.getpi\.work$/.test(hostUrl.hostname)
+    /^office-editor-[a-z0-9-]+\.getpi\.work$/.test(hostUrl.hostname)
   ) {
     return ONLYOFFICE_SHARED_ASSET_ORIGIN;
   }
@@ -26,7 +26,8 @@ function officeHostSessionLabel(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .replace(/^office-editor-/, "");
-  return normalized.slice(0, 48) || "office";
+    .replace(/^-|-$/g, "");
+  const suffix = normalized || "session";
+  const sessionLabel = suffix.startsWith("office-editor-") ? suffix : `office-editor-${suffix}`;
+  return sessionLabel.slice(0, 63);
 }
