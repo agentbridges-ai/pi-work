@@ -15,6 +15,7 @@ import {
 } from "./server/vite-config-runtime";
 import {
   contentTypeForOnlyOfficeAsset,
+  isOnlyOfficeSharedAssetPath,
   isOnlyOfficeBrowserAssetPath,
   isOnlyOfficeHostRequestHost,
   isOnlyOfficePrintPdfPath,
@@ -122,6 +123,13 @@ function onlyOfficeBrowserRuntimePlugin(): Plugin {
         }
         if (pathname === "/office-host.html") {
           res.setHeader("Origin-Agent-Cluster", "?1");
+        }
+        if (isOnlyOfficeSharedAssetPath(pathname)) {
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader(
+            "Access-Control-Expose-Headers",
+            "Content-Length, Content-Range, ETag, Last-Modified, X-OnlyOffice-Asset-Version",
+          );
         }
 
         try {

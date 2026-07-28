@@ -8,6 +8,91 @@ import type { UiLanguage } from "../store/ui-slice.js";
 import type { PiSessionInfo } from "../types.js";
 import { UserSettingsDialog } from "./UserSettingsDialog.js";
 
+const officeResourcesMock = vi.hoisted(() => ({
+  snapshot: {
+    status: "ready" as const,
+    error: null,
+    resources: {
+      progress: {
+        phase: "ready" as const,
+        completedFiles: 3,
+        totalFiles: 10,
+        completedBytes: 3_000,
+        totalBytes: 10_000,
+        failedFiles: 0,
+        categories: [
+          {
+            category: "fonts" as const,
+            completedFiles: 2,
+            totalFiles: 3,
+            completedBytes: 2_000,
+            totalBytes: 3_000,
+          },
+          {
+            category: "core" as const,
+            completedFiles: 1,
+            totalFiles: 2,
+            completedBytes: 1_000,
+            totalBytes: 2_000,
+          },
+          {
+            category: "word" as const,
+            completedFiles: 0,
+            totalFiles: 2,
+            completedBytes: 0,
+            totalBytes: 2_000,
+          },
+          {
+            category: "cell" as const,
+            completedFiles: 0,
+            totalFiles: 2,
+            completedBytes: 0,
+            totalBytes: 2_000,
+          },
+          {
+            category: "slide" as const,
+            completedFiles: 0,
+            totalFiles: 1,
+            completedBytes: 0,
+            totalBytes: 1_000,
+          },
+        ],
+      },
+      fonts: [
+        {
+          id: "dengxian",
+          name: "DengXian",
+          bytes: 1_000,
+          paths: ["fonts/dengxian.ttf"],
+          downloaded: true,
+          removable: false,
+        },
+        {
+          id: "microsoft yahei",
+          name: "Microsoft YaHei",
+          bytes: 2_000,
+          paths: ["fonts/yahei.ttf"],
+          downloaded: false,
+          removable: true,
+        },
+      ],
+      verifiedFontPaths: ["fonts/dengxian.ttf"],
+      operation: null,
+      error: null,
+    },
+  },
+}));
+
+vi.mock("../office-runtime-resources.js", () => ({
+  ensureOfficeResources: vi.fn(async () => ({})),
+  getOfficeResourceSnapshot: () => officeResourcesMock.snapshot,
+  subscribeOfficeResources: () => () => undefined,
+  loadAllOfficeResources: vi.fn(async () => undefined),
+  checkAndRepairOfficeResources: vi.fn(async () => undefined),
+  downloadOfficeFontFamily: vi.fn(async () => undefined),
+  uninstallOfficeFontFamily: vi.fn(async () => undefined),
+}));
+
 const user: CurrentUser = {
   userId: "user-a",
   username: "login-handle",
@@ -96,6 +181,33 @@ describe("UserSettingsDialog", () => {
       screen.getByRole("radiogroup", { name: uiCopy.chat.preferencesPanel.office.title }),
     ).toBeInTheDocument();
   });
+
+  it.each(["zh-CN", "en-US"] as const)(
+    "shows device-local Office cache and font controls in %s",
+    (locale) => {
+      renderDialog(locale);
+
+      const section = screen.getByTestId("office-resources-section");
+      expect(
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
+      ).toBeInTheDocument();
+      expect(within(section).getByText("DengXian")).toBeInTheDocument();
+      expect(within(section).getByText("Microsoft YaHei")).toBeInTheDocument();
+      expect(
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.required),
+      ).toBeInTheDocument();
+      expect(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.download,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.downloadAll,
+        }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("shows the display name as the single username field", () => {
     renderDialog("en-US");

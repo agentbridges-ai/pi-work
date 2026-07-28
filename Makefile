@@ -4,6 +4,7 @@ WEB_DIR := web
 RUNTIME_DIR := .runtime
 CRITICAL_TESTS_FILE := scripts/critical-tests.txt
 COVERAGE_THRESHOLD ?= 80
+AUTH_CLI := npx --yes auth@1.6.20
 
 .PHONY: help
 help:
@@ -105,11 +106,11 @@ stop: dev-fast-stop
 auth-generate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for Better Auth schema generation.' >&2; exit 1; fi; \
-	  cd $(WEB_DIR) && bunx auth@1.6.20 generate --config server/better-auth.ts --output server/migrations/better-auth.sql --yes
+	  cd $(WEB_DIR) && $(AUTH_CLI) generate --config server/better-auth.ts --output server/migrations/better-auth.sql --yes
 auth-migrate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for Better Auth migrations.' >&2; exit 1; fi; \
-	  cd $(WEB_DIR) && bunx auth@1.6.20 migrate --config server/better-auth.ts --yes
+	  cd $(WEB_DIR) && $(AUTH_CLI) migrate --config server/better-auth.ts --yes
 rbac-migrate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for RBAC migrations.' >&2; exit 1; fi; \

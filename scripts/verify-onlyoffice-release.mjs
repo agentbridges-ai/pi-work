@@ -167,7 +167,7 @@ assert(
 );
 
 const compact = readJson(join(officeRoot, "dist", "onlyoffice-runtime-assets.json"));
-assert(compact.version === 1, "compact asset manifest version mismatch");
+assert([1, 2].includes(compact.version), "compact asset manifest version mismatch");
 assert(
   JSON.stringify(compact.types) === JSON.stringify(["word", "cell", "slide"]),
   "compact runtime types mismatch",

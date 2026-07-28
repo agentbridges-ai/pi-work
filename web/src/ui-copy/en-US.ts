@@ -250,6 +250,37 @@ export const enUSCopyOverrides = {
         preview: "Preview",
         edit: "Edit",
       },
+      officeResources: {
+        title: "Office resources",
+        checking: "Checking",
+        ready: "Ready",
+        incomplete: "Not fully downloaded",
+        statusUnavailable: "Resource status is temporarily unavailable",
+        summary: (completed: number, total: number) => `${completed} / ${total} files cached`,
+        failedFiles: (count: number) => `${count} files failed to load`,
+        progressLabel: "Office resource cache progress",
+        categoryProgressLabel: (category: string) => `${category} cache progress`,
+        categories: {
+          fonts: "Fonts",
+          core: "Common runtime and x2t",
+          word: "Word",
+          cell: "Spreadsheet",
+          slide: "Presentation",
+        },
+        fontsTitle: "Font packages",
+        required: "Required",
+        download: "Download",
+        remove: "Remove",
+        downloadAll: "Download all",
+        checkAndRepair: "Check and repair",
+        reopenHint: "Font changes take effect after reopening the Office document.",
+        errors: {
+          statusUnavailable: "Office resource status is unavailable. Check the network and retry.",
+          operationFailed: "The Office resource operation failed. Check the network and retry.",
+          insufficientStorage: (available: string, required: string) =>
+            `Not enough browser storage: ${available} available, ${required} required. Free space or leave private browsing.`,
+        },
+      },
       filePanel: {
         title: "File panel",
       },
@@ -1154,6 +1185,7 @@ export const enUSCopyOverrides = {
       legacyConfirmUnavailable:
         "OnlyOffice built-in format confirmation is not loaded. Refresh the page or restart the dev server and try again.",
       localPreviewFailed: "Failed to preview Office file locally.",
+      manageResources: "Manage Office resources",
       localPreviewTimeout: "Local Office preview timed out. Close the tab and try again.",
       modeSwitch: "Office mode switcher",
       noSaveAccess:

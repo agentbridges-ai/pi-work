@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resolveDefaultPiworkOnlyOfficeHostUrl } from "./onlyoffice-host-url.js";
+import {
+  resolveDefaultPiworkOnlyOfficeHostUrl,
+  resolveOnlyOfficeAssetBaseUrl,
+} from "./onlyoffice-host-url.js";
 import { setUiCopyLanguage } from "./ui-copy.js";
 
 beforeEach(() => {
@@ -48,5 +51,20 @@ describe("OnlyOffice host URL", () => {
         "office-editor-local",
       ),
     ).toBe("http://host-office-editor-local.office.localhost:5173/office-host.html");
+  });
+
+  it("maps isolated editor hosts to their shared static asset origin", () => {
+    expect(
+      resolveOnlyOfficeAssetBaseUrl(
+        new URL("http://host-office-editor-local.office.localhost:3458/office-host.html"),
+        "http://127.0.0.1:3458",
+      ),
+    ).toBe("http://assets.office.localhost:3458/");
+    expect(
+      resolveOnlyOfficeAssetBaseUrl(
+        new URL("https://office-session-a.getpi.work/office-host.html"),
+        "https://piwork.getpi.work",
+      ),
+    ).toBe("https://onlyoffice.getpi.work/");
   });
 });

@@ -38,6 +38,7 @@ import {
 } from "./onlyoffice-font-assets.js";
 import {
   applyOnlyOfficeHostResponseHeaders,
+  applyOnlyOfficeSharedAssetCorsHeaders,
   contentTypeForOnlyOfficeAsset,
   isOnlyOfficeBrowserAssetPath,
   isOnlyOfficeHostRequestHost,
@@ -379,7 +380,10 @@ async function serveOnlyOfficeBrowserAsset(pathname: string): Promise<Response> 
         status: upstream.status || 502,
       });
     }
-    const headers = applyOnlyOfficeHostResponseHeaders(pathname, new Headers());
+    const headers = applyOnlyOfficeSharedAssetCorsHeaders(
+      pathname,
+      applyOnlyOfficeHostResponseHeaders(pathname, new Headers()),
+    );
     headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
     headers.set("Cache-Control", "public, max-age=86400");
     if (pathname.endsWith(".br")) headers.set("Content-Encoding", "br");
@@ -423,6 +427,7 @@ async function serveGeneratedOnlyOfficeFontAsset(pathname: string): Promise<Resp
   const file = Bun.file(target);
   if (!(await file.exists())) return null;
   const headers = new Headers();
+  applyOnlyOfficeSharedAssetCorsHeaders(pathname, headers);
   headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
   return new Response(file, { headers });
@@ -443,7 +448,10 @@ async function serveFileFromRoot(root: string, pathname: string): Promise<Respon
   if (rel.startsWith("..") || rel === "" || rel.startsWith("/")) return null;
   const file = Bun.file(target);
   if (!(await file.exists())) return null;
-  const headers = applyOnlyOfficeHostResponseHeaders(pathname, new Headers());
+  const headers = applyOnlyOfficeSharedAssetCorsHeaders(
+    pathname,
+    applyOnlyOfficeHostResponseHeaders(pathname, new Headers()),
+  );
   headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
   if (pathname.endsWith(".br")) headers.set("Content-Encoding", "br");

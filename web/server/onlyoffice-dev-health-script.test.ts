@@ -68,6 +68,12 @@ describe("OnlyOffice dev health check", () => {
       '"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT" \\\n  --checkout "$ROOT_DIR/onlyoffice-browser"',
     );
     expect(devScript).toContain("VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE");
+    expect(devScript).toContain(
+      "export VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE='https://office-{sessionId}.getpi.work/office-host.html'",
+    );
+    expect(devScript).not.toContain(
+      "VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE:-https://office-{sessionId}",
+    );
     expect(makefile).toContain(
       'bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port" --checkout "$(CURDIR)/onlyoffice-browser"',
     );
@@ -88,6 +94,23 @@ describe("OnlyOffice dev health check", () => {
       runtimeIdentity,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(6);
+  });
+
+  it("checks the configured Cloudflare wildcard host used by development", async () => {
+    const fetchImpl = healthyFetch();
+
+    const result = await checkOnlyOfficeDevHealth({
+      frontendUrl: "http://127.0.0.1:3458",
+      hostUrlTemplate: "https://office-{sessionId}.getpi.work/office-host.html",
+      runtimeIdentity,
+      fetchImpl,
+    });
+
+    const hostUrl = new URL(result.hostUrl);
+    expect(hostUrl.origin).toBe("https://office-office-editor-health.getpi.work");
+    expect(hostUrl.pathname).toBe("/office-host.html");
+    expect(hostUrl.searchParams.get("sessionId")).toBe("office-editor-health");
+    expect(hostUrl.searchParams.get("parentOrigin")).toBe("http://127.0.0.1:3458");
   });
 
   it("rejects a served runtime manifest that does not match the release identity", async () => {

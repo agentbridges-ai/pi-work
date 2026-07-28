@@ -1,9 +1,19 @@
-import { Dialog, SegmentedControl, Switch } from "./ui/index.js";
+import { useEffect, useSyncExternalStore } from "react";
+import { Button, Dialog, SegmentedControl, Switch } from "./ui/index.js";
 import type { CurrentUser, FilePreviewPreference, UserPreferences } from "../api.js";
 import { AGENTS, getAgentDisplayName, type Agent, type AgentId } from "../agents.js";
 import type { UiLanguage } from "../store/ui-slice.js";
 import type { PiSessionInfo } from "../types.js";
 import { uiCopy } from "../ui-copy.js";
+import {
+  checkAndRepairOfficeResources,
+  downloadOfficeFontFamily,
+  ensureOfficeResources,
+  getOfficeResourceSnapshot,
+  loadAllOfficeResources,
+  subscribeOfficeResources,
+  uninstallOfficeFontFamily,
+} from "../office-runtime-resources.js";
 
 export interface UserSettingsDialogProps {
   user: CurrentUser;
@@ -99,6 +109,8 @@ export function UserSettingsDialog({
         onOfficeFileDefaultChange={onOfficeFileDefaultChange}
       />
 
+      <OfficeResourcesSection />
+
       <UserSpacePreferencesSection
         preferences={preferences}
         error={preferencesError}
@@ -122,6 +134,188 @@ export function UserSettingsDialog({
         onHardDeleteSelected={onHardDeleteSelectedArchivedSessions}
       />
     </Dialog>
+  );
+}
+
+function formatOfficeResourceBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function OfficeResourcesSection() {
+  const state = useSyncExternalStore(
+    subscribeOfficeResources,
+    getOfficeResourceSnapshot,
+    getOfficeResourceSnapshot,
+  );
+  useEffect(() => {
+    void ensureOfficeResources().catch(() => undefined);
+  }, []);
+
+  const resources = state.resources;
+  const progress = resources?.progress;
+  const busy = Boolean(resources?.operation);
+  const ratio = progress
+    ? progress.totalBytes > 0
+      ? progress.completedBytes / progress.totalBytes
+      : progress.totalFiles > 0
+        ? progress.completedFiles / progress.totalFiles
+        : 0
+    : 0;
+  const copy = uiCopy.chat.preferencesPanel.officeResources;
+  const categoryLabels = copy.categories;
+  const error =
+    state.error?.code === "insufficient-storage"
+      ? copy.errors.insufficientStorage(
+          formatOfficeResourceBytes(state.error.availableBytes || 0),
+          formatOfficeResourceBytes(state.error.requiredBytes || 0),
+        )
+      : state.error?.code === "initialization-failed"
+        ? copy.errors.statusUnavailable
+        : state.error
+          ? copy.errors.operationFailed
+          : "";
+
+  return (
+    <section className="mt-6" data-testid="office-resources-section">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
+        <span className="text-xs text-muted-foreground">
+          {state.status === "checking"
+            ? copy.checking
+            : progress?.phase === "complete"
+              ? copy.ready
+              : copy.incomplete}
+        </span>
+      </div>
+      <div className="mt-3 overflow-hidden rounded-[var(--piwork-control-radius)] border border-border bg-card">
+        <div className="px-3 py-3">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span>
+              {progress
+                ? copy.summary(progress.completedFiles, progress.totalFiles)
+                : copy.statusUnavailable}
+            </span>
+            {progress && (
+              <span>
+                {formatOfficeResourceBytes(progress.completedBytes)} /{" "}
+                {formatOfficeResourceBytes(progress.totalBytes)}
+              </span>
+            )}
+          </div>
+          <progress
+            aria-label={copy.progressLabel}
+            className="mt-2 h-2 w-full accent-primary"
+            max={1}
+            value={Math.min(1, ratio)}
+          />
+          {progress && progress.failedFiles > 0 && (
+            <div className="mt-1 text-xs text-danger">{copy.failedFiles(progress.failedFiles)}</div>
+          )}
+        </div>
+
+        {progress && (
+          <div className="grid gap-2 border-t border-border px-3 py-3">
+            {progress.categories.map((category) => {
+              const categoryRatio =
+                category.totalBytes > 0
+                  ? category.completedBytes / category.totalBytes
+                  : category.totalFiles > 0
+                    ? category.completedFiles / category.totalFiles
+                    : 0;
+              return (
+                <div key={category.category}>
+                  <div className="flex justify-between gap-3 text-xs text-muted-foreground">
+                    <span>{categoryLabels[category.category]}</span>
+                    <span>
+                      {category.completedFiles} / {category.totalFiles}
+                    </span>
+                  </div>
+                  <progress
+                    aria-label={copy.categoryProgressLabel(categoryLabels[category.category])}
+                    className="mt-1 h-1.5 w-full accent-primary"
+                    max={1}
+                    value={Math.min(1, categoryRatio)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {resources && (
+          <div className="border-t border-border px-3 py-3">
+            <div className="mb-2 text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
+            <div className="grid gap-2">
+              {resources.fonts.map((font) => (
+                <div
+                  key={font.id}
+                  className="flex min-h-9 items-center justify-between gap-3 text-sm"
+                  data-testid={`office-font-${font.id}`}
+                >
+                  <span className="min-w-0 truncate">
+                    {font.name}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      · {formatOfficeResourceBytes(font.bytes)}
+                    </span>
+                  </span>
+                  {font.removable ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={
+                        resources.operation === (font.downloaded ? "remove-font" : "download-font")
+                      }
+                      isDisabled={busy}
+                      onPress={() =>
+                        void (
+                          font.downloaded
+                            ? uninstallOfficeFontFamily(font.id)
+                            : downloadOfficeFontFamily(font.id)
+                        ).catch(() => undefined)
+                      }
+                    >
+                      {font.downloaded ? copy.remove : copy.download}
+                    </Button>
+                  ) : (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {copy.required}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">{copy.reopenHint}</div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={resources?.operation === "check-health"}
+            isDisabled={busy || state.status === "checking"}
+            onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
+          >
+            {copy.checkAndRepair}
+          </Button>
+          <Button
+            size="sm"
+            loading={resources?.operation === "load-all"}
+            isDisabled={busy || state.status === "checking"}
+            onPress={() => void loadAllOfficeResources().catch(() => undefined)}
+          >
+            {copy.downloadAll}
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <div className="mt-2 text-xs font-medium text-danger" role="alert">
+          {error}
+        </div>
+      )}
+    </section>
   );
 }
 

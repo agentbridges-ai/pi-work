@@ -55,6 +55,12 @@ import {
   type OnlyOfficeEditorRegistration,
 } from "../../onlyoffice-browser-executor.js";
 import { resolvePiworkOnlyOfficeHostUrl } from "../../onlyoffice-host-url.js";
+import {
+  ensureOfficeResources,
+  getVerifiedOfficeFontPaths,
+  officeResourcesNeedAttention,
+  requestOfficeResourceSettings,
+} from "../../office-runtime-resources.js";
 import { runtimeContextCoordinator } from "../../runtime-context.js";
 import type { OfficePreviewLease, OfficePreviewRuntimeManager } from "../../office-host-adapter.js";
 import type { UiLanguage } from "../../store/ui-slice.js";
@@ -3426,12 +3432,16 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
 
     let lease: OfficePreviewLease | null = null;
     let disposePromise: Promise<void> | null = null;
-    const leasePromise = officePreviewRuntimeManagerPromise.then((manager) => {
+    const leasePromise = Promise.all([
+      officePreviewRuntimeManagerPromise,
+      ensureOfficeResources().catch(() => null),
+    ]).then(([manager]) => {
       if (disposed) {
         throw new DOMException("Office preview mount was cancelled", "AbortError");
       }
       lease = manager.mount(container, {
         ...officeEditorOptions,
+        downloadedFonts: getVerifiedOfficeFontPaths(),
         resourceKey: officeResourceKey,
         foreground: initialForegroundRef.current,
       });
@@ -3547,9 +3557,18 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
       )}
       {error && (
         <div
-          className={`absolute inset-x-3 top-3 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/35 bg-warning-muted px-3 py-2 text-xs text-warning`}
+          className={`absolute inset-x-3 top-3 flex items-center gap-3 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/35 bg-warning-muted px-3 py-2 text-xs text-warning`}
         >
-          {error}
+          <span className="min-w-0 flex-1">{error}</span>
+          {officeResourcesNeedAttention() && (
+            <button
+              type="button"
+              className="shrink-0 font-semibold underline underline-offset-2"
+              onClick={requestOfficeResourceSettings}
+            >
+              {workspaceCopy.office.manageResources}
+            </button>
+          )}
         </div>
       )}
     </div>

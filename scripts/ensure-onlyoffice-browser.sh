@@ -281,7 +281,7 @@ runtime_assets_optimized() {
     const packs = manifest.packs || {};
     const hasPacks = ["core", "word", "cell", "slide"].every((pack) => Number(packs[pack]) > 0);
     process.exit(
-      manifest.version === 1 &&
+      [1, 2].includes(manifest.version) &&
       types === JSON.stringify(["word", "cell", "slide"]) &&
       dictionaries === JSON.stringify(["en_US"]) &&
       manifest.keepHelp === false &&
@@ -357,10 +357,21 @@ runtime_host_bundle_contains() {
 runtime_bundle_signature_problem() {
   local runtime_source="$ONLYOFFICE_BROWSER_DIR/src/lib/office-editor-runtime.ts"
   local host_source="$ONLYOFFICE_BROWSER_DIR/src/office-host.ts"
+  local expected_host_build_id="$PINNED_ONLYOFFICE_HOST_BUILD_ID"
   [[ -f "$runtime_source" ]] || return 0
 
-  if ! runtime_host_bundle_contains "$PINNED_ONLYOFFICE_HOST_BUILD_ID"; then
-    printf 'OnlyOffice host bundle is missing runtime identity %s. Rebuild the real officeHost-* asset before starting Piwork.' "$PINNED_ONLYOFFICE_HOST_BUILD_ID"
+  if [[ "$ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT" == "1" && -f "$host_source" ]]; then
+    local checkout_host_build_id
+    checkout_host_build_id="$(
+      sed -n "s/^const OFFICE_HOST_BUILD_ID = '\\([^']*\\)';$/\\1/p" "$host_source" | head -n 1
+    )"
+    if [[ -n "$checkout_host_build_id" ]]; then
+      expected_host_build_id="$checkout_host_build_id"
+    fi
+  fi
+
+  if ! runtime_host_bundle_contains "$expected_host_build_id"; then
+    printf 'OnlyOffice host bundle is missing runtime identity %s. Rebuild the real officeHost-* asset before starting Piwork.' "$expected_host_build_id"
     return 1
   fi
 

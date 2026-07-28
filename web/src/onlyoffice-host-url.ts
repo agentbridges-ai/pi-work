@@ -19,6 +19,35 @@ export function resolvePiworkOnlyOfficeHostUrl(context: OfficeHostUrlContext): s
   return resolveDefaultPiworkOnlyOfficeHostUrl(currentUrl, sessionLabel);
 }
 
+export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
+  const hostUrl = new URL(
+    resolvePiworkOnlyOfficeHostUrl({
+      sessionId: "resource-manager",
+      fileName: "resource-manager.docx",
+      fileType: "docx",
+      mode: "preview",
+    }),
+  );
+  return resolveOnlyOfficeAssetBaseUrl(hostUrl, window.location.origin);
+}
+
+export function resolveOnlyOfficeAssetBaseUrl(hostUrl: URL, fallbackOrigin: string): string {
+  if (hostUrl.hostname.endsWith(".office.localhost")) {
+    hostUrl.hostname = "assets.office.localhost";
+    hostUrl.pathname = "/";
+    hostUrl.search = "";
+    hostUrl.hash = "";
+    return hostUrl.href;
+  }
+  if (
+    hostUrl.hostname === "onlyoffice.getpi.work" ||
+    /^office-[a-z0-9-]+\.getpi\.work$/.test(hostUrl.hostname)
+  ) {
+    return "https://onlyoffice.getpi.work/";
+  }
+  return fallbackOrigin;
+}
+
 export function resolveDefaultPiworkOnlyOfficeHostUrl(
   currentUrl: URL,
   sessionLabel = "office",

@@ -34,6 +34,13 @@ const onlyOfficeBrowserAssetChunkPrefixes = [
   "saveE2E",
 ];
 
+const onlyOfficeOriginBoundAssetFiles = new Set([
+  "/office-host.html",
+  "/document_editor_service_worker.js",
+  "/reset.html",
+  "/sw.js",
+]);
+
 export const ONLYOFFICE_PRINT_PDF_ROUTE_PREFIX = "/__onlyoffice-browser-print__/";
 
 export type OnlyOfficeBrowserAssetPathOptions = {
@@ -43,6 +50,24 @@ export type OnlyOfficeBrowserAssetPathOptions = {
 
 export function isOnlyOfficePrintPdfPath(pathname: string): boolean {
   return pathname.startsWith(ONLYOFFICE_PRINT_PDF_ROUTE_PREFIX);
+}
+
+export function isOnlyOfficeSharedAssetPath(pathname: string): boolean {
+  return (
+    isOnlyOfficeBrowserAssetPath(pathname) &&
+    !onlyOfficeOriginBoundAssetFiles.has(pathname) &&
+    !isOnlyOfficePrintPdfPath(pathname)
+  );
+}
+
+export function applyOnlyOfficeSharedAssetCorsHeaders(pathname: string, headers: Headers): Headers {
+  if (!isOnlyOfficeSharedAssetPath(pathname)) return headers;
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set(
+    "Access-Control-Expose-Headers",
+    "Content-Length, Content-Range, ETag, Last-Modified, X-OnlyOffice-Asset-Version",
+  );
+  return headers;
 }
 
 export function applyOnlyOfficeHostResponseHeaders(pathname: string, headers: Headers): Headers {

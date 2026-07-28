@@ -36,6 +36,7 @@ import { persistWorkspaceSessionStateNow } from "../workspace-session-state.js";
 import { savePreferencesLatest } from "../preferences-persistence.js";
 import { uiCopy } from "../ui-copy.js";
 import { isAbortError, runtimeContextCoordinator } from "../runtime-context.js";
+import { subscribeOfficeResourceSettingsRequests } from "../office-runtime-resources.js";
 import { userScopeKeyFromCurrentUser } from "../store/user-scoped-storage.js";
 import {
   captureUserSpaceConfigurationContext,
@@ -110,6 +111,8 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [messageFeedBottomInsetPx, setMessageFeedBottomInsetPx] = useState(
     DEFAULT_MESSAGE_FEED_BOTTOM_INSET_PX,
   );
+
+  useEffect(() => subscribeOfficeResourceSettingsRequests(() => setUserSettingsOpen(true)), []);
   const sessionInteractions = useStore((s) => s.pendingInteractions.get(sessionId));
   const selectedAgentId = useStore((s) => s.selectedAgentId);
   const agentSessionIds = useStore((s) => s.agentSessionIds);

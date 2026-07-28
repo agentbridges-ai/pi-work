@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  applyOnlyOfficeSharedAssetCorsHeaders,
   applyOnlyOfficeHostResponseHeaders,
   contentTypeForOnlyOfficeAsset,
   isOnlyOfficeBrowserAssetPath,
@@ -32,6 +33,19 @@ describe("OnlyOffice runtime asset routing", () => {
     expect(isOnlyOfficeBrowserAssetPath("/fonts/MesloLGS-Regular.woff2")).toBe(false);
     expect(isOnlyOfficeBrowserAssetPath("/__onlyoffice-browser-print__/print-1.pdf")).toBe(false);
     expect(isOnlyOfficePrintPdfPath("/__onlyoffice-browser-print__/print-1.pdf")).toBe(true);
+  });
+
+  it("allows isolated editor hosts to read shared static resources without opening host pages", () => {
+    const fontHeaders = applyOnlyOfficeSharedAssetCorsHeaders("/fonts/019.ttf", new Headers());
+    const runtimeHeaders = applyOnlyOfficeSharedAssetCorsHeaders(
+      "/onlyoffice-runtime-assets.json",
+      new Headers(),
+    );
+    const hostHeaders = applyOnlyOfficeSharedAssetCorsHeaders("/office-host.html", new Headers());
+
+    expect(fontHeaders.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(runtimeHeaders.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(hostHeaders.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
   it("routes generated OnlyOffice host chunks only when they exist locally", () => {
