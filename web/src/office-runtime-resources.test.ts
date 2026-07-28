@@ -89,7 +89,7 @@ describe("Piwork Office resource state", () => {
     await expect(second).resolves.toBe(runtimeMock.manager);
     expect(runtimeMock.create).toHaveBeenCalledTimes(1);
     expect(runtimeMock.create).toHaveBeenCalledWith({
-      assetBaseUrl: expect.stringContaining("assets.office.localhost"),
+      assetBaseUrl: "https://onlyoffice.getpi.work/",
     });
     expect(getOfficeResourceSnapshot().status).toBe("ready");
     expect(getVerifiedOfficeFontPaths()).toEqual(["fonts/dengxian.ttf"]);

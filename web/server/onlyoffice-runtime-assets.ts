@@ -77,21 +77,6 @@ export function applyOnlyOfficeHostResponseHeaders(pathname: string, headers: He
   return headers;
 }
 
-export function isOnlyOfficeHostRequestHost(host: string | null | undefined): boolean {
-  if (!host) return false;
-  let hostname = host.trim().toLowerCase();
-  try {
-    hostname = new URL(`http://${hostname}`).hostname;
-  } catch {
-    hostname = hostname.split(":")[0] || "";
-  }
-  return (
-    hostname === "host.localhost" ||
-    (hostname.startsWith("host-office-editor-") && hostname.endsWith(".localhost")) ||
-    hostname.includes(".office-host.")
-  );
-}
-
 export function isOnlyOfficeBrowserAssetPath(
   pathname: string,
   options: OnlyOfficeBrowserAssetPathOptions = {},

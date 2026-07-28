@@ -1170,8 +1170,6 @@ export const zhCNCopy = {
       noSaveAccess: "用户空间没有写入权限，无法保存 Office 文件。",
       noSaveCopyAccess: "用户空间没有写入权限，无法另存 Office 文件副本。",
       preview: "预览",
-      remoteIpHostRequiresTemplate:
-        "通过远程 IP 打开 Office 文件需要配置 VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE，并为 Office iframe 提供独立且可访问的来源。",
       saveCopyFailed: "Office 文件另存副本失败。",
       savedAs: (name: string) => `已另存为 ${name}`,
       savedAsCopy: (name: string) => `已另存副本为 ${name}`,

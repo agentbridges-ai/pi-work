@@ -41,7 +41,6 @@ import {
   applyOnlyOfficeSharedAssetCorsHeaders,
   contentTypeForOnlyOfficeAsset,
   isOnlyOfficeBrowserAssetPath,
-  isOnlyOfficeHostRequestHost,
   isOnlyOfficePrintPdfPath,
 } from "./onlyoffice-runtime-assets.js";
 import type { SocketData } from "./ws-bridge.js";
@@ -411,16 +410,6 @@ function serveMissingOnlyOfficePrintPdf(): Response {
   );
 }
 
-function serveOnlyOfficeHostNotFound(): Response {
-  const headers = new Headers();
-  headers.set("Content-Type", "text/plain; charset=utf-8");
-  headers.set("Cache-Control", "no-store, max-age=0");
-  return new Response("OnlyOffice host origin does not serve the Piwork application.", {
-    status: 404,
-    headers,
-  });
-}
-
 async function serveGeneratedOnlyOfficeFontAsset(pathname: string): Promise<Response | null> {
   const target = resolveOnlyOfficeGeneratedFontAsset(onlyOfficeFontAssetsDir, pathname);
   if (!target) return null;
@@ -619,13 +608,6 @@ const server = Bun.serve<SocketData>({
   idleTimeout: 0, // Disable top-level idle timeout — it kills idle browser WebSockets (code 1006)
   async fetch(req, server) {
     const url = new URL(req.url);
-    if (isOnlyOfficeHostRequestHost(req.headers.get("host"))) {
-      if (isOnlyOfficePrintPdfPath(url.pathname)) return serveMissingOnlyOfficePrintPdf();
-      if (isPiworkOnlyOfficeBrowserAssetPath(url.pathname))
-        return serveOnlyOfficeBrowserAsset(url.pathname);
-      return serveOnlyOfficeHostNotFound();
-    }
-
     if (url.pathname === "/api/health/live" && req.method === "GET") {
       return Response.json(livenessResponse(), {
         headers: { "Cache-Control": "no-store, max-age=0" },

@@ -7,7 +7,6 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  firstHeader,
   preserveOriginalOriginProxyOptions,
   resolveOnlyOfficeFontAssetsDir,
   resolveOnlyOfficeGeneratedFontAsset,
@@ -17,7 +16,6 @@ import {
   contentTypeForOnlyOfficeAsset,
   isOnlyOfficeSharedAssetPath,
   isOnlyOfficeBrowserAssetPath,
-  isOnlyOfficeHostRequestHost,
   isOnlyOfficePrintPdfPath,
 } from "./server/onlyoffice-runtime-assets";
 import { readOnlyOfficeRuntimeIdentity } from "./server/onlyoffice-runtime-identity";
@@ -100,7 +98,6 @@ function onlyOfficeBrowserRuntimePlugin(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const requestUrl = req.url || "";
         const pathname = new URL(requestUrl, "http://localhost").pathname;
-        const isOfficeHost = isOnlyOfficeHostRequestHost(firstHeader(req.headers.host));
         if (isOnlyOfficePrintPdfPath(pathname)) {
           res.statusCode = 410;
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -111,13 +108,6 @@ function onlyOfficeBrowserRuntimePlugin(): Plugin {
           return;
         }
         if (!isPiworkOnlyOfficeBrowserAssetPath(pathname)) {
-          if (isOfficeHost) {
-            res.statusCode = 404;
-            res.setHeader("Content-Type", "text/plain; charset=utf-8");
-            res.setHeader("Cache-Control", "no-store, max-age=0");
-            res.end("OnlyOffice host origin does not serve the Piwork application.");
-            return;
-          }
           next();
           return;
         }

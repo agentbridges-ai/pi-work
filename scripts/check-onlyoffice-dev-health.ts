@@ -13,7 +13,6 @@ export type OnlyOfficeRuntimeIdentity = {
 type CheckOnlyOfficeDevHealthOptions = {
   frontendUrl: string;
   runtimeIdentity: OnlyOfficeRuntimeIdentity;
-  hostUrlTemplate?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
 };
@@ -35,27 +34,9 @@ function fail(message: string): never {
   throw new Error(`[onlyoffice-browser] health check failed: ${message}`);
 }
 
-function isolatedHostUrl(frontendUrl: string, hostUrlTemplate = ""): URL {
+function isolatedHostUrl(frontendUrl: string): URL {
   const parent = new URL(frontendUrl);
-  let host: URL;
-  if (hostUrlTemplate.trim()) {
-    host = new URL(
-      hostUrlTemplate
-        .replaceAll("{sessionId}", healthSessionId)
-        .replaceAll("{rawSessionId}", encodeURIComponent(healthSessionId))
-        .replaceAll("{hostname}", parent.hostname)
-        .replaceAll("{origin}", parent.origin)
-        .replaceAll("{protocol}", parent.protocol.replace(/:$/, ""))
-        .replaceAll("{port}", parent.port),
-    );
-  } else {
-    host = new URL("/office-host.html", parent);
-    if (parent.hostname === "127.0.0.1" || parent.hostname === "localhost") {
-      host.hostname = `host-${healthSessionId}.office.localhost`;
-    } else {
-      host.hostname = `${healthSessionId}.office-host.${parent.hostname}`;
-    }
-  }
+  const host = new URL("https://health.onlyoffice.getpi.work/office-host.html");
   host.searchParams.set("sessionId", healthSessionId);
   host.searchParams.set("parentOrigin", parent.origin);
   return host;
@@ -92,11 +73,10 @@ function requireContentType(response: Response, expected: string, label: string)
 export async function checkOnlyOfficeDevHealth({
   frontendUrl,
   runtimeIdentity,
-  hostUrlTemplate = "",
   fetchImpl = fetch,
   timeoutMs = 5_000,
 }: CheckOnlyOfficeDevHealthOptions): Promise<OnlyOfficeDevHealth> {
-  const hostUrl = isolatedHostUrl(frontendUrl, hostUrlTemplate);
+  const hostUrl = isolatedHostUrl(frontendUrl);
   const hostResponse = await fetchRequired(fetchImpl, hostUrl, "office host page", timeoutMs);
   requireContentType(hostResponse, "text/html", "office host page");
   if (hostResponse.headers.get("origin-agent-cluster") !== "?1") {
@@ -243,7 +223,6 @@ if (import.meta.main) {
   try {
     const result = await checkOnlyOfficeDevHealth({
       frontendUrl,
-      hostUrlTemplate: process.env.VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE,
       runtimeIdentity: checkoutDir
         ? await readOnlyOfficeRuntimeIdentity(checkoutDir)
         : await readReleaseIdentity(),

@@ -1193,8 +1193,6 @@ export const enUSCopyOverrides = {
       noSaveCopyAccess:
         "The user space does not have write access, so an Office file copy cannot be saved.",
       preview: "Preview",
-      remoteIpHostRequiresTemplate:
-        "Opening Office files from a remote IP requires VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE and a separate, reachable origin for the Office iframe.",
       saveCopyFailed: "Failed to save Office file copy.",
       savedAs: (name: string) => `Saved as ${name}`,
       savedAsCopy: (name: string) => `Saved copy as ${name}`,

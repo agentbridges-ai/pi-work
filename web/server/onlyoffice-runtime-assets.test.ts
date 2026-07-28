@@ -7,7 +7,6 @@ import {
   applyOnlyOfficeHostResponseHeaders,
   contentTypeForOnlyOfficeAsset,
   isOnlyOfficeBrowserAssetPath,
-  isOnlyOfficeHostRequestHost,
   isOnlyOfficePrintPdfPath,
 } from "./onlyoffice-runtime-assets";
 
@@ -91,16 +90,5 @@ describe("OnlyOffice runtime asset routing", () => {
     expect(contentTypeForOnlyOfficeAsset("/assets/converter-test.js")).toBe(
       "text/javascript; charset=utf-8",
     );
-  });
-
-  it("recognizes isolated OnlyOffice host request hosts", () => {
-    expect(isOnlyOfficeHostRequestHost("host-office-editor-1-abc.office.localhost:3458")).toBe(
-      true,
-    );
-    expect(isOnlyOfficeHostRequestHost("host-office-editor-1-abc.localhost:3458")).toBe(true);
-    expect(isOnlyOfficeHostRequestHost("host.localhost:4173")).toBe(true);
-    expect(isOnlyOfficeHostRequestHost("office-editor-1.office-host.example.com")).toBe(true);
-    expect(isOnlyOfficeHostRequestHost("localhost:3458")).toBe(false);
-    expect(isOnlyOfficeHostRequestHost("agent.office.example.com")).toBe(false);
   });
 });

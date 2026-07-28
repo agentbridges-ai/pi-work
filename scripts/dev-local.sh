@@ -197,15 +197,6 @@ vite_env=(
   "PIWORK_DEV_CONTROL_PLANE_URL=http://127.0.0.1:$PORT"
 )
 
-# Development uses Cloudflare's wildcard host by default so every editor gets
-# an independent origin while all large runtime assets share one canonical
-# browser-cache entry. An explicit caller value still overrides this default.
-if [[ -z "${VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE:-}" ]]; then
-  export VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE='https://office-{sessionId}.getpi.work/office-host.html'
-else
-  export VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE
-fi
-
 add_optional_api_env() {
   local key="$1"
   local value="${2:-}"
@@ -239,8 +230,7 @@ for key in \
   PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE \
   PIWORK_ONLYOFFICE_BROWSER_DIR \
   PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR \
-  VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE; do
+  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR; do
   add_optional_vite_env "$key" "${!key:-}"
 done
 
