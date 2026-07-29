@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-28T14:52:52.000Z",
+  "createdAt": "2026-07-29T04:27:00.000Z",
   "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
   "repositories": {
     "onlyoffice-x2t-wasm": {
@@ -11,8 +11,8 @@
     },
     "onlyoffice-browser": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
-      "version": "0.3.35",
-      "commitSha": "477a1e73de53a741af8b879515ee49c1b94045ea"
+      "version": "0.3.36",
+      "commitSha": "616b15101f9af8f15b43d3b35a5df5aa5158becc"
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/Piwork.git",
@@ -22,19 +22,19 @@
   },
   "npmPackage": {
     "name": "@agentbridges-ai/onlyoffice-browser",
-    "version": "0.3.35",
+    "version": "0.3.36",
     "publish": true
   },
   "runtimeIdentity": {
-    "packageVersion": "0.3.35",
-    "hostBuildId": "office-host-0.3.35-r1",
-    "assetManifestDigest": "affb8dc4274859368b532b0e921141a2ca7deeca5d42db55af1dcf6af9b94bd0"
+    "packageVersion": "0.3.36",
+    "hostBuildId": "office-host-0.3.36-r1",
+    "assetManifestDigest": "6ab95a29587307ce26a617cc9549f9a3d14bb602d35a453a52b225fbd4801523"
   },
   "lockfiles": [
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "aa6a18430638e85c35eddb895cfd7dd1bcf8363555acdc0851342fc6fd63d4c7"
+      "sha256": "d74b1b2a7f492d726747d8b4bff1dac95ee1d1ba442fec13211bd6347a258e4a"
     },
     {
       "repository": "onlyoffice-browser",
@@ -47,19 +47,19 @@
       "repository": "onlyoffice-browser",
       "kind": "npm-proxy-api",
       "path": "dist/npm/public-api.js",
-      "sha256": "51f2d0b0668e4cd6adf5f82c56d394a9ca0de0dfca02683095de496f0bd55c1e"
+      "sha256": "201ccec4cc5fd297aa18d761627e88e230dcb66dc239f170c9567779200b3ef8"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "editor-host-bundle",
-      "path": "dist/assets/officeHost-UK4U4p0a.js",
-      "sha256": "a9011e35fd7b63d24ad552e8e02c0df70c80311745799599a8ebbaaec8ddf9cf"
+      "path": "dist/assets/officeHost-U0OpMenI.js",
+      "sha256": "8f8248a0ea7a57e43cd13289c9784b613cccd7cbb293b76a977556358808f980"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "compact-asset-manifest",
       "path": "dist/onlyoffice-runtime-assets.json",
-      "sha256": "affb8dc4274859368b532b0e921141a2ca7deeca5d42db55af1dcf6af9b94bd0"
+      "sha256": "6ab95a29587307ce26a617cc9549f9a3d14bb602d35a453a52b225fbd4801523"
     },
     {
       "repository": "onlyoffice-browser",

@@ -59,6 +59,7 @@ import {
   ensureOfficeResources,
   getVerifiedOfficeFontPaths,
   officeResourcesNeedAttention,
+  prepareOfficeResourcesForFile,
   requestOfficeResourceSettings,
 } from "../../office-runtime-resources.js";
 import { runtimeContextCoordinator } from "../../runtime-context.js";
@@ -3395,6 +3396,9 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
         if (disposed) return;
         editorRef.current = instance as ThemeAwareOfficeEditorInstance;
         setOpening(false);
+        void prepareOfficeResourcesForFile(initialRuntimeFileNameRef.current).catch(
+          () => undefined,
+        );
       },
       onPluginReady(pluginGuid, _editorType, instance) {
         if (disposed || pluginGuid !== ONLYOFFICE_PLUGIN_GUID) return;

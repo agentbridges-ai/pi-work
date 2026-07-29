@@ -10,6 +10,7 @@ import {
   downloadOfficeFontFamily,
   ensureOfficeResources,
   getOfficeResourceSnapshot,
+  installOfficeFontPreset,
   loadAllOfficeResources,
   subscribeOfficeResources,
   uninstallOfficeFontFamily,
@@ -154,15 +155,7 @@ function OfficeResourcesSection() {
   }, []);
 
   const resources = state.resources;
-  const progress = resources?.progress;
   const busy = Boolean(resources?.operation);
-  const ratio = progress
-    ? progress.totalBytes > 0
-      ? progress.completedBytes / progress.totalBytes
-      : progress.totalFiles > 0
-        ? progress.completedFiles / progress.totalFiles
-        : 0
-    : 0;
   const copy = uiCopy.chat.preferencesPanel.officeResources;
   const categoryLabels = copy.categories;
   const error =
@@ -180,83 +173,79 @@ function OfficeResourcesSection() {
   return (
     <section className="mt-6" data-testid="office-resources-section">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
-        <span className="text-xs text-muted-foreground">
-          {state.status === "checking"
-            ? copy.checking
-            : progress?.phase === "complete"
-              ? copy.ready
-              : copy.incomplete}
-        </span>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{copy.description}</p>
+        </div>
+        <div className="shrink-0 text-right text-xs text-muted-foreground">
+          <div className="font-medium text-foreground">
+            {state.status === "checking"
+              ? copy.checking
+              : resources?.readiness === "ready"
+                ? copy.ready
+                : copy.incomplete}
+          </div>
+          {resources && <div className="mt-0.5">{copy.version(resources.packageVersion)}</div>}
+        </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-[var(--piwork-control-radius)] border border-border bg-card">
-        <div className="px-3 py-3">
-          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>
-              {progress
-                ? copy.summary(progress.completedFiles, progress.totalFiles)
-                : copy.statusUnavailable}
-            </span>
-            {progress && (
-              <span>
-                {formatOfficeResourceBytes(progress.completedBytes)} /{" "}
-                {formatOfficeResourceBytes(progress.totalBytes)}
-              </span>
-            )}
+        {resources ? (
+          <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-3">
+            {resources.packs.map((pack) => (
+              <div
+                key={pack.id}
+                className="flex items-center justify-between gap-2 rounded-[var(--piwork-control-radius)] border border-border bg-background px-2.5 py-2 text-xs"
+              >
+                <span className="font-medium text-foreground">{categoryLabels[pack.id]}</span>
+                <span className="text-muted-foreground">
+                  {pack.ready ? copy.packReady : copy.packOnDemand}
+                </span>
+              </div>
+            ))}
           </div>
-          <progress
-            aria-label={copy.progressLabel}
-            className="mt-2 h-2 w-full accent-primary"
-            max={1}
-            value={Math.min(1, ratio)}
-          />
-          {progress && progress.failedFiles > 0 && (
-            <div className="mt-1 text-xs text-danger">{copy.failedFiles(progress.failedFiles)}</div>
-          )}
-        </div>
-
-        {progress && (
-          <div className="grid gap-2 border-t border-border px-3 py-3">
-            {progress.categories.map((category) => {
-              const categoryRatio =
-                category.totalBytes > 0
-                  ? category.completedBytes / category.totalBytes
-                  : category.totalFiles > 0
-                    ? category.completedFiles / category.totalFiles
-                    : 0;
-              return (
-                <div key={category.category}>
-                  <div className="flex justify-between gap-3 text-xs text-muted-foreground">
-                    <span>{categoryLabels[category.category]}</span>
-                    <span>
-                      {category.completedFiles} / {category.totalFiles}
-                    </span>
-                  </div>
-                  <progress
-                    aria-label={copy.categoryProgressLabel(categoryLabels[category.category])}
-                    className="mt-1 h-1.5 w-full accent-primary"
-                    max={1}
-                    value={Math.min(1, categoryRatio)}
-                  />
-                </div>
-              );
-            })}
-          </div>
+        ) : (
+          <div className="px-3 py-3 text-xs text-muted-foreground">{copy.statusUnavailable}</div>
         )}
 
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={resources?.operation === "prefetch-recommended"}
+            isDisabled={busy || state.status === "checking"}
+            onPress={() => void installOfficeFontPreset("basic").catch(() => undefined)}
+          >
+            {copy.basicPreset}
+          </Button>
+          <Button
+            size="sm"
+            loading={resources?.operation === "install-font-preset"}
+            isDisabled={busy || state.status === "checking"}
+            onPress={() =>
+              void installOfficeFontPreset("office-compatibility").catch(() => undefined)
+            }
+          >
+            {copy.compatibilityPreset}
+          </Button>
+        </div>
+
         {resources && (
-          <div className="border-t border-border px-3 py-3">
-            <div className="mb-2 text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
-            <div className="grid gap-2">
+          <details className="group border-t border-border px-3 py-3">
+            <summary className="cursor-pointer text-xs font-semibold text-foreground">
+              {copy.advanced}
+            </summary>
+            <div className="mt-3 text-xs text-muted-foreground">{copy.storageNote}</div>
+            <div className="mt-3 grid gap-2">
+              <div className="text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
               {resources.fonts.map((font) => (
                 <div
                   key={font.id}
                   className="flex min-h-9 items-center justify-between gap-3 text-sm"
                   data-testid={`office-font-${font.id}`}
                 >
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 truncate font-medium text-foreground">
                     {font.name}
-                    <span className="ml-1 text-xs text-muted-foreground">
+                    <span className="ml-1 font-normal text-muted-foreground">
                       · {formatOfficeResourceBytes(font.bytes)}
                     </span>
                   </span>
@@ -287,28 +276,28 @@ function OfficeResourcesSection() {
               ))}
             </div>
             <div className="mt-2 text-xs text-muted-foreground">{copy.reopenHint}</div>
-          </div>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={resources.operation === "check-health"}
+                isDisabled={busy}
+                onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
+              >
+                {copy.checkAndRepair}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={resources.operation === "load-all"}
+                isDisabled={busy}
+                onPress={() => void loadAllOfficeResources().catch(() => undefined)}
+              >
+                {copy.downloadAll}
+              </Button>
+            </div>
+          </details>
         )}
-
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-3">
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={resources?.operation === "check-health"}
-            isDisabled={busy || state.status === "checking"}
-            onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
-          >
-            {copy.checkAndRepair}
-          </Button>
-          <Button
-            size="sm"
-            loading={resources?.operation === "load-all"}
-            isDisabled={busy || state.status === "checking"}
-            onPress={() => void loadAllOfficeResources().catch(() => undefined)}
-          >
-            {copy.downloadAll}
-          </Button>
-        </div>
       </div>
       {error && (
         <div className="mt-2 text-xs font-medium text-danger" role="alert">

@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => {
   const resources = {
+    packageVersion: "0.3.36",
+    assetVersion: "assets-v1",
+    readiness: "needs-download" as const,
+    packs: [
+      { id: "fonts" as const, ready: true, completedBytes: 4, totalBytes: 4 },
+      { id: "core" as const, ready: true, completedBytes: 4, totalBytes: 4 },
+      { id: "word" as const, ready: false, completedBytes: 0, totalBytes: 4 },
+    ],
     progress: {
       phase: "ready" as const,
       completedFiles: 1,
@@ -41,6 +49,9 @@ const runtimeMock = vi.hoisted(() => {
     remainingBytes: vi.fn(() => 4),
     loadAll: vi.fn(async () => undefined),
     checkHealth: vi.fn(async () => undefined),
+    repair: vi.fn(async () => undefined),
+    prepareForDocumentType: vi.fn(async () => undefined),
+    installFontPreset: vi.fn(async () => undefined),
     downloadFontFamily: vi.fn(async () => undefined),
     uninstallFontFamily: vi.fn(async () => undefined),
   };
@@ -61,6 +72,7 @@ import {
   getOfficeResourceSnapshot,
   getVerifiedOfficeFontPaths,
   loadAllOfficeResources,
+  prepareOfficeResourcesForFile,
   requestOfficeResourceSettings,
   resetOfficeResourcesForTests,
   subscribeOfficeResourceSettingsRequests,
@@ -115,6 +127,16 @@ describe("Piwork Office resource state", () => {
       availableBytes: 1,
       requiredBytes: 4,
     });
+  });
+
+  it("prepares only the resource pack matching the opened document", async () => {
+    await prepareOfficeResourcesForFile("budget.xlsx");
+    await prepareOfficeResourcesForFile("brief.docx");
+    await prepareOfficeResourcesForFile("deck.pptx");
+
+    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(1, "cell");
+    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(2, "word");
+    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(3, "slide");
   });
 
   it("opens the settings surface through the resource request channel", () => {

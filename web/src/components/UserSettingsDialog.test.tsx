@@ -13,6 +13,16 @@ const officeResourcesMock = vi.hoisted(() => ({
     status: "ready" as const,
     error: null,
     resources: {
+      packageVersion: "0.3.36",
+      assetVersion: "assets-v1",
+      readiness: "needs-download",
+      packs: [
+        { id: "fonts", ready: true, completedBytes: 1_000, totalBytes: 1_000 },
+        { id: "core", ready: true, completedBytes: 1_000, totalBytes: 1_000 },
+        { id: "word", ready: false, completedBytes: 0, totalBytes: 2_000 },
+        { id: "cell", ready: false, completedBytes: 0, totalBytes: 2_000 },
+        { id: "slide", ready: false, completedBytes: 0, totalBytes: 2_000 },
+      ],
       progress: {
         phase: "ready" as const,
         completedFiles: 3,
@@ -90,6 +100,7 @@ vi.mock("../office-runtime-resources.js", () => ({
   loadAllOfficeResources: vi.fn(async () => undefined),
   checkAndRepairOfficeResources: vi.fn(async () => undefined),
   downloadOfficeFontFamily: vi.fn(async () => undefined),
+  installOfficeFontPreset: vi.fn(async () => undefined),
   uninstallOfficeFontFamily: vi.fn(async () => undefined),
 }));
 
@@ -183,7 +194,7 @@ describe("UserSettingsDialog", () => {
   });
 
   it.each(["zh-CN", "en-US"] as const)(
-    "shows device-local Office cache and font controls in %s",
+    "shows simplified Office readiness and presets in %s",
     (locale) => {
       renderDialog(locale);
 
@@ -191,20 +202,21 @@ describe("UserSettingsDialog", () => {
       expect(
         within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
       ).toBeInTheDocument();
-      expect(within(section).getByText("DengXian")).toBeInTheDocument();
-      expect(within(section).getByText("Microsoft YaHei")).toBeInTheDocument();
       expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.required),
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.3.36")),
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("button", {
-          name: uiCopy.chat.preferencesPanel.officeResources.download,
+          name: uiCopy.chat.preferencesPanel.officeResources.basicPreset,
         }),
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("button", {
-          name: uiCopy.chat.preferencesPanel.officeResources.downloadAll,
+          name: uiCopy.chat.preferencesPanel.officeResources.compatibilityPreset,
         }),
+      ).toBeInTheDocument();
+      expect(
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.advanced),
       ).toBeInTheDocument();
     },
   );

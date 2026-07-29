@@ -1,5 +1,7 @@
 import {
   createOfficeRuntimeResourceManager,
+  type OfficeDocumentResourceType,
+  type OfficeFontPreset,
   type OfficeRuntimeResourceManager,
   type OfficeRuntimeResourceSnapshot,
 } from "@agentbridges-ai/onlyoffice-browser";
@@ -131,10 +133,31 @@ export function loadAllOfficeResources(): Promise<void> {
   );
 }
 
+function officeDocumentResourceType(fileName: string): OfficeDocumentResourceType {
+  const extension = fileName.split(".").pop()?.toLocaleLowerCase();
+  if (extension === "xlsx" || extension === "xls" || extension === "csv" || extension === "ods") {
+    return "cell";
+  }
+  if (extension === "pptx" || extension === "ppt" || extension === "odp") return "slide";
+  return "word";
+}
+
+export async function prepareOfficeResourcesForFile(fileName: string): Promise<void> {
+  const resourceManager = await ensureOfficeResources();
+  await resourceManager.prepareForDocumentType(officeDocumentResourceType(fileName));
+}
+
+export function installOfficeFontPreset(preset: OfficeFontPreset): Promise<void> {
+  return runOperation(
+    (resourceManager) => resourceManager.installFontPreset(preset),
+    (resourceManager) => resourceManager.remainingBytes(),
+  );
+}
+
 export async function checkAndRepairOfficeResources(): Promise<void> {
   const resourceManager = await ensureOfficeResources();
   try {
-    await resourceManager.checkHealth();
+    await resourceManager.repair();
   } catch (error) {
     publish({ ...snapshot, status: "error", error: { code: "operation-failed" } });
     throw error;
@@ -160,8 +183,11 @@ export async function uninstallOfficeFontFamily(id: string): Promise<void> {
 }
 
 export function officeResourcesNeedAttention(): boolean {
-  const current = snapshot.resources?.progress;
-  return snapshot.status === "error" || Boolean(current && current.phase !== "complete");
+  const resources = snapshot.resources;
+  if (snapshot.status === "error" || resources?.readiness === "error") return true;
+  return Boolean(
+    resources?.packs.some((pack) => (pack.id === "core" || pack.id === "fonts") && !pack.ready),
+  );
 }
 
 export function requestOfficeResourceSettings(): void {

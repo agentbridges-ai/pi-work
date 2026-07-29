@@ -252,6 +252,9 @@ export const enUSCopyOverrides = {
       },
       officeResources: {
         title: "Office resources",
+        description:
+          "Required resources are prepared as documents open; common fonts can be installed ahead of time.",
+        version: (version: string) => `OnlyOffice ${version}`,
         checking: "Checking",
         ready: "Ready",
         incomplete: "Not fully downloaded",
@@ -268,6 +271,12 @@ export const enUSCopyOverrides = {
           slide: "Presentation",
         },
         fontsTitle: "Font packages",
+        basicPreset: "Prepare essentials",
+        compatibilityPreset: "Install Office-compatible fonts",
+        advanced: "Advanced resources and fonts",
+        packReady: "Installed",
+        packOnDemand: "On demand",
+        storageNote: "Resources stay in this browser and do not use Piwork workspace storage.",
         required: "Required",
         download: "Download",
         remove: "Remove",
