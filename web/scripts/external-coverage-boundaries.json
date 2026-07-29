@@ -111,6 +111,21 @@
       ]
     },
     {
+      "path": "web/scripts/finalize-pwa-shell.mjs",
+      "reason": "The post-build script reads and rewrites the generated Vite output and is executed by the production build outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "build"
+      },
+      "evidence": [
+        "Makefile",
+        "web/package.json",
+        "web/server/pwa-assets.test.ts",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
       "path": "web/server/index.ts",
       "reason": "The Bun server entrypoint is executed by the authenticated Playwright job rather than inside Vitest V8 coverage.",
       "runner": {

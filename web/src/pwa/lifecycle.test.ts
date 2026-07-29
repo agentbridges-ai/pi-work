@@ -169,4 +169,34 @@ describe("PWA lifecycle", () => {
     expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
     expect(runtime.windowObject.location.reload).toHaveBeenCalledOnce();
   });
+
+  it("fails closed when the same waiting worker already triggered one refresh", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true });
+    const waiting = runtime.waiting!;
+    Object.assign(waiting, { scriptURL: "https://piwork.test/piwork-sw.js?v=2" });
+    const storage = new Map<string, string>([
+      ["piwork-pwa-refresh:https://piwork.test/piwork-sw.js?v=2", "1"],
+    ]);
+    Object.assign(runtime.windowObject, {
+      sessionStorage: {
+        get length() {
+          return storage.size;
+        },
+        getItem: (key: string) => storage.get(key) ?? null,
+        key: (index: number) => [...storage.keys()][index] ?? null,
+        removeItem: (key: string) => storage.delete(key),
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    storage.set("piwork-pwa-refresh:https://piwork.test/piwork-sw.js?v=2", "1");
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("failed");
+    expect(getPwaLifecycleState()).toMatchObject({
+      updateActivating: false,
+      error: "This app update already refreshed once and still did not activate",
+    });
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+  });
 });

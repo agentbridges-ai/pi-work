@@ -263,7 +263,8 @@ export const enUSCopyOverrides = {
         repairNeeded: "Repair needed",
         statusUnavailable: "Resource status is temporarily unavailable",
         summary: (completed: number, total: number) => `${completed} / ${total} files cached`,
-        failedFiles: (count: number) => `${count} files failed to load`,
+        failedFiles: (count: number) =>
+          count === 1 ? "1 file failed to load" : `${count} files failed to load`,
         progressLabel: "Office resource cache progress",
         downloadProgress: (completed: string, total: string) =>
           `Downloading ${completed} / ${total}`,
