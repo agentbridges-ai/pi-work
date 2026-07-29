@@ -57,9 +57,11 @@ help:
 
 .PHONY: install agent-browser agent-browser-e2e
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
-# Linux, so keep installed package metadata private to this checkout.
+# Linux, so keep installed package metadata private to this checkout. A hoisted
+# layout also gives the runtime, its transitive Pi modules, and TypeScript one
+# canonical dependency tree inside the SRT allow-read root.
 install:
-	cd $(WEB_DIR) && bun install --backend copyfile --frozen-lockfile
+	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh
