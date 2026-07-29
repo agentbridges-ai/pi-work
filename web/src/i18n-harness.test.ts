@@ -28,6 +28,7 @@ const SHARED_COPY_PATHS = new Set([
   "chat.keyboardShortcuts.keys.shift",
   "chat.keyboardShortcuts.keys.tab",
   "chat.keyboardShortcuts.keys.u",
+  "chat.preferencesPanel.officeResources.categories.word",
   "agents.items.agent.name",
   "login.brand",
   "timeline.thinking",

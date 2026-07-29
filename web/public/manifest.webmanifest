@@ -65,6 +65,15 @@
       "purpose": "maskable"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshots/piwork-desktop-1280x720.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Piwork Agent 工作台"
+    }
+  ],
   "shortcuts": [
     {
       "name": "打开Agent工作台",

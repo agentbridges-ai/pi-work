@@ -10,6 +10,7 @@ export default defineConfig({
       reportsDirectory: "coverage",
       include: [
         "bin/**/*.ts",
+        "scripts/**/*.mjs",
         "scripts/**/*.ts",
         "server/**/*.ts",
         "shared/**/*.ts",

@@ -14,7 +14,9 @@ function createWorker(state: ServiceWorkerState = "installed") {
   return target;
 }
 
-function createRuntime(options: { waiting?: boolean; controlled?: boolean } = {}) {
+function createRuntime(
+  options: { waiting?: boolean; controlled?: boolean; unsafePeer?: boolean } = {},
+) {
   const windowTarget = new EventTarget() as EventTarget & {
     location: { reload: ReturnType<typeof vi.fn> };
     document: { visibilityState: DocumentVisibilityState };
@@ -30,6 +32,38 @@ function createRuntime(options: { waiting?: boolean; controlled?: boolean } = {}
         removeEventListener: vi.fn(),
       }) as unknown as MediaQueryList,
   );
+  if (options.unsafePeer) {
+    class TestBroadcastChannel extends EventTarget {
+      postMessage(message: { type?: string; requestId?: string }) {
+        if (message.type === "HELLO") {
+          queueMicrotask(() =>
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: { protocol: 1, type: "HELLO_ACK", tabId: "remote-tab" },
+              }),
+            ),
+          );
+        }
+        if (message.type === "PREPARE_UPDATE") {
+          queueMicrotask(() =>
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: {
+                  protocol: 1,
+                  type: "PREPARE_RESULT",
+                  tabId: "remote-tab",
+                  requestId: message.requestId,
+                  safe: false,
+                },
+              }),
+            ),
+          );
+        }
+      }
+      close() {}
+    }
+    Object.assign(windowTarget, { BroadcastChannel: TestBroadcastChannel });
+  }
 
   const waiting = options.waiting ? createWorker() : null;
   const registrationTarget = new EventTarget() as EventTarget & ServiceWorkerRegistration;
@@ -111,6 +145,16 @@ describe("PWA lifecycle", () => {
     expect(runtime.windowObject.location.reload).not.toHaveBeenCalled();
   });
 
+  it("does not activate while another tab reports an unsafe Office state", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true, unsafePeer: true });
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("blocked");
+    expect(runtime.waiting?.postMessage).not.toHaveBeenCalled();
+    expect(runtime.windowObject.location.reload).not.toHaveBeenCalled();
+  });
+
   it("reloads once only after the user activates the waiting worker", async () => {
     const runtime = createRuntime({ waiting: true, controlled: true });
     await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
@@ -124,5 +168,35 @@ describe("PWA lifecycle", () => {
 
     expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
     expect(runtime.windowObject.location.reload).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the same waiting worker already triggered one refresh", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true });
+    const waiting = runtime.waiting!;
+    Object.assign(waiting, { scriptURL: "https://piwork.test/piwork-sw.js?v=2" });
+    const storage = new Map<string, string>([
+      ["piwork-pwa-refresh:https://piwork.test/piwork-sw.js?v=2", "1"],
+    ]);
+    Object.assign(runtime.windowObject, {
+      sessionStorage: {
+        get length() {
+          return storage.size;
+        },
+        getItem: (key: string) => storage.get(key) ?? null,
+        key: (index: number) => [...storage.keys()][index] ?? null,
+        removeItem: (key: string) => storage.delete(key),
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    storage.set("piwork-pwa-refresh:https://piwork.test/piwork-sw.js?v=2", "1");
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("failed");
+    expect(getPwaLifecycleState()).toMatchObject({
+      updateActivating: false,
+      error: "This app update already refreshed once and still did not activate",
+    });
+    expect(waiting.postMessage).not.toHaveBeenCalled();
   });
 });

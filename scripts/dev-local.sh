@@ -216,24 +216,11 @@ add_optional_vite_env() {
 for key in \
   BETTER_AUTH_SECRET \
   PIWORK_SESSION_SANDBOX \
-  PIWORK_REQUIRE_SESSION_SANDBOX \
-  PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE \
-  PIWORK_ONLYOFFICE_BROWSER_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR; do
+  PIWORK_REQUIRE_SESSION_SANDBOX; do
   add_optional_api_env "$key" "${!key:-}"
 done
 
 add_optional_api_env "TMPDIR" "${TMPDIR:-}"
-
-for key in \
-  PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE \
-  PIWORK_ONLYOFFICE_BROWSER_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR \
-  VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE; do
-  add_optional_vite_env "$key" "${!key:-}"
-done
 
 : >"$SERVER_LOG"
 : >"$VITE_LOG"
@@ -341,8 +328,6 @@ wait_for_url() {
 
 wait_for_url "local API" "http://127.0.0.1:$PORT/build-info" "$SERVER_LOG"
 wait_for_url "Vite" "http://127.0.0.1:$VITE_PORT/index.html" "$VITE_LOG"
-"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT" \
-  --checkout "$ROOT_DIR/onlyoffice-browser"
 
 cat >"$PORTS_ENV" <<EOF
 PORT=$PORT

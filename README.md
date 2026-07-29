@@ -60,9 +60,6 @@ make dev-fast
 make dev-fast-stop
 make status
 make agent-browser-e2e
-make prepare-onlyoffice-fonts
-make onlyoffice-save-e2e
-make onlyoffice-print-e2e
 
 make typecheck
 make test-targeted
@@ -95,9 +92,10 @@ CONFIRM_HARD_RESET=1 make dev-reset-sessions-hard
 `make dev` 会准备固定提交的运行组件。首次使用时点击工作台标题栏的浏览器图标，启动桥接，然后按面板提示在
 `chrome://extensions` 中加载已解压扩展。发布前可运行 `make agent-browser-e2e`，它只接受真实扩展连接，不会回退到 mock CDP。
 
-Office 本地预览依赖预生成字体资产。首次准备或刷新字体时运行
-`make prepare-onlyoffice-fonts`；目标字体和授权说明见
-[fonts/README.md](fonts/README.md)。
+Office 编辑器 Host 与字体、SDK、WASM 等静态资源由独立部署的
+`onlyoffice.getpi.work` 提供。Piwork 只使用已发布的
+`@agentbridges-ai/onlyoffice-browser` 客户端 API；`make dev` 和
+`make build` 不准备、校验或托管 repo-local OnlyOffice 资源。
 
 ## 状态权威来源
 

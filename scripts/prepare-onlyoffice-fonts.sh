@@ -2,9 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FONT_ASSETS_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ROOT_DIR/fonts/onlyoffice-browser}"
+ONLYOFFICE_BROWSER_DIR="${PIWORK_ONLYOFFICE_BROWSER_DIR:-$ROOT_DIR/onlyoffice-browser}"
+FONT_ASSETS_TARGET_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ONLYOFFICE_BROWSER_DIR/.onlyoffice-font-assets}"
+FONT_ASSETS_PARENT_DIR="$(dirname "$FONT_ASSETS_TARGET_DIR")"
 FONT_SET="${PIWORK_ONLYOFFICE_BROWSER_FONT_SET:-zh-core}"
 SOURCE_CACHE_CONFIGURED="${PIWORK_ONLYOFFICE_FONT_SOURCE_CACHE_DIR:-}"
+mkdir -p "$FONT_ASSETS_PARENT_DIR"
+FONT_ASSETS_DIR="$(mktemp -d "$FONT_ASSETS_PARENT_DIR/.onlyoffice-font-assets.staging.XXXXXX")"
 if [[ -n "$SOURCE_CACHE_CONFIGURED" ]]; then
   FONT_SOURCE_DIR="$SOURCE_CACHE_CONFIGURED"
   CLEAN_FONT_SOURCE=0
@@ -15,6 +19,35 @@ fi
 
 log() {
   printf '[onlyoffice-fonts] %s\n' "$*"
+}
+
+promote_font_assets() {
+  [[ -n "$FONT_ASSETS_TARGET_DIR" && "$FONT_ASSETS_TARGET_DIR" != "/" ]] || {
+    printf '[onlyoffice-fonts] Refusing unsafe font asset target: %s\n' "$FONT_ASSETS_TARGET_DIR" >&2
+    return 1
+  }
+
+  local backup_dir=""
+  if [[ -e "$FONT_ASSETS_TARGET_DIR" ]]; then
+    backup_dir="$FONT_ASSETS_TARGET_DIR.previous.$$"
+    [[ ! -e "$backup_dir" ]] || {
+      printf '[onlyoffice-fonts] Font asset backup already exists: %s\n' "$backup_dir" >&2
+      return 1
+    }
+    mv "$FONT_ASSETS_TARGET_DIR" "$backup_dir"
+  fi
+
+  if ! mv "$FONT_ASSETS_DIR" "$FONT_ASSETS_TARGET_DIR"; then
+    if [[ -n "$backup_dir" && -e "$backup_dir" ]]; then
+      mv "$backup_dir" "$FONT_ASSETS_TARGET_DIR"
+    fi
+    return 1
+  fi
+
+  FONT_ASSETS_DIR=""
+  if [[ -n "$backup_dir" ]]; then
+    rm -rf "$backup_dir"
+  fi
 }
 
 copy_font() {
@@ -69,7 +102,7 @@ write_manifest() {
     printf 'Piwork local OnlyOffice font source cache\n'
     printf 'Generated at: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'Source directory: %s\n' "$FONT_SOURCE_DIR"
-    printf 'Generated assets: %s\n\n' "$FONT_ASSETS_DIR"
+    printf 'Generated assets: %s\n\n' "$FONT_ASSETS_TARGET_DIR"
     printf 'Requested families:\n'
     printf '%s\n' '- Aptos'
     printf '%s\n' '- Calibri'
@@ -139,10 +172,13 @@ if (sourceMapPath && fs.existsSync(sourceMapPath)) {
 NODE
 }
 
-mkdir -p "$FONT_SOURCE_DIR" "$FONT_ASSETS_DIR"
+mkdir -p "$FONT_SOURCE_DIR"
 cleanup() {
   if [[ "$CLEAN_FONT_SOURCE" == "1" ]]; then
     rm -rf "$FONT_SOURCE_DIR"
+  fi
+  if [[ -n "${FONT_ASSETS_DIR:-}" && -d "$FONT_ASSETS_DIR" ]]; then
+    rm -rf "$FONT_ASSETS_DIR"
   fi
 }
 trap cleanup EXIT
@@ -208,17 +244,18 @@ fi
 write_manifest
 
 log "collected $(find "$FONT_SOURCE_DIR" -maxdepth 1 -type f ! -name 'manifest.txt' | wc -l | tr -d ' ') font file(s)"
-log "generating OnlyOffice assets into $FONT_ASSETS_DIR"
-rm -rf "$FONT_ASSETS_DIR"
-mkdir -p "$FONT_ASSETS_DIR"
+log "generating OnlyOffice assets for $FONT_ASSETS_TARGET_DIR"
 PIWORK_ONLYOFFICE_BROWSER_FONT_SOURCE_DIR="$FONT_SOURCE_DIR" \
 PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$FONT_ASSETS_DIR" \
 PIWORK_ONLYOFFICE_BROWSER_FONT_SET="$FONT_SET" \
 PIWORK_ONLYOFFICE_SKIP_FONT_POLICY=1 \
+PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT="${PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT:-1}" \
   "$ROOT_DIR/scripts/ensure-onlyoffice-browser.sh"
 filter_visible_fonts
-node "$ROOT_DIR/onlyoffice-browser/scripts/verify-onlyoffice-font-assets.mjs" --input "$FONT_ASSETS_DIR"
+node "$ONLYOFFICE_BROWSER_DIR/scripts/verify-onlyoffice-font-assets.mjs" --input "$FONT_ASSETS_DIR"
 PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$FONT_ASSETS_DIR" \
+PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT="${PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT:-1}" \
   "$ROOT_DIR/scripts/ensure-onlyoffice-browser.sh"
+promote_font_assets
 
-log "ready"
+log "ready: $FONT_ASSETS_TARGET_DIR"

@@ -4,6 +4,7 @@ WEB_DIR := web
 RUNTIME_DIR := .runtime
 CRITICAL_TESTS_FILE := scripts/critical-tests.txt
 COVERAGE_THRESHOLD ?= 80
+AUTH_CLI := npx --yes auth@1.6.20
 
 .PHONY: help
 help:
@@ -14,14 +15,10 @@ help:
 		  '  make install              Install web dependencies' \
 		  '  make agent-browser        Prepare the pinned agent-browser Chrome extension runtime' \
 		  '  make agent-browser-e2e    Run the real Mac Chrome extension bridge smoke test' \
-		  '  make onlyoffice-browser   Prepare the local OnlyOffice browser runtime and font assets' \
-		  '  make prepare-onlyoffice-fonts  Collect local fonts and generate repo font assets' \
-		  '  make onlyoffice-save-e2e  Run the OnlyOffice save-flow E2E suite' \
-		  '  make onlyoffice-print-e2e Run the OnlyOffice print-flow E2E suite' \
 		  '  make dev                  Start local Bun API + Vite frontend' \
 	  '  make dev-fast             Alias for make dev' \
 	  '  make dev-fast-stop        Stop local dev processes' \
-	  '  make status               Check local server, Vite, and OnlyOffice health' \
+	  '  make status               Check local server and Vite health' \
 	  '  make stop                 Alias for make dev-fast-stop' \
 	  '  make auth-generate        Generate Better Auth SQL schema' \
 	  '  make auth-migrate         Apply Better Auth Postgres schema' \
@@ -45,7 +42,6 @@ help:
 	  '  make lint                 Run ESLint over maintained web source' \
 	  '  make format              Format maintained source, config, and docs' \
 	  '  make format-check        Verify Prettier formatting' \
-	  '  make onlyoffice-verify    Verify the pinned OnlyOffice release inputs and artifacts' \
 	  '  make deadcode             Run the dead-code TypeScript project' \
 	  '  make dry-check            Run duplication check' \
 	  '' \
@@ -59,11 +55,16 @@ help:
 	  '  make pi-reset-legacy-sessions  Dry-run the explicit legacy session reset' \
 	  '  make dev-reset-sessions-hard  Hard-delete local data/ session state'
 
-.PHONY: install agent-browser agent-browser-e2e onlyoffice-browser onlyoffice-browser-dev prepare-onlyoffice-fonts onlyoffice-save-e2e onlyoffice-print-e2e
+.PHONY: install agent-browser agent-browser-e2e
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
-# Linux, so keep installed package metadata private to this checkout.
+# Linux, so keep installed package metadata private to this checkout. A hoisted
+# layout also gives the runtime, its transitive Pi modules, and TypeScript one
+# canonical dependency tree inside the SRT allow-read root.
 install:
-	cd $(WEB_DIR) && bun install --backend copyfile --frozen-lockfile --omit optional
+	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
+	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
+		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
+	fi
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh
@@ -71,24 +72,9 @@ agent-browser:
 agent-browser-e2e: agent-browser
 	node ./scripts/e2e-agent-browser-chrome-extension.mjs
 
-onlyoffice-browser:
-	./scripts/ensure-onlyoffice-browser.sh
-
-onlyoffice-browser-dev:
-	PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT=1 ./scripts/ensure-onlyoffice-browser.sh
-
-prepare-onlyoffice-fonts:
-	./scripts/prepare-onlyoffice-fonts.sh
-
-onlyoffice-save-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/fonts/onlyoffice-browser" pnpm run test:e2e:save
-
-onlyoffice-print-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/fonts/onlyoffice-browser" pnpm run test:e2e:print
-
 .PHONY: dev dev-fast dev-fast-stop status stop
 dev: dev-fast
-dev-fast: agent-browser onlyoffice-browser-dev
+dev-fast: agent-browser
 	./scripts/dev-local.sh
 dev-fast-stop:
 	./scripts/dev-local-stop.sh
@@ -97,19 +83,18 @@ status:
 	  api_port="$${PORT:-3457}"; \
 	  vite_port="$${VITE_PORT:-3458}"; \
 	  curl -fsS "http://127.0.0.1:$$api_port/build-info" >/dev/null && echo "local API ready: http://127.0.0.1:$$api_port" || (echo 'local API is not ready' >&2; exit 1); \
-	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1); \
-	  bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port" --checkout "$(CURDIR)/onlyoffice-browser"
+	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1)
 stop: dev-fast-stop
 
 .PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi
 auth-generate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for Better Auth schema generation.' >&2; exit 1; fi; \
-	  cd $(WEB_DIR) && bunx auth@1.6.20 generate --config server/better-auth.ts --output server/migrations/better-auth.sql --yes
+	  cd $(WEB_DIR) && $(AUTH_CLI) generate --config server/better-auth.ts --output server/migrations/better-auth.sql --yes
 auth-migrate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for Better Auth migrations.' >&2; exit 1; fi; \
-	  cd $(WEB_DIR) && bunx auth@1.6.20 migrate --config server/better-auth.ts --yes
+	  cd $(WEB_DIR) && $(AUTH_CLI) migrate --config server/better-auth.ts --yes
 rbac-migrate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for RBAC migrations.' >&2; exit 1; fi; \
@@ -139,10 +124,10 @@ test-srt-pi:
 		echo 'Skipping Linux-only native Pi SRT smoke on non-Linux.'; \
 	fi
 
-.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify onlyoffice-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc onlyoffice-verify backup-self-test build
+.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
+verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
 
-verify-toolchain: onlyoffice-browser
+verify-toolchain:
 	./scripts/verify-toolchain.sh
 
 verify-pi-versions:
@@ -153,9 +138,6 @@ verify-pi-only-runtime:
 
 agent-browser-verify:
 	node ./scripts/verify-agent-browser-release.mjs
-
-onlyoffice-verify: onlyoffice-browser
-	node ./scripts/verify-onlyoffice-release.mjs
 
 backup-self-test:
 	./scripts/verify-backup.sh --self-test
@@ -211,7 +193,6 @@ landing-lint:
 
 .PHONY: build
 build:
-	./scripts/ensure-onlyoffice-browser.sh
 	cd $(WEB_DIR) && bun run build
 
 .PHONY: backup backup-verify clean-runtime pi-reset-legacy-sessions dev-reset-sessions-hard

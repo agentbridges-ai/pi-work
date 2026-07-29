@@ -87,11 +87,11 @@ if [[ ! "$ONLYOFFICE_BROWSER_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 ONLYOFFICE_BROWSER_REPO="${PIWORK_ONLYOFFICE_BROWSER_REPO:-https://github.com/agentbridges-ai/onlyoffice-browser.git}"
 ONLYOFFICE_BROWSER_DIR="${PIWORK_ONLYOFFICE_BROWSER_DIR:-$ROOT_DIR/onlyoffice-browser}"
-ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-${ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ROOT_DIR/fonts/onlyoffice-browser}}"
+ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-${ONLYOFFICE_BROWSER_FONT_ASSETS_DIR:-$ONLYOFFICE_BROWSER_DIR/.onlyoffice-font-assets}}"
 ONLYOFFICE_BROWSER_FONT_SOURCE_DIR="${PIWORK_ONLYOFFICE_BROWSER_FONT_SOURCE_DIR:-${ONLYOFFICE_BROWSER_FONT_SOURCE_DIR:-}}"
 ONLYOFFICE_BROWSER_FONT_SET_CONFIGURED="${PIWORK_ONLYOFFICE_BROWSER_FONT_SET:-${ONLYOFFICE_BROWSER_FONT_SET:-}}"
 ONLYOFFICE_BROWSER_FONT_SET="${ONLYOFFICE_BROWSER_FONT_SET_CONFIGURED:-zh-core}"
-ONLYOFFICE_BROWSER_DEFAULT_FONT_ASSETS_DIR="$ROOT_DIR/fonts/onlyoffice-browser"
+ONLYOFFICE_BROWSER_DEFAULT_FONT_ASSETS_DIR="$ONLYOFFICE_BROWSER_DIR/.onlyoffice-font-assets"
 ONLYOFFICE_BROWSER_PLATFORM_METADATA_REMOVED=0
 ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT="${PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT:-0}"
 
@@ -142,13 +142,33 @@ checkout_onlyoffice_browser_version() {
 }
 
 run_pnpm() {
-  if command -v pnpm >/dev/null 2>&1; then
-    pnpm "$@"
-  elif command -v corepack >/dev/null 2>&1; then
-    corepack pnpm "$@"
-  else
-    fail "pnpm or corepack is required to prepare onlyoffice-browser."
+  local candidate resolved
+
+  if [[ -n "${PIWORK_PNPM_BIN:-}" ]]; then
+    [[ -x "$PIWORK_PNPM_BIN" ]] || fail "PIWORK_PNPM_BIN is not executable: $PIWORK_PNPM_BIN"
+    "$PIWORK_PNPM_BIN" "$@"
+    return
   fi
+
+  # Prefer a real pnpm installation. Corepack's pnpm shim prompts for a
+  # download whenever its cache is unavailable, which makes `make dev`
+  # unexpectedly interactive on every invocation after a failed download.
+  while IFS= read -r candidate; do
+    [[ -x "$candidate" ]] || continue
+    resolved="$candidate"
+    if command -v realpath >/dev/null 2>&1; then
+      resolved="$(realpath "$candidate" 2>/dev/null || printf '%s' "$candidate")"
+    fi
+    [[ "$resolved" == */corepack/* || "$resolved" == */corepack ]] && continue
+    "$candidate" "$@"
+    return
+  done < <(type -ap pnpm 2>/dev/null | awk '!seen[$0]++')
+
+  if command -v corepack >/dev/null 2>&1; then
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm "$@" || fail "pnpm is required to prepare onlyoffice-browser. Install pnpm 11 (for example: brew install pnpm) or set PIWORK_PNPM_BIN to a real pnpm executable."
+    return
+  fi
+  fail "pnpm is required to prepare onlyoffice-browser. Install pnpm 11 or set PIWORK_PNPM_BIN to a real pnpm executable."
 }
 
 ensure_checkout() {
@@ -281,7 +301,7 @@ runtime_assets_optimized() {
     const packs = manifest.packs || {};
     const hasPacks = ["core", "word", "cell", "slide"].every((pack) => Number(packs[pack]) > 0);
     process.exit(
-      manifest.version === 1 &&
+      [1, 2].includes(manifest.version) &&
       types === JSON.stringify(["word", "cell", "slide"]) &&
       dictionaries === JSON.stringify(["en_US"]) &&
       manifest.keepHelp === false &&
@@ -357,10 +377,21 @@ runtime_host_bundle_contains() {
 runtime_bundle_signature_problem() {
   local runtime_source="$ONLYOFFICE_BROWSER_DIR/src/lib/office-editor-runtime.ts"
   local host_source="$ONLYOFFICE_BROWSER_DIR/src/office-host.ts"
+  local expected_host_build_id="$PINNED_ONLYOFFICE_HOST_BUILD_ID"
   [[ -f "$runtime_source" ]] || return 0
 
-  if ! runtime_host_bundle_contains "$PINNED_ONLYOFFICE_HOST_BUILD_ID"; then
-    printf 'OnlyOffice host bundle is missing runtime identity %s. Rebuild the real officeHost-* asset before starting Piwork.' "$PINNED_ONLYOFFICE_HOST_BUILD_ID"
+  if [[ "$ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT" == "1" && -f "$host_source" ]]; then
+    local checkout_host_build_id
+    checkout_host_build_id="$(
+      sed -n "s/^const OFFICE_HOST_BUILD_ID = '\\([^']*\\)';$/\\1/p" "$host_source" | head -n 1
+    )"
+    if [[ -n "$checkout_host_build_id" ]]; then
+      expected_host_build_id="$checkout_host_build_id"
+    fi
+  fi
+
+  if ! runtime_host_bundle_contains "$expected_host_build_id"; then
+    printf 'OnlyOffice host bundle is missing runtime identity %s. Rebuild the real officeHost-* asset before starting Piwork.' "$expected_host_build_id"
     return 1
   fi
 
@@ -798,7 +829,7 @@ ensure_font_assets() {
   fi
 
   if [[ -z "$ONLYOFFICE_BROWSER_FONT_SOURCE_DIR" && "$ONLYOFFICE_BROWSER_FONT_ASSETS_DIR" == "$ONLYOFFICE_BROWSER_DEFAULT_FONT_ASSETS_DIR" ]]; then
-    fail "OnlyOffice generated font assets are missing or invalid at $ONLYOFFICE_BROWSER_FONT_ASSETS_DIR. Run make prepare-onlyoffice-fonts once and commit the generated fonts/onlyoffice-browser assets, or set PIWORK_ONLYOFFICE_BROWSER_FONT_SOURCE_DIR explicitly to regenerate."
+    fail "OnlyOffice generated font assets are missing or invalid at $ONLYOFFICE_BROWSER_FONT_ASSETS_DIR. Run make prepare-onlyoffice-fonts to generate them in the onlyoffice-browser checkout, or set PIWORK_ONLYOFFICE_BROWSER_FONT_SOURCE_DIR explicitly to regenerate."
   fi
 
   if ! command -v docker >/dev/null 2>&1; then

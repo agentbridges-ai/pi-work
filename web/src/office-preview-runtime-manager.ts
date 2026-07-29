@@ -104,10 +104,7 @@ function identitiesEqual(left: OfficeHostIdentity, right: OfficeHostIdentity): b
 }
 
 function expectedReleaseIdentity(): OfficeHostIdentity {
-  const identity =
-    typeof __PIWORK_ONLYOFFICE_DEVELOPMENT_IDENTITY__ === "undefined"
-      ? releaseManifest.runtimeIdentity
-      : __PIWORK_ONLYOFFICE_DEVELOPMENT_IDENTITY__;
+  const identity = releaseManifest.runtimeIdentity;
   if (
     !identity ||
     typeof identity.packageVersion !== "string" ||

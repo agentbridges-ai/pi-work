@@ -34,9 +34,13 @@ interface FakeTaskLaunch {
 
 const roots: string[] = [];
 const managers: PiTaskManager[] = [];
+const sealedDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.allSettled(managers.splice(0).map((manager) => manager.dispose()));
+  for (const directory of sealedDirectories.splice(0).reverse()) {
+    chmodSync(directory, 0o700);
+  }
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -81,9 +85,11 @@ function sealManagedResources(path: string): void {
   for (const file of [join(skill, "SKILL.md"), join(bin, "managed-tool")]) {
     chmodSync(file, 0o500);
   }
-  for (const directory of [skill, join(path, "skills"), bin, path]) {
+  const directories = [skill, join(path, "skills"), bin, path];
+  for (const directory of directories) {
     chmodSync(directory, 0o500);
   }
+  sealedDirectories.push(...directories);
 }
 
 function fixture(rootMode: "agent" | "plan" = "agent") {

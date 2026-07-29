@@ -44,9 +44,6 @@ make dev-fast      # alias for make dev
 make dev-fast-stop # stop local dev processes
 make status        # check local API and frontend
 make agent-browser-e2e # real Mac Chrome extension bridge smoke test
-make prepare-onlyoffice-fonts # collect local fonts and generate Office assets
-make onlyoffice-save-e2e # run OnlyOffice save-flow E2E
-make onlyoffice-print-e2e # run OnlyOffice print-flow E2E
 
 make auth-generate # generate Better Auth SQL schema
 make auth-migrate  # apply Better Auth schema to Postgres
@@ -204,26 +201,18 @@ Runtime ownership is split intentionally:
 - The UI reports artifact, daemon, and extension state without exposing tab
   URLs or page content.
 
-## OnlyOffice Fonts
+## OnlyOffice Deployment Boundary
 
-OnlyOffice browser preview needs generated font assets before Office documents
-are opened. The project default is:
+Piwork does not build or serve the OnlyOffice Host, SDK, WASM, dictionaries, or
+font assets. Each editor uses an isolated
+`https://office-editor-<session>.getpi.work/office-host.html` Host and loads
+shared resources from `https://onlyoffice.getpi.work/`.
 
-```text
-fonts/onlyoffice-browser/
-```
-
-Maintainers can refresh this directory with:
-
-```bash
-make prepare-onlyoffice-fonts
-```
-
-`make dev` and `make build` validate `fonts/onlyoffice-browser/` automatically.
-They do not implicitly regenerate fonts when the checked-in assets are missing or
-invalid; refresh them intentionally with the command above.
-See [../fonts/README.md](../fonts/README.md) for the target Office font list,
-fallback behavior, and licensing notes.
+OnlyOffice runtime and font changes are developed, tested, and deployed from
+the `onlyoffice-browser` repository. Piwork consumes its published npm client
+API and pins the expected deployed runtime identity in the release manifest.
+`make dev`, `make build`, and `make status` neither require a local
+`onlyoffice-browser` checkout nor block on the remote deployment.
 
 ## OnlyOffice Save Chain
 
@@ -287,62 +276,40 @@ viewer can also use the PDF Title metadata. The browser runtime therefore adds
 the filename to the temporary URL and writes a UTF-16BE `/Title` into generated
 print PDFs.
 
-## OnlyOffice Dev Cache And Iframe Isolation
+## OnlyOffice Package Cache And Iframe Isolation
 
-OnlyOffice runs inside a per-editor `host-*.localhost` iframe. The outer host
+OnlyOffice runs inside a per-editor
+`office-editor-<session>.getpi.work` iframe. The outer host
 iframe must not have a `sandbox` attribute: the editor's native print flow loads
 a generated PDF into its own `#id-print-frame` and then calls
 `iframe.contentWindow.print()`, which requires script access inside the same
 editor host origin. Reintroducing a sandbox can make Chrome report the nested
 print frame as cross-origin even when the URL looks correct.
 
-During local development, `make dev` prepares the repo-local
-`onlyoffice-browser/` checkout, overlays its `dist/npm` bundle into
-`web/node_modules/@agentbridges-ai/onlyoffice-browser`, clears
-`web/node_modules/.vite`, and starts Vite with `--force`. In addition,
-`web/vite.config.ts` excludes `@agentbridges-ai/onlyoffice-browser` from
-`optimizeDeps` and sends `no-store` headers for any remaining dev module URL
-for that package. This is intentional. Vite optimized dependencies use
+During local development, Piwork imports the published
+`@agentbridges-ai/onlyoffice-browser` package installed under `web/node_modules`.
+`web/vite.config.ts` excludes it from `optimizeDeps` and sends `no-store`
+headers for its module URLs. Vite optimized dependencies use
 immutable `?v=` URLs, and Chrome can keep executing an older prebundled
-`@agentbridges-ai/onlyoffice-browser` module even after the files on disk are
-correct. If real Chrome shows `iframe.office-editor-host-frame[sandbox]`, treat
-it as a stale-dev-cache regression, restart through `make dev`, and do not debug
-the PDF conversion path until the outer iframe has no `sandbox` attribute.
+module after the installed package changes. If real Chrome shows
+`iframe.office-editor-host-frame[sandbox]`, confirm the published npm version,
+restart `make dev`, and reopen the Office iframe.
 
 `onlyoffice-browser` has two build outputs that must stay in sync. `dist/npm`
 is the package API imported by Piwork, while `dist/assets/officeHost-*.js`
 and `dist/assets/converter-*.js` are the code that actually runs inside the
 editor host iframe. Save, Print, Download as, and document resource fixes are
-usually in the host runtime path. `scripts/ensure-onlyoffice-browser.sh` must
-rebuild runtime assets when `onlyoffice-browser/src`, `pages`, or runtime build
-configuration changes; `web/server/onlyoffice-prepare-script.test.ts` protects
-this stale-runtime check. Do not treat `pnpm run build:lib`, unit tests against
-`office-editor-runtime.ts`, or a synced `web/node_modules/.../dist/npm` bundle
-as proof that Piwork is running the new editor behavior. After changing the
-host runtime, run `./scripts/ensure-onlyoffice-browser.sh`, check the relevant
-signature in `onlyoffice-browser/dist/assets/officeHost-*.js`, then reload or
-reopen the Office iframe in Chrome before real-browser verification. An already
-open editor iframe can keep executing the previous host bundle even after the
-new files exist on disk.
-
-The editor runtime served by Piwork must also be the compact OnlyOffice
-profile, not a full upstream `dist`. `onlyoffice-browser/bin/build.sh` runs
-`scripts/build-onlyoffice-runtime-assets.mjs --prune-root`, writes
-`onlyoffice-browser/dist/onlyoffice-runtime-assets.json`, and removes low-use
-runtime files from the served tree. `scripts/ensure-onlyoffice-browser.sh`
-treats the runtime as stale unless that manifest exists and the served `dist`
-contains only the Word, Spreadsheet, Presentation, shared core, x2t, libs, and
-`en_US` dictionary profile. The guard rejects bundled PDF/Visio SDKs, bundled
-font directories, FileConverter font assets, non-selected dictionaries, and
-bundled help image trees. Generated development fonts still live under
-`fonts/onlyoffice-browser/` and are served as an overlay; they are not copied
-from the upstream package runtime.
+usually in the Host runtime path. Build and verify both outputs in the
+`onlyoffice-browser` repository, deploy the Host and shared assets to
+`onlyoffice.getpi.work`, publish the npm package when its public API changes,
+then update Piwork's package and release-manifest pins. An already open editor
+iframe can keep executing the previous Host bundle, so reopen it after a
+deployment.
 
 The OnlyOffice service worker is registered at the editor host root so the
 native print iframe can fetch the generated PDF as a same-origin URL. It must
-only handle Office runtime files and `/__onlyoffice-browser-print__/`; it must
-not intercept Piwork app routes, Vite dev routes, `/node_modules/.vite/`,
-`/src/`, or API/WebSocket paths.
+only handle Office runtime files and `/__onlyoffice-browser-print__/` on the
+Office Host origin; Piwork never serves or registers that service worker.
 
 Authoritative references for this behavior:
 
