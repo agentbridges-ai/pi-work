@@ -49,7 +49,7 @@
     "perf:user-space:browser": "bun scripts/user-space-cdp-perf.mjs"
   },
   "dependencies": {
-    "@agentbridges-ai/onlyoffice-browser": "0.4.1",
+    "@agentbridges-ai/onlyoffice-browser": "0.4.7",
     "@anthropic-ai/sandbox-runtime": "0.0.65",
     "@earendil-works/pi-coding-agent": "0.82.1",
     "@modelcontextprotocol/sdk": "1.29.0",
