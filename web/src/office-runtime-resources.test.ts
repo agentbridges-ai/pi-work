@@ -82,6 +82,7 @@ describe("Piwork Office resource state", () => {
   beforeEach(() => {
     resetOfficeResourcesForTests();
     runtimeMock.create.mockClear();
+    runtimeMock.manager.getSnapshot.mockClear();
     runtimeMock.manager.loadAll.mockClear();
     runtimeMock.manager.downloadFontFamily.mockClear();
     Object.defineProperty(navigator, "storage", {
@@ -105,6 +106,21 @@ describe("Piwork Office resource state", () => {
     });
     expect(getOfficeResourceSnapshot().status).toBe("ready");
     expect(getVerifiedOfficeFontPaths()).toEqual(["fonts/dengxian.ttf"]);
+  });
+
+  it("fails closed when a stale optimized dependency returns an incomplete snapshot", async () => {
+    runtimeMock.manager.getSnapshot.mockReturnValueOnce({
+      ...runtimeMock.resources,
+      packs: undefined,
+    } as unknown as typeof runtimeMock.resources);
+
+    await ensureOfficeResources();
+
+    expect(getOfficeResourceSnapshot()).toEqual({
+      status: "error",
+      resources: null,
+      error: { code: "initialization-failed" },
+    });
   });
 
   it("checks available browser storage before downloading resources or fonts", async () => {

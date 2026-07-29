@@ -155,6 +155,10 @@ function OfficeResourcesSection() {
   }, []);
 
   const resources = state.resources;
+  const packs = Array.isArray(resources?.packs) ? resources.packs : [];
+  const fonts = Array.isArray(resources?.fonts) ? resources.fonts : [];
+  const hasResourceInventory =
+    Boolean(resources) && Array.isArray(resources?.packs) && Array.isArray(resources?.fonts);
   const busy = Boolean(resources?.operation);
   const copy = uiCopy.chat.preferencesPanel.officeResources;
   const categoryLabels = copy.categories;
@@ -189,9 +193,9 @@ function OfficeResourcesSection() {
         </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-[var(--piwork-control-radius)] border border-border bg-card">
-        {resources ? (
+        {hasResourceInventory ? (
           <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-3">
-            {resources.packs.map((pack) => (
+            {packs.map((pack) => (
               <div
                 key={pack.id}
                 className="flex items-center justify-between gap-2 rounded-[var(--piwork-control-radius)] border border-border bg-background px-2.5 py-2 text-xs"
@@ -229,7 +233,7 @@ function OfficeResourcesSection() {
           </Button>
         </div>
 
-        {resources && (
+        {hasResourceInventory && resources && (
           <details className="group border-t border-border px-3 py-3">
             <summary className="cursor-pointer text-xs font-semibold text-foreground">
               {copy.advanced}
@@ -237,7 +241,7 @@ function OfficeResourcesSection() {
             <div className="mt-3 text-xs text-muted-foreground">{copy.storageNote}</div>
             <div className="mt-3 grid gap-2">
               <div className="text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
-              {resources.fonts.map((font) => (
+              {fonts.map((font) => (
                 <div
                   key={font.id}
                   className="flex min-h-9 items-center justify-between gap-3 text-sm"

@@ -221,6 +221,31 @@ describe("UserSettingsDialog", () => {
     },
   );
 
+  it("does not crash when a stale resource snapshot is missing its inventories", () => {
+    const resources = officeResourcesMock.snapshot.resources;
+    const originalPacks = resources.packs;
+    const originalFonts = resources.fonts;
+    const incompleteResources = resources as unknown as {
+      packs: typeof originalPacks | undefined;
+      fonts: typeof originalFonts | undefined;
+    };
+    try {
+      incompleteResources.packs = undefined;
+      incompleteResources.fonts = undefined;
+
+      renderDialog("en-US");
+
+      expect(
+        within(screen.getByTestId("office-resources-section")).getByText(
+          uiCopy.chat.preferencesPanel.officeResources.statusUnavailable,
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      resources.packs = originalPacks;
+      resources.fonts = originalFonts;
+    }
+  });
+
   it("shows the display name as the single username field", () => {
     renderDialog("en-US");
 

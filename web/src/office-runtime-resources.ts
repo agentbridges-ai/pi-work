@@ -38,7 +38,27 @@ function publish(next: PiworkOfficeResourceSnapshot): void {
   for (const listener of listeners) listener();
 }
 
+function hasOfficeResourceInventory(
+  resources: OfficeRuntimeResourceSnapshot,
+): resources is OfficeRuntimeResourceSnapshot {
+  return (
+    Array.isArray(resources.packs) &&
+    Array.isArray(resources.fonts) &&
+    Array.isArray(resources.verifiedFontPaths) &&
+    Boolean(resources.progress) &&
+    Array.isArray(resources.progress.categories)
+  );
+}
+
 function publishManagerSnapshot(resources: OfficeRuntimeResourceSnapshot): void {
+  if (!hasOfficeResourceInventory(resources)) {
+    publish({
+      status: "error",
+      resources: null,
+      error: { code: "initialization-failed" },
+    });
+    return;
+  }
   publish({
     status: resources.error ? "error" : "ready",
     resources,
@@ -168,7 +188,7 @@ export function downloadOfficeFontFamily(id: string): Promise<void> {
   return runOperation(
     (resourceManager) => resourceManager.downloadFontFamily(id),
     (resourceManager) =>
-      resourceManager.getSnapshot().fonts.find((font) => font.id === id)?.bytes ?? 0,
+      resourceManager.getSnapshot().fonts?.find((font) => font.id === id)?.bytes ?? 0,
   );
 }
 
@@ -186,7 +206,7 @@ export function officeResourcesNeedAttention(): boolean {
   const resources = snapshot.resources;
   if (snapshot.status === "error" || resources?.readiness === "error") return true;
   return Boolean(
-    resources?.packs.some((pack) => (pack.id === "core" || pack.id === "fonts") && !pack.ready),
+    resources?.packs?.some((pack) => (pack.id === "core" || pack.id === "fonts") && !pack.ready),
   );
 }
 
