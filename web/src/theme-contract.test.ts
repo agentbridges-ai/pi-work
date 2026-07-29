@@ -200,7 +200,7 @@ describe("Piwork theme token contract", () => {
 
   it("shares one text-selection background across Markdown and code previews and editors", () => {
     expect(rootBlock.replace(/\s+/g, " ")).toContain(
-      "--piwork-text-selection-background: color-mix( in oklab, var(--foreground) 18%, var(--background) );",
+      "--piwork-text-selection-background: color-mix(in oklab, var(--foreground) 18%, var(--background));",
     );
     expect(css).toContain("--crepe-color-selected: var(--piwork-text-selection-background);");
     expect(textEditorSource.match(/var\(--piwork-text-selection-background\)/g)).toHaveLength(2);

@@ -91,7 +91,7 @@
     "diff": "^8.0.3",
     "fflate": "0.8.3",
     "hono": "^4.12.30",
-    "just-bash": "^3.0.1",
+    "just-bash": "3.0.1",
     "konva": "^10.3.0",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.5",

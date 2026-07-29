@@ -202,6 +202,23 @@ test("LoginPage registration and login perform real bootstrap and user-menu logo
   await page.routeWebSocket("**/ws/browser/**", (webSocket) => {
     webSocket.onMessage(() => {});
   });
+  await page.route("**/api/backends/pi/models?agentId=*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify([
+        {
+          model: {
+            key: "openai/e2e-model",
+            provider: "openai",
+            modelId: "e2e-model",
+          },
+          label: "E2E model",
+          thinkingLevels: ["off", "medium"],
+        },
+      ]),
+    });
+  });
   await page.route("**/api/sessions/create-stream", async (route) => {
     fakeSessionSequence += 1;
     await route.fulfill({
