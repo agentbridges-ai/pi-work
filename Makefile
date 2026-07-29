@@ -62,6 +62,9 @@ help:
 # canonical dependency tree inside the SRT allow-read root.
 install:
 	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
+	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
+		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
+	fi
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh
