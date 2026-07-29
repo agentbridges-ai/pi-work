@@ -13,7 +13,7 @@ const officeResourcesMock = vi.hoisted(() => ({
     status: "ready" as const,
     error: null,
     resources: {
-      packageVersion: "0.3.36",
+      packageVersion: "0.3.37",
       assetVersion: "assets-v1",
       readiness: "needs-download",
       packs: [
@@ -203,7 +203,7 @@ describe("UserSettingsDialog", () => {
         within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
       ).toBeInTheDocument();
       expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.3.36")),
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.3.37")),
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("button", {

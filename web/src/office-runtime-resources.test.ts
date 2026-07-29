@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => {
   const resources = {
-    packageVersion: "0.3.36",
+    packageVersion: "0.3.37",
     assetVersion: "assets-v1",
     readiness: "needs-download" as const,
     packs: [
