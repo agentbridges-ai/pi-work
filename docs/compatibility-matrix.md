@@ -22,7 +22,9 @@ fallback is supported.
 
 Pi's sole allowed upstream `@mariozechner` package is its optional
 `@mariozechner/clipboard@0.3.9`. It is not a Piwork direct dependency and
-production installs omit optional packages and source must not import it.
+source must not import it. Development and CI install platform-specific optional
+toolchain packages from the frozen lockfile; the runtime still must not load or
+expose the clipboard package.
 Other `@mariozechner` Pi packages,
 forks, alternate Agent transports, and SDK proxy fallbacks are unsupported.
 

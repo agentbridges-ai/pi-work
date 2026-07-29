@@ -59,7 +59,7 @@ help:
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
 # Linux, so keep installed package metadata private to this checkout.
 install:
-	cd $(WEB_DIR) && bun install --backend copyfile --frozen-lockfile --omit optional
+	cd $(WEB_DIR) && bun install --backend copyfile --frozen-lockfile
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh
