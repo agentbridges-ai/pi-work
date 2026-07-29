@@ -142,13 +142,33 @@ checkout_onlyoffice_browser_version() {
 }
 
 run_pnpm() {
-  if command -v pnpm >/dev/null 2>&1; then
-    pnpm "$@"
-  elif command -v corepack >/dev/null 2>&1; then
-    corepack pnpm "$@"
-  else
-    fail "pnpm or corepack is required to prepare onlyoffice-browser."
+  local candidate resolved
+
+  if [[ -n "${PIWORK_PNPM_BIN:-}" ]]; then
+    [[ -x "$PIWORK_PNPM_BIN" ]] || fail "PIWORK_PNPM_BIN is not executable: $PIWORK_PNPM_BIN"
+    "$PIWORK_PNPM_BIN" "$@"
+    return
   fi
+
+  # Prefer a real pnpm installation. Corepack's pnpm shim prompts for a
+  # download whenever its cache is unavailable, which makes `make dev`
+  # unexpectedly interactive on every invocation after a failed download.
+  while IFS= read -r candidate; do
+    [[ -x "$candidate" ]] || continue
+    resolved="$candidate"
+    if command -v realpath >/dev/null 2>&1; then
+      resolved="$(realpath "$candidate" 2>/dev/null || printf '%s' "$candidate")"
+    fi
+    [[ "$resolved" == */corepack/* || "$resolved" == */corepack ]] && continue
+    "$candidate" "$@"
+    return
+  done < <(type -ap pnpm 2>/dev/null | awk '!seen[$0]++')
+
+  if command -v corepack >/dev/null 2>&1; then
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm "$@" || fail "pnpm is required to prepare onlyoffice-browser. Install pnpm 11 (for example: brew install pnpm) or set PIWORK_PNPM_BIN to a real pnpm executable."
+    return
+  fi
+  fail "pnpm is required to prepare onlyoffice-browser. Install pnpm 11 or set PIWORK_PNPM_BIN to a real pnpm executable."
 }
 
 ensure_checkout() {
