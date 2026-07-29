@@ -99,7 +99,7 @@ status:
 	  vite_port="$${VITE_PORT:-3458}"; \
 	  curl -fsS "http://127.0.0.1:$$api_port/build-info" >/dev/null && echo "local API ready: http://127.0.0.1:$$api_port" || (echo 'local API is not ready' >&2; exit 1); \
 	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1); \
-	  bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port" --checkout "$(CURDIR)/onlyoffice-browser"
+	  bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port"
 stop: dev-fast-stop
 
 .PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi

@@ -65,11 +65,13 @@ describe("OnlyOffice dev health check", () => {
     const makefile = readFileSync(resolve(repoRoot, "Makefile"), "utf8");
 
     expect(devScript).toContain(
-      '"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT" \\\n  --checkout "$ROOT_DIR/onlyoffice-browser"',
+      '"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT"',
     );
+    expect(devScript).not.toContain('--checkout "$ROOT_DIR/onlyoffice-browser"');
     expect(makefile).toContain(
-      'bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port" --checkout "$(CURDIR)/onlyoffice-browser"',
+      'bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port"',
     );
+    expect(makefile).not.toContain('--checkout "$(CURDIR)/onlyoffice-browser"');
   });
 
   it("checks the isolated host page, entry bundle, manifest, and release identity", async () => {

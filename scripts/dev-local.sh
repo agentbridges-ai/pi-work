@@ -340,8 +340,7 @@ wait_for_url() {
 
 wait_for_url "local API" "http://127.0.0.1:$PORT/build-info" "$SERVER_LOG"
 wait_for_url "Vite" "http://127.0.0.1:$VITE_PORT/index.html" "$VITE_LOG"
-"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT" \
-  --checkout "$ROOT_DIR/onlyoffice-browser"
+"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT"
 
 cat >"$PORTS_ENV" <<EOF
 PORT=$PORT
