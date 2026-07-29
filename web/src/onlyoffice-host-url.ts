@@ -2,9 +2,15 @@ import type { OfficeHostUrlContext } from "@agentbridges-ai/onlyoffice-browser";
 
 const ONLYOFFICE_SHARED_ASSET_ORIGIN = "https://onlyoffice.getpi.work/";
 
-export function resolvePiworkOnlyOfficeHostUrl(context: OfficeHostUrlContext): string {
+export function resolvePiworkOnlyOfficeHostUrl(
+  context: OfficeHostUrlContext,
+  releaseId?: string | null,
+): string {
   const sessionLabel = officeHostSessionLabel(context.sessionId);
-  return `https://${sessionLabel}.getpi.work/office-host.html`;
+  const path = releaseId
+    ? `/r/${encodeURIComponent(releaseId)}/office-host.html`
+    : "/office-host.html";
+  return `https://${sessionLabel}.getpi.work${path}`;
 }
 
 export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {

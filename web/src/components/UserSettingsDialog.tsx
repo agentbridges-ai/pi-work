@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button, Dialog, SegmentedControl, Switch } from "./ui/index.js";
 import type { CurrentUser, FilePreviewPreference, UserPreferences } from "../api.js";
 import { AGENTS, getAgentDisplayName, type Agent, type AgentId } from "../agents.js";
@@ -12,6 +12,8 @@ import {
   getOfficeResourceSnapshot,
   installOfficeFontPreset,
   loadAllOfficeResources,
+  pauseOfficeResources,
+  resumeOfficeResources,
   subscribeOfficeResources,
   uninstallOfficeFontFamily,
 } from "../office-runtime-resources.js";
@@ -145,6 +147,7 @@ function formatOfficeResourceBytes(bytes: number): string {
 }
 
 function OfficeResourcesSection() {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const state = useSyncExternalStore(
     subscribeOfficeResources,
     getOfficeResourceSnapshot,
@@ -162,16 +165,57 @@ function OfficeResourcesSection() {
   const busy = Boolean(resources?.operation);
   const copy = uiCopy.chat.preferencesPanel.officeResources;
   const categoryLabels = copy.categories;
-  const error =
-    state.error?.code === "insufficient-storage"
-      ? copy.errors.insufficientStorage(
-          formatOfficeResourceBytes(state.error.availableBytes || 0),
-          formatOfficeResourceBytes(state.error.requiredBytes || 0),
+  const readinessLabel =
+    state.status === "checking"
+      ? copy.checking
+      : resources?.readiness === "ready"
+        ? copy.ready
+        : resources?.readiness === "update-available"
+          ? copy.updateAvailable
+          : resources?.readiness === "paused"
+            ? copy.paused
+            : resources?.readiness === "repair-needed"
+              ? copy.repairNeeded
+              : copy.incomplete;
+  const phase = resources?.phase ?? "idle";
+  const showingVerification = phase === "verifying" || phase === "repairing";
+  const completedBytes = showingVerification
+    ? (resources?.verifiedBytes ?? 0)
+    : (resources?.downloadedBytes ?? 0);
+  const totalBytes = showingVerification
+    ? (resources?.verifyBytes ?? 0)
+    : (resources?.downloadBytes ?? 0);
+  const progressPercent =
+    totalBytes > 0 ? Math.min(100, Math.round((completedBytes / totalBytes) * 100)) : 0;
+  const phaseLabel = copy.phases[phase];
+  const progressActive = phase !== "idle";
+  const displayedProgressPercent = progressActive
+    ? progressPercent
+    : resources?.readiness === "ready"
+      ? 100
+      : 0;
+  const progressText = progressActive
+    ? showingVerification
+      ? copy.verifyProgress(
+          formatOfficeResourceBytes(completedBytes),
+          formatOfficeResourceBytes(totalBytes),
         )
-      : state.error?.code === "initialization-failed"
+      : copy.downloadProgress(
+          formatOfficeResourceBytes(completedBytes),
+          formatOfficeResourceBytes(totalBytes),
+        )
+    : readinessLabel;
+  const resourceErrorCode = state.error?.code;
+  const error =
+    resourceErrorCode === "insufficient-storage"
+      ? copy.errors.insufficientStorage(
+          formatOfficeResourceBytes(state.error?.availableBytes || 0),
+          formatOfficeResourceBytes(state.error?.requiredBytes || 0),
+        )
+      : resourceErrorCode === "initialization-failed"
         ? copy.errors.statusUnavailable
-        : state.error
-          ? copy.errors.operationFailed
+        : resourceErrorCode
+          ? copy.errors[resourceErrorCode]
           : "";
 
   return (
@@ -182,23 +226,33 @@ function OfficeResourcesSection() {
           <p className="mt-1 text-xs text-muted-foreground">{copy.description}</p>
         </div>
         <div className="shrink-0 text-right text-xs text-muted-foreground">
-          <div className="font-medium text-foreground">
-            {state.status === "checking"
-              ? copy.checking
-              : resources?.readiness === "ready"
-                ? copy.ready
-                : copy.incomplete}
-          </div>
+          <div className="font-medium text-foreground">{readinessLabel}</div>
           {resources && <div className="mt-0.5">{copy.version(resources.packageVersion)}</div>}
         </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-[var(--piwork-control-radius)] border border-border bg-card">
+        {resources && (
+          <div className="border-b border-border px-3 py-3">
+            <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium text-foreground">{phaseLabel}</span>
+              <span className="text-muted-foreground">
+                {totalBytes > 0 ? progressText : readinessLabel}
+              </span>
+            </div>
+            <progress
+              aria-label={copy.progressLabel}
+              className="block h-1.5 w-full overflow-hidden rounded-full accent-primary"
+              max={100}
+              value={displayedProgressPercent}
+            />
+          </div>
+        )}
         {hasResourceInventory ? (
-          <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-3">
+          <div className="grid gap-1.5 px-3 py-3">
             {packs.map((pack) => (
               <div
                 key={pack.id}
-                className="flex items-center justify-between gap-2 rounded-[var(--piwork-control-radius)] border border-border bg-background px-2.5 py-2 text-xs"
+                className="flex min-h-8 items-center justify-between gap-3 rounded-[var(--piwork-control-radius)] border border-border bg-background px-2.5 py-1.5 text-xs"
               >
                 <span className="font-medium text-foreground">{categoryLabels[pack.id]}</span>
                 <span className="text-muted-foreground">
@@ -214,93 +268,137 @@ function OfficeResourcesSection() {
         <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-3">
           <Button
             size="sm"
-            variant="secondary"
             loading={resources?.operation === "prefetch-recommended"}
             isDisabled={busy || state.status === "checking"}
             onPress={() => void installOfficeFontPreset("basic").catch(() => undefined)}
           >
             {copy.basicPreset}
           </Button>
-          <Button
-            size="sm"
-            loading={resources?.operation === "install-font-preset"}
-            isDisabled={busy || state.status === "checking"}
-            onPress={() =>
-              void installOfficeFontPreset("office-compatibility").catch(() => undefined)
-            }
-          >
-            {copy.compatibilityPreset}
-          </Button>
+          {resources?.canPause && (
+            <Button size="sm" variant="secondary" onPress={() => void pauseOfficeResources()}>
+              {copy.pause}
+            </Button>
+          )}
+          {resources?.canResume && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={() => void resumeOfficeResources().catch(() => undefined)}
+            >
+              {copy.resume}
+            </Button>
+          )}
+          {(resources?.canRetry || resources?.readiness === "repair-needed") && (
+            <Button
+              size="sm"
+              variant="secondary"
+              isDisabled={busy}
+              onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
+            >
+              {resources?.canRetry ? copy.retry : copy.checkAndRepair}
+            </Button>
+          )}
         </div>
 
         {hasResourceInventory && resources && (
-          <details className="group border-t border-border px-3 py-3">
-            <summary className="cursor-pointer text-xs font-semibold text-foreground">
-              {copy.advanced}
-            </summary>
-            <div className="mt-3 text-xs text-muted-foreground">{copy.storageNote}</div>
-            <div className="mt-3 grid gap-2">
-              <div className="text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
-              {fonts.map((font) => (
-                <div
-                  key={font.id}
-                  className="flex min-h-9 items-center justify-between gap-3 text-sm"
-                  data-testid={`office-font-${font.id}`}
-                >
-                  <span className="min-w-0 truncate font-medium text-foreground">
-                    {font.name}
-                    <span className="ml-1 font-normal text-muted-foreground">
-                      · {formatOfficeResourceBytes(font.bytes)}
-                    </span>
-                  </span>
-                  {font.removable ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={
-                        resources.operation === (font.downloaded ? "remove-font" : "download-font")
-                      }
-                      isDisabled={busy}
-                      onPress={() =>
-                        void (
-                          font.downloaded
-                            ? uninstallOfficeFontFamily(font.id)
-                            : downloadOfficeFontFamily(font.id)
-                        ).catch(() => undefined)
-                      }
-                    >
-                      {font.downloaded ? copy.remove : copy.download}
-                    </Button>
-                  ) : (
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {copy.required}
-                    </span>
-                  )}
+          <div className="border-t border-border px-3 py-3">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full justify-between px-0 text-xs font-semibold"
+              aria-expanded={advancedOpen}
+              aria-controls="office-advanced-resources"
+              onPress={() => setAdvancedOpen((open) => !open)}
+            >
+              <span>{copy.advanced}</span>
+              <span
+                aria-hidden="true"
+                className={`transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+              >
+                ⌄
+              </span>
+            </Button>
+            {advancedOpen && (
+              <div id="office-advanced-resources">
+                <div className="mt-3 text-xs text-muted-foreground">{copy.storageNote}</div>
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={resources.operation === "install-font-preset"}
+                    isDisabled={busy}
+                    onPress={() =>
+                      void installOfficeFontPreset("office-compatibility").catch(() => undefined)
+                    }
+                  >
+                    {copy.compatibilityPreset}
+                  </Button>
                 </div>
-              ))}
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">{copy.reopenHint}</div>
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={resources.operation === "check-health"}
-                isDisabled={busy}
-                onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
-              >
-                {copy.checkAndRepair}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={resources.operation === "load-all"}
-                isDisabled={busy}
-                onPress={() => void loadAllOfficeResources().catch(() => undefined)}
-              >
-                {copy.downloadAll}
-              </Button>
-            </div>
-          </details>
+                <div className="mt-3 grid gap-2">
+                  <div className="text-xs font-semibold text-foreground">{copy.fontsTitle}</div>
+                  {fonts.map((font) => (
+                    <div
+                      key={font.id}
+                      className="flex min-h-9 items-center justify-between gap-3 text-sm"
+                      data-testid={`office-font-${font.id}`}
+                    >
+                      <span className="min-w-0 truncate font-medium text-foreground">
+                        {font.name}
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          · {formatOfficeResourceBytes(font.bytes)}
+                        </span>
+                      </span>
+                      {font.removable ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={
+                            resources.operation ===
+                            (font.downloaded ? "remove-font" : "download-font")
+                          }
+                          isDisabled={busy}
+                          onPress={() =>
+                            void (
+                              font.downloaded
+                                ? uninstallOfficeFontFamily(font.id)
+                                : downloadOfficeFontFamily(font.id)
+                            ).catch(() => undefined)
+                          }
+                        >
+                          {font.downloaded ? copy.remove : copy.download}
+                        </Button>
+                      ) : (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {copy.required}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">{copy.reopenHint}</div>
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={resources.operation === "check-health"}
+                    isDisabled={busy}
+                    onPress={() => void checkAndRepairOfficeResources().catch(() => undefined)}
+                  >
+                    {copy.checkAndRepair}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={resources.operation === "load-all"}
+                    isDisabled={busy}
+                    onPress={() => void loadAllOfficeResources().catch(() => undefined)}
+                  >
+                    {copy.downloadAll}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {error && (

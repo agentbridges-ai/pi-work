@@ -4,11 +4,20 @@ import {
   type OfficeFontPreset,
   type OfficeRuntimeResourceManager,
   type OfficeRuntimeResourceSnapshot,
+  type ResourceErrorCode,
+  type ResourcePlan,
 } from "@agentbridges-ai/onlyoffice-browser";
 import { resolvePiworkOnlyOfficeAssetBaseUrl } from "./onlyoffice-host-url.js";
+import {
+  requestOfficeResourceSettings,
+  resetOfficeResourceSettingsChannelForTests,
+  subscribeOfficeResourceSettingsRequests,
+} from "./office-resource-settings-channel.js";
+
+export { requestOfficeResourceSettings, subscribeOfficeResourceSettingsRequests };
 
 export type OfficeResourceErrorCode =
-  "initialization-failed" | "insufficient-storage" | "operation-failed";
+  "initialization-failed" | "insufficient-storage" | ResourceErrorCode;
 
 export type PiworkOfficeResourceSnapshot = {
   status: "idle" | "checking" | "ready" | "error";
@@ -31,7 +40,6 @@ let snapshot: PiworkOfficeResourceSnapshot = {
   error: null,
 };
 const listeners = new Set<Listener>();
-const settingsRequestListeners = new Set<Listener>();
 
 function publish(next: PiworkOfficeResourceSnapshot): void {
   snapshot = next;
@@ -60,9 +68,9 @@ function publishManagerSnapshot(resources: OfficeRuntimeResourceSnapshot): void 
     return;
   }
   publish({
-    status: resources.error ? "error" : "ready",
+    status: resources.error || resources.readiness === "error" ? "error" : "ready",
     resources,
-    error: resources.error ? { code: "operation-failed" } : null,
+    error: resources.error ? { code: resources.error.code } : null,
   });
 }
 
@@ -108,6 +116,11 @@ export function getVerifiedOfficeFontPaths(): string[] {
   return manager?.getVerifiedFontPaths() ?? [];
 }
 
+export function getTargetOfficeReleaseId(): string | null {
+  const resources = manager?.getSnapshot();
+  return resources?.targetRelease ?? resources?.installedRelease ?? null;
+}
+
 async function requestPersistentStorage(requiredBytes: number): Promise<void> {
   await navigator.storage?.persist?.();
   const estimate = await navigator.storage?.estimate?.();
@@ -140,7 +153,8 @@ async function runOperation(
     await operation(resourceManager);
   } catch (error) {
     if (snapshot.error?.code !== "insufficient-storage") {
-      publish({ ...snapshot, status: "error", error: { code: "operation-failed" } });
+      const code = resourceManager.getSnapshot().error?.code ?? "network";
+      publish({ ...snapshot, status: "error", error: { code } });
     }
     throw error;
   }
@@ -164,7 +178,26 @@ function officeDocumentResourceType(fileName: string): OfficeDocumentResourceTyp
 
 export async function prepareOfficeResourcesForFile(fileName: string): Promise<void> {
   const resourceManager = await ensureOfficeResources();
-  await resourceManager.prepareForDocumentType(officeDocumentResourceType(fileName));
+  const plan = await resourceManager.plan({
+    scope: "document",
+    documentType: officeDocumentResourceType(fileName),
+  });
+  await requestPersistentStorage(plan.downloadBytes);
+  await resourceManager.apply(plan);
+}
+
+export async function planOfficeResourcesForFile(fileName: string): Promise<ResourcePlan> {
+  const resourceManager = await ensureOfficeResources();
+  return resourceManager.plan({
+    scope: "document",
+    documentType: officeDocumentResourceType(fileName),
+  });
+}
+
+export async function applyOfficeResourcePlan(plan: ResourcePlan): Promise<void> {
+  const resourceManager = await ensureOfficeResources();
+  await requestPersistentStorage(plan.downloadBytes);
+  await resourceManager.apply(plan);
 }
 
 export function installOfficeFontPreset(preset: OfficeFontPreset): Promise<void> {
@@ -177,9 +210,10 @@ export function installOfficeFontPreset(preset: OfficeFontPreset): Promise<void>
 export async function checkAndRepairOfficeResources(): Promise<void> {
   const resourceManager = await ensureOfficeResources();
   try {
-    await resourceManager.repair();
+    await resourceManager.repair({ scope: "installed" });
   } catch (error) {
-    publish({ ...snapshot, status: "error", error: { code: "operation-failed" } });
+    const code = resourceManager.getSnapshot().error?.code ?? "network";
+    publish({ ...snapshot, status: "error", error: { code } });
     throw error;
   }
 }
@@ -197,7 +231,8 @@ export async function uninstallOfficeFontFamily(id: string): Promise<void> {
   try {
     await resourceManager.uninstallFontFamily(id);
   } catch (error) {
-    publish({ ...snapshot, status: "error", error: { code: "operation-failed" } });
+    const code = resourceManager.getSnapshot().error?.code ?? "storage";
+    publish({ ...snapshot, status: "error", error: { code } });
     throw error;
   }
 }
@@ -210,13 +245,14 @@ export function officeResourcesNeedAttention(): boolean {
   );
 }
 
-export function requestOfficeResourceSettings(): void {
-  for (const listener of settingsRequestListeners) listener();
+export async function pauseOfficeResources(): Promise<void> {
+  const resourceManager = await ensureOfficeResources();
+  resourceManager.pause();
 }
 
-export function subscribeOfficeResourceSettingsRequests(listener: Listener): () => void {
-  settingsRequestListeners.add(listener);
-  return () => settingsRequestListeners.delete(listener);
+export async function resumeOfficeResources(): Promise<void> {
+  const resourceManager = await ensureOfficeResources();
+  await resourceManager.resume();
 }
 
 export function resetOfficeResourcesForTests(): void {
@@ -226,5 +262,5 @@ export function resetOfficeResourcesForTests(): void {
   initializePromise = null;
   snapshot = { status: "idle", resources: null, error: null };
   listeners.clear();
-  settingsRequestListeners.clear();
+  resetOfficeResourceSettingsChannelForTests();
 }

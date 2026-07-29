@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { DEFAULT_USER_PREFERENCES, type CurrentUser } from "../api.js";
 import { setUiCopyLanguage, uiCopy } from "../ui-copy.js";
@@ -13,7 +13,7 @@ const officeResourcesMock = vi.hoisted(() => ({
     status: "ready" as const,
     error: null,
     resources: {
-      packageVersion: "0.3.37",
+      packageVersion: "0.4.0",
       assetVersion: "assets-v1",
       readiness: "needs-download",
       packs: [
@@ -89,6 +89,21 @@ const officeResourcesMock = vi.hoisted(() => ({
       verifiedFontPaths: ["fonts/dengxian.ttf"],
       operation: null,
       error: null,
+      installedRelease: null,
+      targetRelease: "release-v3",
+      availableRelease: "release-v3",
+      storageMode: "http-cache" as const,
+      phase: "idle" as const,
+      currentChunk: null,
+      downloadedBytes: 0,
+      downloadBytes: 7_000,
+      verifiedBytes: 0,
+      verifyBytes: 0,
+      bytesPerSecond: 0,
+      failedResources: [],
+      canPause: false,
+      canResume: false,
+      canRetry: false,
     },
   },
 }));
@@ -101,6 +116,8 @@ vi.mock("../office-runtime-resources.js", () => ({
   checkAndRepairOfficeResources: vi.fn(async () => undefined),
   downloadOfficeFontFamily: vi.fn(async () => undefined),
   installOfficeFontPreset: vi.fn(async () => undefined),
+  pauseOfficeResources: vi.fn(async () => undefined),
+  resumeOfficeResources: vi.fn(async () => undefined),
   uninstallOfficeFontFamily: vi.fn(async () => undefined),
 }));
 
@@ -195,7 +212,7 @@ describe("UserSettingsDialog", () => {
 
   it.each(["zh-CN", "en-US"] as const)(
     "shows simplified Office readiness and presets in %s",
-    (locale) => {
+    async (locale) => {
       renderDialog(locale);
 
       const section = screen.getByTestId("office-resources-section");
@@ -203,8 +220,13 @@ describe("UserSettingsDialog", () => {
         within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
       ).toBeInTheDocument();
       expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.3.37")),
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.4.0")),
       ).toBeInTheDocument();
+      expect(
+        within(section).getByRole("progressbar", {
+          name: uiCopy.chat.preferencesPanel.officeResources.progressLabel,
+        }),
+      ).toHaveAttribute("value", "0");
       expect(
         within(section).getByRole("button", {
           name: uiCopy.chat.preferencesPanel.officeResources.basicPreset,
@@ -212,14 +234,35 @@ describe("UserSettingsDialog", () => {
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.advanced,
+        }),
+      ).toBeInTheDocument();
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.advanced,
+        }),
+      );
+      expect(
+        await within(section).findByRole("button", {
           name: uiCopy.chat.preferencesPanel.officeResources.compatibilityPreset,
         }),
       ).toBeInTheDocument();
-      expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.advanced),
-      ).toBeInTheDocument();
     },
   );
+
+  it("renders Office resource controls without React Aria press warnings", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      renderDialog("en-US");
+      expect([...warn.mock.calls, ...error.mock.calls].flat().join(" ")).not.toMatch(
+        /PressResponder|pressable child|unhandled/i,
+      );
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
 
   it("does not crash when a stale resource snapshot is missing its inventories", () => {
     const resources = officeResourcesMock.snapshot.resources;

@@ -14,7 +14,9 @@ function createWorker(state: ServiceWorkerState = "installed") {
   return target;
 }
 
-function createRuntime(options: { waiting?: boolean; controlled?: boolean } = {}) {
+function createRuntime(
+  options: { waiting?: boolean; controlled?: boolean; unsafePeer?: boolean } = {},
+) {
   const windowTarget = new EventTarget() as EventTarget & {
     location: { reload: ReturnType<typeof vi.fn> };
     document: { visibilityState: DocumentVisibilityState };
@@ -30,6 +32,38 @@ function createRuntime(options: { waiting?: boolean; controlled?: boolean } = {}
         removeEventListener: vi.fn(),
       }) as unknown as MediaQueryList,
   );
+  if (options.unsafePeer) {
+    class TestBroadcastChannel extends EventTarget {
+      postMessage(message: { type?: string; requestId?: string }) {
+        if (message.type === "HELLO") {
+          queueMicrotask(() =>
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: { protocol: 1, type: "HELLO_ACK", tabId: "remote-tab" },
+              }),
+            ),
+          );
+        }
+        if (message.type === "PREPARE_UPDATE") {
+          queueMicrotask(() =>
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: {
+                  protocol: 1,
+                  type: "PREPARE_RESULT",
+                  tabId: "remote-tab",
+                  requestId: message.requestId,
+                  safe: false,
+                },
+              }),
+            ),
+          );
+        }
+      }
+      close() {}
+    }
+    Object.assign(windowTarget, { BroadcastChannel: TestBroadcastChannel });
+  }
 
   const waiting = options.waiting ? createWorker() : null;
   const registrationTarget = new EventTarget() as EventTarget & ServiceWorkerRegistration;
@@ -105,6 +139,16 @@ describe("PWA lifecycle", () => {
     const runtime = createRuntime({ waiting: true, controlled: true });
     await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
     registerPwaUpdateGuard(() => false);
+
+    await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("blocked");
+    expect(runtime.waiting?.postMessage).not.toHaveBeenCalled();
+    expect(runtime.windowObject.location.reload).not.toHaveBeenCalled();
+  });
+
+  it("does not activate while another tab reports an unsafe Office state", async () => {
+    const runtime = createRuntime({ waiting: true, controlled: true, unsafePeer: true });
+    await initializePwaLifecycle(true, runtime.windowObject, runtime.navigatorObject);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     await expect(activatePwaUpdate(runtime.windowObject)).resolves.toBe("blocked");
     expect(runtime.waiting?.postMessage).not.toHaveBeenCalled();

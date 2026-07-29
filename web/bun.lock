@@ -5,7 +5,7 @@
     "": {
       "name": "piwork",
       "dependencies": {
-        "@agentbridges-ai/onlyoffice-browser": "0.3.37",
+        "@agentbridges-ai/onlyoffice-browser": "0.4.0",
         "@anthropic-ai/sandbox-runtime": "0.0.65",
         "@codemirror/commands": "^6.10.3",
         "@codemirror/lang-cpp": "^6.0.3",
@@ -108,7 +108,7 @@
 
     "@adobe/react-spectrum-workflow": ["@adobe/react-spectrum-workflow@2.3.5", "https://registry.npmjs.org/@adobe/react-spectrum-workflow/-/react-spectrum-workflow-2.3.5.tgz", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0" } }, "sha512-b53VIPwPWKb/T5gzE3qs+QlGP5gVrw/LnWV3xMksDU+CRl3rzOKUwxIGiZO8ICyYh1WiyqY4myGlPU/nAynBUg=="],
 
-    "@agentbridges-ai/onlyoffice-browser": ["@agentbridges-ai/onlyoffice-browser@0.3.37", "https://registry.npmjs.org/@agentbridges-ai/onlyoffice-browser/-/onlyoffice-browser-0.3.37.tgz", { "bin": { "onlyoffice-browser-generate-font-assets": "scripts/generate-onlyoffice-font-assets.mjs", "onlyoffice-browser-build-runtime-assets": "scripts/build-onlyoffice-runtime-assets.mjs", "onlyoffice-browser-verify-font-assets": "scripts/verify-onlyoffice-font-assets.mjs" } }, "sha512-Uwvimt1ET1crpS5qqR7NHFDlajjZ29VE61uPf/BH1faXSOwZ4W1C55m8q1YoxIeKs45jrlso105IOjF4DyB7dA=="],
+    "@agentbridges-ai/onlyoffice-browser": ["@agentbridges-ai/onlyoffice-browser@0.4.0", "https://registry.npmjs.org/@agentbridges-ai/onlyoffice-browser/-/onlyoffice-browser-0.4.0.tgz", { "bin": { "onlyoffice-browser-generate-font-assets": "scripts/generate-onlyoffice-font-assets.mjs", "onlyoffice-browser-build-runtime-assets": "scripts/build-onlyoffice-runtime-assets.mjs", "onlyoffice-browser-verify-font-assets": "scripts/verify-onlyoffice-font-assets.mjs" } }, "sha512-kcrjtDGz1YJQ+u13lUbc+bL2oVd06OgJ2xcBPAAm6d8TX7TYWoX6mxIxjh1+8VhSMSTnXWAnGp2xQdwoHEV+aA=="],
 
     "@ant-design/colors": ["@ant-design/colors@8.0.1", "https://registry.npmjs.org/@ant-design/colors/-/colors-8.0.1.tgz", { "dependencies": { "@ant-design/fast-color": "^3.0.0" } }, "sha512-foPVl0+SWIslGUtD/xBr1p9U4AKzPhNYEseXYRRo5QSzGACYZrQbe11AYJbYfAWnWSpGBx6JjBmSeugUsD9vqQ=="],
 

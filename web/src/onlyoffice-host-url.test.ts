@@ -42,4 +42,18 @@ describe("OnlyOffice host URL", () => {
       ),
     ).toBe("https://piwork.getpi.work");
   });
+
+  it("pins new editor instances to the prepared immutable release", () => {
+    expect(
+      resolvePiworkOnlyOfficeHostUrl(
+        {
+          sessionId: "session-a",
+          fileName: "first.docx",
+          fileType: "docx",
+          mode: "edit",
+        },
+        "v0.4.0-release+1",
+      ),
+    ).toBe("https://office-editor-session-a.getpi.work/r/v0.4.0-release%2B1/office-host.html");
+  });
 });

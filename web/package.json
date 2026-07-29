@@ -31,7 +31,7 @@
     "web-ui"
   ],
   "scripts": {
-    "build": "node node_modules/vite/bin/vite.js build && bun scripts/check-ui-bundle-budgets.mjs",
+    "build": "node node_modules/vite/bin/vite.js build && node scripts/finalize-pwa-shell.mjs && bun scripts/check-ui-bundle-budgets.mjs",
     "check:ui-bundles": "bun scripts/check-ui-bundle-budgets.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "lint": "node node_modules/eslint/bin/eslint.js . --max-warnings 0",
@@ -49,7 +49,7 @@
     "perf:user-space:browser": "bun scripts/user-space-cdp-perf.mjs"
   },
   "dependencies": {
-    "@agentbridges-ai/onlyoffice-browser": "0.3.37",
+    "@agentbridges-ai/onlyoffice-browser": "0.4.0",
     "@anthropic-ai/sandbox-runtime": "0.0.65",
     "@earendil-works/pi-coding-agent": "0.82.1",
     "@modelcontextprotocol/sdk": "1.29.0",

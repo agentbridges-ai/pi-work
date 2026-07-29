@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtimeMock = vi.hoisted(() => {
   const resources = {
-    packageVersion: "0.3.37",
+    packageVersion: "0.4.0",
     assetVersion: "assets-v1",
     readiness: "needs-download" as const,
     packs: [
@@ -50,6 +50,16 @@ const runtimeMock = vi.hoisted(() => {
     loadAll: vi.fn(async () => undefined),
     checkHealth: vi.fn(async () => undefined),
     repair: vi.fn(async () => undefined),
+    plan: vi.fn(async (request: { documentType: "word" | "cell" | "slide" }) => ({
+      planId: `plan-${request.documentType}`,
+      releaseId: "release-v3",
+      scope: "document" as const,
+      profiles: ["base", request.documentType],
+      totalBytes: 4,
+      downloadBytes: 4,
+      reusedBytes: 0,
+    })),
+    apply: vi.fn(async () => undefined),
     prepareForDocumentType: vi.fn(async () => undefined),
     installFontPreset: vi.fn(async () => undefined),
     downloadFontFamily: vi.fn(async () => undefined),
@@ -85,6 +95,8 @@ describe("Piwork Office resource state", () => {
     runtimeMock.manager.getSnapshot.mockClear();
     runtimeMock.manager.loadAll.mockClear();
     runtimeMock.manager.downloadFontFamily.mockClear();
+    runtimeMock.manager.plan.mockClear();
+    runtimeMock.manager.apply.mockClear();
     Object.defineProperty(navigator, "storage", {
       configurable: true,
       value: {
@@ -150,9 +162,19 @@ describe("Piwork Office resource state", () => {
     await prepareOfficeResourcesForFile("brief.docx");
     await prepareOfficeResourcesForFile("deck.pptx");
 
-    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(1, "cell");
-    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(2, "word");
-    expect(runtimeMock.manager.prepareForDocumentType).toHaveBeenNthCalledWith(3, "slide");
+    expect(runtimeMock.manager.plan).toHaveBeenNthCalledWith(1, {
+      scope: "document",
+      documentType: "cell",
+    });
+    expect(runtimeMock.manager.plan).toHaveBeenNthCalledWith(2, {
+      scope: "document",
+      documentType: "word",
+    });
+    expect(runtimeMock.manager.plan).toHaveBeenNthCalledWith(3, {
+      scope: "document",
+      documentType: "slide",
+    });
+    expect(runtimeMock.manager.apply).toHaveBeenCalledTimes(3);
   });
 
   it("opens the settings surface through the resource request channel", () => {

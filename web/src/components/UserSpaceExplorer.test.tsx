@@ -34,12 +34,16 @@ const {
   mockWtermWrite,
   mockWtermResize,
   mockWtermFocus,
+  mockPlanOfficeResourcesForFile,
+  mockApplyOfficeResourcePlan,
 } = vi.hoisted(() => ({
   mockCreateOfficeEditor: vi.fn(),
   mockOfficeEditorDestroy: vi.fn(),
   mockWtermWrite: vi.fn(),
   mockWtermResize: vi.fn(),
   mockWtermFocus: vi.fn(),
+  mockPlanOfficeResourcesForFile: vi.fn(),
+  mockApplyOfficeResourcePlan: vi.fn(),
 }));
 
 const mountedWorkspace = {
@@ -411,6 +415,16 @@ vi.mock("@agentbridges-ai/onlyoffice-browser", () => ({
   },
   getActiveOfficeEditorCount: () => 0,
   loadOfficeEditorApi: () => Promise.resolve(),
+}));
+
+vi.mock("../office-runtime-resources.js", () => ({
+  applyOfficeResourcePlan: (...args: unknown[]) => mockApplyOfficeResourcePlan(...args),
+  ensureOfficeResources: vi.fn(async () => ({})),
+  getTargetOfficeReleaseId: vi.fn(() => "test-release"),
+  getVerifiedOfficeFontPaths: vi.fn(() => []),
+  officeResourcesNeedAttention: vi.fn(() => false),
+  planOfficeResourcesForFile: (...args: unknown[]) => mockPlanOfficeResourcesForFile(...args),
+  requestOfficeResourceSettings: vi.fn(),
 }));
 
 vi.mock("@wterm/react", async () => {
@@ -904,6 +918,18 @@ beforeEach(() => {
   mockWtermWrite.mockReset();
   mockWtermResize.mockReset();
   mockWtermFocus.mockReset();
+  mockPlanOfficeResourcesForFile.mockReset();
+  mockApplyOfficeResourcePlan.mockReset();
+  mockPlanOfficeResourcesForFile.mockResolvedValue({
+    planId: "test-plan",
+    releaseId: "test-release",
+    scope: "document",
+    profiles: ["base", "word"],
+    totalBytes: 0,
+    downloadBytes: 0,
+    reusedBytes: 0,
+  });
+  mockApplyOfficeResourcePlan.mockResolvedValue(undefined);
   mockCreateOfficeEditor.mockImplementation(
     async (
       container: HTMLElement,
@@ -3880,6 +3906,7 @@ describe("UserSpaceExplorer", () => {
     expect(screen.getByTestId("user-space-preview-toolbar-filename")).toHaveTextContent(
       "report.docx",
     );
+    expect(screen.getByTestId("preview-tab-dirty-uw-mounted:report.docx")).toBeInTheDocument();
     expect(
       within(screen.getByTestId("user-space-preview-toolbar")).queryByRole("button", {
         name: "保存",
@@ -3887,6 +3914,33 @@ describe("UserSpaceExplorer", () => {
     ).not.toBeInTheDocument();
     expect(officeInstance.save).not.toHaveBeenCalled();
     expect(mockSaveUserSpaceFile).not.toHaveBeenCalled();
+  });
+
+  it("prepares missing document resources before mounting the Office editor", async () => {
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    mockPlanOfficeResourcesForFile.mockResolvedValueOnce({
+      planId: "word-plan",
+      releaseId: "release-v3",
+      scope: "document",
+      profiles: ["base", "word"],
+      totalBytes: 24 * 1024 * 1024,
+      downloadBytes: 24 * 1024 * 1024,
+      reusedBytes: 0,
+    });
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+
+    expect(await screen.findByRole("dialog", { name: "准备 Office 资源" })).toBeInTheDocument();
+    expect(mockCreateOfficeEditor).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "准备并打开" }));
+
+    await waitFor(() => expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockCreateOfficeEditor).toHaveBeenCalledOnce());
   });
 
   it("keeps Office previews readonly in the common viewer when the workspace is readonly", async () => {
