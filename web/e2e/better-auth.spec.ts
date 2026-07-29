@@ -199,6 +199,9 @@ test("LoginPage registration and login perform real bootstrap and user-menu logo
   const page = await context.newPage();
   const user = uniqueUser("login-page");
   let fakeSessionSequence = 0;
+  await page.routeWebSocket("**/ws/browser/**", (webSocket) => {
+    webSocket.onMessage(() => {});
+  });
   await page.route("**/api/sessions/create-stream", async (route) => {
     fakeSessionSequence += 1;
     await route.fulfill({

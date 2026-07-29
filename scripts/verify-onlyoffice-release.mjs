@@ -121,8 +121,11 @@ assert(
   "runtime identity asset manifest digest is invalid",
 );
 assert(manifest.releaseManifest?.version === 3, "release manifest version must be 3");
+const escapedPackageVersion = manifest.npmPackage.version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 assert(
-  /^v0\.4\.0-[0-9a-f]{16}$/.test(manifest.releaseManifest?.releaseId || ""),
+  new RegExp(`^v${escapedPackageVersion}-[0-9a-f]{16}$`).test(
+    manifest.releaseManifest?.releaseId || "",
+  ),
   "immutable release ID is invalid",
 );
 assert(
