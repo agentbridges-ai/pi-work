@@ -16,7 +16,7 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono, type Context } from "hono";
 import { serveStatic } from "hono/bun";
@@ -32,17 +32,6 @@ import { cacheControlMiddleware } from "./cache-headers.js";
 import { initLogFile, closeLogFile } from "./logger.js";
 import { acquireRunnerLock } from "./runner-lock.js";
 import { getBuildInfo } from "./build-info.js";
-import {
-  resolveOnlyOfficeFontAssetsDir,
-  resolveOnlyOfficeGeneratedFontAsset,
-} from "./onlyoffice-font-assets.js";
-import {
-  applyOnlyOfficeHostResponseHeaders,
-  applyOnlyOfficeSharedAssetCorsHeaders,
-  contentTypeForOnlyOfficeAsset,
-  isOnlyOfficeBrowserAssetPath,
-  isOnlyOfficePrintPdfPath,
-} from "./onlyoffice-runtime-assets.js";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 import {
@@ -79,25 +68,7 @@ import { ensurePiRuntimeLayout } from "./pi-runtime-layout.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = environment.packageRoot || resolve(__dirname, "..");
-const repoRoot = resolve(packageRoot, "..");
 const bundledFrontendDistDir = resolve(packageRoot, "dist");
-const frontendPublicDir = resolve(packageRoot, "public");
-const configuredOnlyOfficeBrowserDir = environment
-  .optionalString(ENV.PIWORK_ONLYOFFICE_BROWSER_DIR, false)
-  ?.trim();
-const defaultOnlyOfficeBrowserDir = configuredOnlyOfficeBrowserDir
-  ? resolve(configuredOnlyOfficeBrowserDir)
-  : resolve(repoRoot, "onlyoffice-browser");
-const defaultOnlyOfficeBrowserPublicDir = resolve(defaultOnlyOfficeBrowserDir, "dist");
-const configuredOnlyOfficeBrowserPublicDir = environment
-  .optionalString(ENV.PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR, false)
-  ?.trim();
-const onlyOfficeBrowserPublicDir =
-  configuredOnlyOfficeBrowserPublicDir ||
-  (existsSync(defaultOnlyOfficeBrowserPublicDir) ? defaultOnlyOfficeBrowserPublicDir : "");
-const onlyOfficeFontAssetsDir = resolveOnlyOfficeFontAssetsDir();
-const onlyOfficeBrowserAssetBase =
-  environment.optionalString(ENV.PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE) || "";
 import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
 
 const defaultPort = environment.isProduction ? DEFAULT_PORT_PROD : DEFAULT_PORT_DEV;
@@ -345,112 +316,6 @@ app.get("/build-info", (c) => {
   return c.json(buildInfo);
 });
 
-function isPiworkOnlyOfficeBrowserAssetPath(pathname: string): boolean {
-  return isOnlyOfficeBrowserAssetPath(pathname, {
-    assetBaseConfigured: Boolean(onlyOfficeBrowserAssetBase),
-    localAssetRoots: [bundledFrontendDistDir, frontendPublicDir, onlyOfficeBrowserPublicDir],
-  });
-}
-
-async function serveOnlyOfficeBrowserAsset(pathname: string): Promise<Response> {
-  const generatedFontResponse = await serveGeneratedOnlyOfficeFontAsset(pathname);
-  if (generatedFontResponse) return generatedFontResponse;
-
-  const distResponse = await serveDistOnlyOfficeAsset(pathname);
-  if (distResponse) return distResponse;
-
-  const publicResponse = await serveFileFromRoot(frontendPublicDir, pathname);
-  if (publicResponse) return publicResponse;
-
-  const localResponse = await serveLocalOnlyOfficeBrowserAsset(pathname);
-  if (localResponse) return localResponse;
-
-  if (!onlyOfficeBrowserAssetBase) {
-    return new Response(`OnlyOffice browser runtime asset is not configured: ${pathname}`, {
-      status: 502,
-    });
-  }
-
-  const target = new URL(pathname.slice(1), ensureTrailingSlash(onlyOfficeBrowserAssetBase));
-  try {
-    const upstream = await fetch(target);
-    if (!upstream.ok || !upstream.body) {
-      return new Response(`Failed to load OnlyOffice runtime asset: ${pathname}`, {
-        status: upstream.status || 502,
-      });
-    }
-    const headers = applyOnlyOfficeSharedAssetCorsHeaders(
-      pathname,
-      applyOnlyOfficeHostResponseHeaders(pathname, new Headers()),
-    );
-    headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
-    headers.set("Cache-Control", "public, max-age=86400");
-    if (pathname.endsWith(".br")) headers.set("Content-Encoding", "br");
-    return new Response(upstream.body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers,
-    });
-  } catch (error) {
-    console.warn("[server] Failed to proxy OnlyOffice browser asset", target.toString(), error);
-    return new Response("Failed to load OnlyOffice browser asset", { status: 502 });
-  }
-}
-
-function serveMissingOnlyOfficePrintPdf(): Response {
-  const headers = new Headers();
-  headers.set("Content-Type", "text/plain; charset=utf-8");
-  headers.set("Cache-Control", "no-store, max-age=0");
-  return new Response(
-    "OnlyOffice print PDFs are transient and must be served from the editor host Service Worker cache.",
-    {
-      status: 410,
-      headers,
-    },
-  );
-}
-
-async function serveGeneratedOnlyOfficeFontAsset(pathname: string): Promise<Response | null> {
-  const target = resolveOnlyOfficeGeneratedFontAsset(onlyOfficeFontAssetsDir, pathname);
-  if (!target) return null;
-  const file = Bun.file(target);
-  if (!(await file.exists())) return null;
-  const headers = new Headers();
-  applyOnlyOfficeSharedAssetCorsHeaders(pathname, headers);
-  headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  return new Response(file, { headers });
-}
-
-async function serveDistOnlyOfficeAsset(pathname: string): Promise<Response | null> {
-  return serveFileFromRoot(bundledFrontendDistDir, pathname);
-}
-
-async function serveLocalOnlyOfficeBrowserAsset(pathname: string): Promise<Response | null> {
-  if (!onlyOfficeBrowserPublicDir) return null;
-  return serveFileFromRoot(resolve(onlyOfficeBrowserPublicDir), pathname);
-}
-
-async function serveFileFromRoot(root: string, pathname: string): Promise<Response | null> {
-  const target = resolve(root, `.${pathname}`);
-  const rel = relative(root, target);
-  if (rel.startsWith("..") || rel === "" || rel.startsWith("/")) return null;
-  const file = Bun.file(target);
-  if (!(await file.exists())) return null;
-  const headers = applyOnlyOfficeSharedAssetCorsHeaders(
-    pathname,
-    applyOnlyOfficeHostResponseHeaders(pathname, new Headers()),
-  );
-  headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  if (pathname.endsWith(".br")) headers.set("Content-Encoding", "br");
-  return new Response(file, { headers });
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
 async function serveBundledPwaAsset(pathname: string): Promise<Response> {
   const policy = resolvePwaAssetPolicy(bundledFrontendDistDir, pathname);
   if (!policy) return new Response("Not Found", { status: 404 });
@@ -486,52 +351,9 @@ if (environment.isProduction && servesBundledFrontend) {
   app.get("/favicon.svg", servePwaAsset);
   app.get("/icons/*", servePwaAsset);
   app.get("/screenshots/*", servePwaAsset);
-  app.get("/__onlyoffice-browser-print__/*", () => serveMissingOnlyOfficePrintPdf());
   const serveFrontendAsset = serveStatic({ root: distDir });
-  app.get("/assets/*", (c, next) => {
-    const pathname = new URL(c.req.url).pathname;
-    if (isPiworkOnlyOfficeBrowserAssetPath(pathname)) return serveOnlyOfficeBrowserAsset(pathname);
-    return serveFrontendAsset(c, next);
-  });
-  app.get("/fonts/*", async (c) => {
-    const pathname = new URL(c.req.url).pathname;
-    const localPath = resolve(distDir, `.${pathname}`);
-    const rel = relative(distDir, localPath);
-    if (
-      !rel.startsWith("..") &&
-      rel !== "" &&
-      !rel.startsWith("/") &&
-      (await Bun.file(localPath).exists())
-    ) {
-      const headers = new Headers();
-      headers.set("Content-Type", contentTypeForOnlyOfficeAsset(pathname));
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
-      return new Response(Bun.file(localPath), { headers });
-    }
-    return serveOnlyOfficeBrowserAsset(pathname);
-  });
-  const serveOnlyOfficeAsset = (c: Context) =>
-    serveOnlyOfficeBrowserAsset(new URL(c.req.url).pathname);
-  app.get("/web-apps/*", serveOnlyOfficeAsset);
-  app.get("/sdkjs/*", serveOnlyOfficeAsset);
-  app.get("/wasm/*", serveOnlyOfficeAsset);
-  app.get("/libs/*", serveOnlyOfficeAsset);
-  app.get("/dictionaries/*", serveOnlyOfficeAsset);
-  app.get("/server/FileConverter/bin/*", serveOnlyOfficeAsset);
-  app.get("/onlyoffice-browser-font-assets.json", serveOnlyOfficeAsset);
-  app.get("/onlyoffice-browser-font-source-map.json", serveOnlyOfficeAsset);
-  app.get("/document_editor_service_worker.js", serveOnlyOfficeAsset);
-  app.get("/plugins.json", serveOnlyOfficeAsset);
-  app.get("/themes.json", serveOnlyOfficeAsset);
-  app.get("/reset.html", serveOnlyOfficeAsset);
-  app.get("/office-host.html", serveOnlyOfficeAsset);
-  app.get("/sw.js", serveOnlyOfficeAsset);
-  app.get("/*", (c, next) => {
-    const pathname = new URL(c.req.url).pathname;
-    if (isOnlyOfficePrintPdfPath(pathname)) return serveMissingOnlyOfficePrintPdf();
-    if (isPiworkOnlyOfficeBrowserAssetPath(pathname)) return serveOnlyOfficeBrowserAsset(pathname);
-    return next();
-  });
+  app.get("/assets/*", serveFrontendAsset);
+  app.get("/fonts/*", serveFrontendAsset);
   app.get("/*", (c) => {
     if (c.req.path.includes(".")) return c.text("Not Found", 404);
     return serveIndexHtml(c);

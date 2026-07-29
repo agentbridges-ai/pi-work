@@ -55,11 +55,6 @@ jobs:
 
       - uses: ./.github/actions/setup-toolchain
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.4.0
-          run_install: false
-
       - name: Install PostgreSQL and SRT runtime dependencies
         run: |
           sudo apt-get update

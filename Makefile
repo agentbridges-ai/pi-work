@@ -15,14 +15,10 @@ help:
 		  '  make install              Install web dependencies' \
 		  '  make agent-browser        Prepare the pinned agent-browser Chrome extension runtime' \
 		  '  make agent-browser-e2e    Run the real Mac Chrome extension bridge smoke test' \
-	  '  make onlyoffice-browser   Prepare the external OnlyOffice browser runtime and font assets' \
-	  '  make prepare-onlyoffice-fonts  Collect local fonts and generate external runtime assets' \
-		  '  make onlyoffice-save-e2e  Run the OnlyOffice save-flow E2E suite' \
-		  '  make onlyoffice-print-e2e Run the OnlyOffice print-flow E2E suite' \
 		  '  make dev                  Start local Bun API + Vite frontend' \
 	  '  make dev-fast             Alias for make dev' \
 	  '  make dev-fast-stop        Stop local dev processes' \
-	  '  make status               Check local server, Vite, and OnlyOffice health' \
+	  '  make status               Check local server and Vite health' \
 	  '  make stop                 Alias for make dev-fast-stop' \
 	  '  make auth-generate        Generate Better Auth SQL schema' \
 	  '  make auth-migrate         Apply Better Auth Postgres schema' \
@@ -46,7 +42,6 @@ help:
 	  '  make lint                 Run ESLint over maintained web source' \
 	  '  make format              Format maintained source, config, and docs' \
 	  '  make format-check        Verify Prettier formatting' \
-	  '  make onlyoffice-verify    Verify the pinned OnlyOffice release inputs and artifacts' \
 	  '  make deadcode             Run the dead-code TypeScript project' \
 	  '  make dry-check            Run duplication check' \
 	  '' \
@@ -60,7 +55,7 @@ help:
 	  '  make pi-reset-legacy-sessions  Dry-run the explicit legacy session reset' \
 	  '  make dev-reset-sessions-hard  Hard-delete local data/ session state'
 
-.PHONY: install agent-browser agent-browser-e2e onlyoffice-browser onlyoffice-browser-dev prepare-onlyoffice-fonts onlyoffice-save-e2e onlyoffice-print-e2e
+.PHONY: install agent-browser agent-browser-e2e
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
 # Linux, so keep installed package metadata private to this checkout.
 install:
@@ -72,24 +67,9 @@ agent-browser:
 agent-browser-e2e: agent-browser
 	node ./scripts/e2e-agent-browser-chrome-extension.mjs
 
-onlyoffice-browser:
-	./scripts/ensure-onlyoffice-browser.sh
-
-onlyoffice-browser-dev:
-	PIWORK_ONLYOFFICE_BROWSER_USE_CURRENT_CHECKOUT=1 ./scripts/ensure-onlyoffice-browser.sh
-
-prepare-onlyoffice-fonts:
-	./scripts/prepare-onlyoffice-fonts.sh
-
-onlyoffice-save-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/onlyoffice-browser/.onlyoffice-font-assets" pnpm run test:e2e:save
-
-onlyoffice-print-e2e: onlyoffice-browser
-	cd onlyoffice-browser && ONLYOFFICE_BROWSER_FONT_ASSETS_DIR="$(CURDIR)/onlyoffice-browser/.onlyoffice-font-assets" pnpm run test:e2e:print
-
 .PHONY: dev dev-fast dev-fast-stop status stop
 dev: dev-fast
-dev-fast: agent-browser onlyoffice-browser-dev
+dev-fast: agent-browser
 	./scripts/dev-local.sh
 dev-fast-stop:
 	./scripts/dev-local-stop.sh
@@ -98,8 +78,7 @@ status:
 	  api_port="$${PORT:-3457}"; \
 	  vite_port="$${VITE_PORT:-3458}"; \
 	  curl -fsS "http://127.0.0.1:$$api_port/build-info" >/dev/null && echo "local API ready: http://127.0.0.1:$$api_port" || (echo 'local API is not ready' >&2; exit 1); \
-	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1); \
-	  bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port"
+	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1)
 stop: dev-fast-stop
 
 .PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi
@@ -140,10 +119,10 @@ test-srt-pi:
 		echo 'Skipping Linux-only native Pi SRT smoke on non-Linux.'; \
 	fi
 
-.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify onlyoffice-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc onlyoffice-verify backup-self-test build
+.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
+verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
 
-verify-toolchain: onlyoffice-browser
+verify-toolchain:
 	./scripts/verify-toolchain.sh
 
 verify-pi-versions:
@@ -154,9 +133,6 @@ verify-pi-only-runtime:
 
 agent-browser-verify:
 	node ./scripts/verify-agent-browser-release.mjs
-
-onlyoffice-verify: onlyoffice-browser
-	node ./scripts/verify-onlyoffice-release.mjs
 
 backup-self-test:
 	./scripts/verify-backup.sh --self-test
@@ -212,7 +188,6 @@ landing-lint:
 
 .PHONY: build
 build:
-	./scripts/ensure-onlyoffice-browser.sh
 	cd $(WEB_DIR) && bun run build
 
 .PHONY: backup backup-verify clean-runtime pi-reset-legacy-sessions dev-reset-sessions-hard

@@ -9,14 +9,13 @@ fallback is supported.
 | --------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Bun                                                       | `1.3.9`                                                                  | `scripts/verify-toolchain.sh`, `web/bun.lock`                                                        |
 | Node.js                                                   | `>= 22.19.0` (CI: exact `26.5.0`)                                        | shared `.github/actions/setup-toolchain`, `scripts/verify-toolchain.sh`                              |
-| pnpm                                                      | `11.4.0`                                                                 | `scripts/verify-toolchain.sh`, OnlyOffice `packageManager`                                           |
 | PostgreSQL                                                | `16.x` (baseline `16.14`)                                                | `pg_dump`/`pg_restore` backup verification and integration environment                               |
 | `@earendil-works/pi-coding-agent`                         | `0.82.1`                                                                 | exact manifest/lock pin, `rpc-entry` export, RPC contract and real Linux SRT smoke                   |
 | `@modelcontextprotocol/sdk`                               | `1.29.0`                                                                 | exact manifest/lock pin; Piwork-owned stdio/SSE/Streamable HTTP transports                           |
 | `@anthropic-ai/sandbox-runtime`                           | `0.0.65`                                                                 | exact manifest/lock pin, filesystem canary and real native Pi Linux smoke                            |
 | Better Auth runtime and CLI                               | `1.6.20`                                                                 | exact package/CLI pin and frozen Bun lockfile                                                        |
 | `agentbridges-ai/agent-browser` Chrome extension provider | `0.31.1` at `6ee4f5bcd6010af4927b2fc274878323504141ed`                   | `release/agent-browser-release-manifest.json`, `make agent-browser-verify`, `make agent-browser-e2e` |
-| `@agentbridges-ai/onlyoffice-browser`                     | `0.3.35`                                                                 | `release/onlyoffice-release-manifest.json` and `make onlyoffice-verify`                              |
+| `@agentbridges-ai/onlyoffice-browser`                     | `0.3.35`                                                                 | exact manifest/lock pin, release runtime identity, Office integration tests                          |
 | OnlyOffice x2t WASM                                       | `v9.3.0+0`                                                               | pinned commit and browser artifact digests in the release manifest                                   |
 | ONLYOFFICE DocumentServer reference                       | `9.3.0`                                                                  | generated font metadata and browser-runtime compatibility work                                       |
 | Browser / PWA                                             | Current stable desktop Chromium (Chrome, Edge, Chromium-family browsers) | platform gate tests, production asset tests, production build, real Chromium smoke test              |
@@ -70,10 +69,12 @@ The supported retention envelope is 7 days, 100 MiB per session
 ## Updating the matrix
 
 1. Update the exact tool or package pin and its lockfile when that surface is pinned.
-2. Rebuild the compact OnlyOffice runtime when that surface changes.
-3. Refresh the immutable commits and SHA-256 values in
-   `release/onlyoffice-release-manifest.json`.
-4. Run `make verify`, then the affected real-browser smoke suite.
+2. For an OnlyOffice change, build, test, and deploy the runtime from the
+   `onlyoffice-browser` repository before changing Piwork.
+3. Update Piwork's published npm package pin and the deployed runtime identity
+   in `release/onlyoffice-release-manifest.json`.
+4. Run `make verify`, then the affected real-browser smoke suite against the
+   deployed Office Host.
 
 Native Pi release evidence additionally requires
 `make verify-pi-versions verify-pi-only-runtime test-pi-rpc-contract

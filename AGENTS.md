@@ -254,10 +254,11 @@ make test
   argv, logs, recordings, Pi JSONL, or a child Agent's inherited environment.
 - `agentbridges-ai/onlyoffice-browser` is maintained by the same organization
   and is part of this product surface. For OnlyOffice behavior changes, use the
-  repo-local monorepo checkout at `onlyoffice-browser/` instead of adding
-  workaround patches in Piwork; this directory is intentionally ignored by
-  Git and prepared by `make onlyoffice-browser`. After user verification, push
-  the upstream change and publish the updated npm package.
+  separate `onlyoffice-browser` repository instead of adding workaround patches
+  in Piwork. Build, test, and deploy its Host and shared assets to
+  `onlyoffice.getpi.work`, then publish the updated npm package when its public
+  API changes. Piwork development must not prepare or inspect a repo-local
+  OnlyOffice checkout.
 - OnlyOffice-related shipping spans three repositories. When changes touch this
   surface, commit and push any updated `agentbridges-ai/onlyoffice-x2t-wasm`,
   `agentbridges-ai/onlyoffice-browser`, and `agentbridges-ai/Piwork` working
@@ -267,18 +268,16 @@ make test
   Piwork-facing proxy API, but the editor iframe actually runs
   `dist/assets/officeHost-*.js`. If a change touches
   `onlyoffice-browser/src/lib/office-editor-runtime.ts`, verify the rebuilt host
-  bundle, not just TypeScript tests or `build:lib`: run
-  `./scripts/ensure-onlyoffice-browser.sh`, confirm the expected runtime
-  signature exists in `onlyoffice-browser/dist/assets/officeHost-*.js`, then
-  reload or reopen the Office iframe before Chrome verification. Stale open
-  iframes keep the old host bundle even when files on disk are correct.
-- Piwork must serve the compact OnlyOffice runtime profile from the external
-  `onlyoffice-browser/` checkout. The prepared `onlyoffice-browser/dist` must
-  contain `onlyoffice-runtime-assets.json` and exclude bundled PDF/Visio SDKs,
-  package fonts, FileConverter font assets, non-selected dictionaries, and
-  bundled help image trees. Generated development fonts are served from
-  `onlyoffice-browser/.onlyoffice-font-assets/` as an overlay; do not vendor
-  them or the full upstream editor asset tree into Piwork.
+  bundle in that repository, not just TypeScript tests or `build:lib`. Deploy
+  the verified Host bundle before Chrome verification, then reload or reopen
+  the Office iframe. Stale open iframes keep the old Host bundle after a
+  deployment.
+- Piwork must not serve, proxy, build, or validate OnlyOffice Host, SDK, WASM,
+  dictionary, font, or service-worker assets. Editor iframes use
+  `office-editor-<session>.getpi.work`; shared assets use
+  `onlyoffice.getpi.work`. Piwork consumes only the published npm client API and
+  the deployed runtime identity. `make dev`, `make build`, and `make status`
+  must remain independent from the OnlyOffice deployment.
 - Treat [ONLYOFFICE/DocumentServer](https://github.com/ONLYOFFICE/DocumentServer)
   as the authoritative upstream reference for OnlyOffice save, print,
   conversion, document-resource, editor iframe, and callback/storage behavior.

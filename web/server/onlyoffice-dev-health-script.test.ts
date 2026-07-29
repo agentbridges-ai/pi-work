@@ -60,18 +60,22 @@ function healthyFetch() {
 }
 
 describe("OnlyOffice dev health check", () => {
-  it("runs as a required make dev startup gate and from make status", () => {
+  it("keeps Piwork development and build independent from the OnlyOffice deployment", () => {
     const devScript = readFileSync(resolve(repoRoot, "scripts/dev-local.sh"), "utf8");
     const makefile = readFileSync(resolve(repoRoot, "Makefile"), "utf8");
+    const viteConfig = readFileSync(resolve(repoRoot, "web/vite.config.ts"), "utf8");
+    const server = readFileSync(resolve(repoRoot, "web/server/index.ts"), "utf8");
 
-    expect(devScript).toContain(
-      '"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT"',
-    );
-    expect(devScript).not.toContain('--checkout "$ROOT_DIR/onlyoffice-browser"');
-    expect(makefile).toContain(
-      'bun ./scripts/check-onlyoffice-dev-health.ts "http://127.0.0.1:$$vite_port"',
-    );
-    expect(makefile).not.toContain('--checkout "$(CURDIR)/onlyoffice-browser"');
+    expect(devScript).not.toContain("check-onlyoffice-dev-health.ts");
+    expect(devScript).not.toContain("PIWORK_ONLYOFFICE_BROWSER_");
+    expect(makefile).toContain("dev-fast: agent-browser");
+    expect(makefile).not.toContain("dev-fast: agent-browser onlyoffice-browser");
+    expect(makefile).not.toMatch(/^build:\n\t.*ensure-onlyoffice-browser/m);
+    expect(makefile).not.toContain("check-onlyoffice-dev-health.ts");
+    expect(viteConfig).not.toContain("onlyOfficeBrowserRuntimePlugin");
+    expect(viteConfig).not.toContain("onlyOfficeBrowserFontBuildPlugin");
+    expect(server).not.toContain('app.get("/office-host.html"');
+    expect(server).not.toContain("serveOnlyOfficeBrowserAsset");
   });
 
   it("checks the isolated host page, entry bundle, manifest, and release identity", async () => {

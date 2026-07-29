@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readOnlyOfficeRuntimeIdentity } from "./onlyoffice-runtime-identity.js";
 
 describe("readOnlyOfficeRuntimeIdentity", () => {
-  it("derives the development identity from the repo-local host source and runtime manifest", async () => {
+  it("derives the development identity from an explicit OnlyOffice checkout", async () => {
     const root = await mkdtemp(join(tmpdir(), "piwork-onlyoffice-identity-"));
     await mkdir(join(root, "src"), { recursive: true });
     await mkdir(join(root, "dist"), { recursive: true });

@@ -36,12 +36,14 @@ function proxyOptions(value: string | ProxyOptions | undefined): ProxyOptions {
 describe("Vite runtime configuration", () => {
   const viteConfig = config as UserConfig;
 
-  it("assembles the OnlyOffice runtime and cache-control plugins", () => {
+  it("uses the installed OnlyOffice client package without local runtime plugins", () => {
     expect(viteConfig.publicDir).toBe(resolve(process.cwd(), "public"));
     expect(viteConfig.optimizeDeps?.exclude).toContain("@agentbridges-ai/onlyoffice-browser");
-    expect(pluginNames(viteConfig.plugins)).toEqual(
+    expect(pluginNames(viteConfig.plugins)).toContain(
+      "piwork-onlyoffice-browser-dev-module-cache-guard",
+    );
+    expect(pluginNames(viteConfig.plugins)).not.toEqual(
       expect.arrayContaining([
-        "piwork-onlyoffice-browser-dev-module-cache-guard",
         "piwork-onlyoffice-browser-development-identity",
         "piwork-onlyoffice-browser-fonts",
         "piwork-onlyoffice-browser-runtime",
