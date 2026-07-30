@@ -120,7 +120,7 @@ assert(
   /^[0-9a-f]{64}$/.test(manifest.runtimeIdentity?.assetManifestDigest || ""),
   "runtime identity asset manifest digest is invalid",
 );
-assert(manifest.releaseManifest?.version === 3, "release manifest version must be 3");
+assert(manifest.releaseManifest?.version === 4, "release manifest version must be 4");
 const escapedPackageVersion = manifest.npmPackage.version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 assert(
   new RegExp(`^v${escapedPackageVersion}-[0-9a-f]{16}$`).test(

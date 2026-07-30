@@ -15,6 +15,9 @@ describe("OnlyOffice prepare script", () => {
     );
     expect(script).toContain("[1, 2].includes(manifest.version)");
     expect(releaseVerifier).toContain("[1, 2].includes(compact.version)");
+    expect(releaseVerifier).toContain(
+      'manifest.releaseManifest?.version === 4, "release manifest version must be 4"',
+    );
   });
 
   it("validates a development checkout against its current host build identity", () => {
