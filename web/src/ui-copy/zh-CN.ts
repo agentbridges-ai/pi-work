@@ -1197,7 +1197,9 @@ export const zhCNCopy = {
       legacyConfirmUnavailable:
         "OnlyOffice 内置格式确认能力未加载，请刷新页面或重启 dev server 后重试。",
       localPreviewFailed: "Office 文件本地预览失败。",
+      openLimitReached: "最多可同时打开 12 个 Office 文档，请先关闭一个 Office 标签后再试。",
       manageResources: "管理 Office 资源",
+      resourcesNotReady: "Office 资源尚未完整下载并校验，暂时无法打开编辑器。",
       prepareResources: "准备并打开",
       resourcePreparationClose: "取消准备 Office 资源",
       resourcePreparationDescription: (size: string) =>

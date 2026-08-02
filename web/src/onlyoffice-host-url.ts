@@ -1,16 +1,34 @@
 import type { OfficeHostUrlContext } from "@agentbridges-ai/onlyoffice-browser";
 
 const ONLYOFFICE_SHARED_ASSET_ORIGIN = "https://onlyoffice.getpi.work/";
+const OFFICE_EDITOR_SLOTS = [
+  "aries",
+  "taurus",
+  "gemini",
+  "cancer",
+  "leo",
+  "virgo",
+  "libra",
+  "scorpio",
+  "sagittarius",
+  "capricorn",
+  "aquarius",
+  "pisces",
+] as const;
+const OFFICE_EDITOR_SLOT_SET = new Set<string>(OFFICE_EDITOR_SLOTS);
+const OFFICE_EDITOR_HOSTNAMES = new Set(OFFICE_EDITOR_SLOTS.map((slot) => `${slot}.getpi.work`));
 
 export function resolvePiworkOnlyOfficeHostUrl(
   context: OfficeHostUrlContext,
   releaseId?: string | null,
 ): string {
-  const sessionLabel = officeHostSessionLabel(context.sessionId);
+  if (!OFFICE_EDITOR_SLOT_SET.has(context.hostSlot)) {
+    throw new Error("OnlyOffice host slot is outside the fixed constellation pool");
+  }
   const path = releaseId
     ? `/r/${encodeURIComponent(releaseId)}/office-host.html`
     : "/office-host.html";
-  return `https://${sessionLabel}.getpi.work${path}`;
+  return `https://${context.hostSlot}.getpi.work${path}`;
 }
 
 export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
@@ -20,20 +38,9 @@ export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
 export function resolveOnlyOfficeAssetBaseUrl(hostUrl: URL, fallbackOrigin: string): string {
   if (
     hostUrl.hostname === "onlyoffice.getpi.work" ||
-    /^office-editor-[a-z0-9-]+\.getpi\.work$/.test(hostUrl.hostname)
+    OFFICE_EDITOR_HOSTNAMES.has(hostUrl.hostname.toLowerCase())
   ) {
     return ONLYOFFICE_SHARED_ASSET_ORIGIN;
   }
   return fallbackOrigin;
-}
-
-function officeHostSessionLabel(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  const suffix = normalized || "session";
-  const sessionLabel = suffix.startsWith("office-editor-") ? suffix : `office-editor-${suffix}`;
-  return sessionLabel.slice(0, 63);
 }

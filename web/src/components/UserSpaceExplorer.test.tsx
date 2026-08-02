@@ -6,7 +6,7 @@ import "vitest-axe/extend-expect";
 import { useState } from "react";
 import releaseManifest from "../../../release/onlyoffice-release-manifest.json";
 import type { UserSpaceMount } from "../types.js";
-import { setUiCopyLanguage } from "../ui-copy.js";
+import { setUiCopyLanguage, uiCopy } from "../ui-copy.js";
 
 const mockExecuteUserSpaceOperation = vi.fn();
 const mockGetUserSpaceFile = vi.fn();
@@ -36,6 +36,7 @@ const {
   mockWtermFocus,
   mockPlanOfficeResourcesForFile,
   mockApplyOfficeResourcePlan,
+  mockOfficeResourcesReadyForRelease,
 } = vi.hoisted(() => ({
   mockCreateOfficeEditor: vi.fn(),
   mockOfficeEditorDestroy: vi.fn(),
@@ -44,6 +45,7 @@ const {
   mockWtermFocus: vi.fn(),
   mockPlanOfficeResourcesForFile: vi.fn(),
   mockApplyOfficeResourcePlan: vi.fn(),
+  mockOfficeResourcesReadyForRelease: vi.fn(),
 }));
 
 const mountedWorkspace = {
@@ -423,6 +425,8 @@ vi.mock("../office-runtime-resources.js", () => ({
   getTargetOfficeReleaseId: vi.fn(() => "test-release"),
   getVerifiedOfficeFontPaths: vi.fn(() => []),
   officeResourcesNeedAttention: vi.fn(() => false),
+  officeResourcesReadyForRelease: (...args: unknown[]) =>
+    mockOfficeResourcesReadyForRelease(...args),
   planOfficeResourcesForFile: (...args: unknown[]) => mockPlanOfficeResourcesForFile(...args),
   requestOfficeResourceSettings: vi.fn(),
 }));
@@ -920,6 +924,8 @@ beforeEach(() => {
   mockWtermFocus.mockReset();
   mockPlanOfficeResourcesForFile.mockReset();
   mockApplyOfficeResourcePlan.mockReset();
+  mockOfficeResourcesReadyForRelease.mockReset();
+  mockOfficeResourcesReadyForRelease.mockReturnValue(true);
   mockPlanOfficeResourcesForFile.mockResolvedValue({
     planId: "test-plan",
     releaseId: "test-release",
@@ -3930,6 +3936,7 @@ describe("UserSpaceExplorer", () => {
       downloadBytes: 24 * 1024 * 1024,
       reusedBytes: 0,
     });
+    mockOfficeResourcesReadyForRelease.mockReturnValueOnce(false).mockReturnValue(true);
 
     render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
     fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
@@ -3941,6 +3948,54 @@ describe("UserSpaceExplorer", () => {
 
     await waitFor(() => expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce());
     await waitFor(() => expect(mockCreateOfficeEditor).toHaveBeenCalledOnce());
+  });
+
+  it("activates and probes a zero-download release before mounting the Office editor", async () => {
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    mockOfficeResourcesReadyForRelease.mockReturnValueOnce(false).mockReturnValue(true);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+
+    await waitFor(() => expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockCreateOfficeEditor).toHaveBeenCalledOnce());
+    expect(mockApplyOfficeResourcePlan.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreateOfficeEditor.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps the editor unmounted when canonical resource readiness remains incomplete", async () => {
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    mockOfficeResourcesReadyForRelease.mockReturnValue(false);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+
+    expect(await screen.findByText(uiCopy.userSpace.office.resourcesNotReady)).toBeInTheDocument();
+    expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce();
+    expect(mockCreateOfficeEditor).not.toHaveBeenCalled();
+  });
+
+  it("shows the localized 12-document limit when the constellation pool is exhausted", async () => {
+    setUiCopyLanguage("en-US");
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    const capacityError = new Error("office-host-pool-exhausted");
+    capacityError.name = "OfficeHostPoolExhaustedError";
+    mockCreateOfficeEditor.mockRejectedValue(capacityError);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview report.docx" }));
+
+    expect(await screen.findByText(uiCopy.userSpace.office.openLimitReached)).toBeInTheDocument();
   });
 
   it("keeps Office previews readonly in the common viewer when the workspace is readonly", async () => {

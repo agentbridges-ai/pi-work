@@ -227,7 +227,11 @@ function OfficeResourcesSection() {
         </div>
         <div className="shrink-0 text-right text-xs text-muted-foreground">
           <div className="font-medium text-foreground">{readinessLabel}</div>
-          {resources && <div className="mt-0.5">{copy.version(resources.packageVersion)}</div>}
+          {resources && (
+            <div className="mt-0.5">
+              {copy.version(resources.availablePackageVersion ?? resources.packageVersion)}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-[var(--piwork-control-radius)] border border-border bg-card">
