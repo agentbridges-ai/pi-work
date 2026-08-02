@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import releaseDescriptor from "../../release/onlyoffice-release-manifest.json";
 
 const runtimeMock = vi.hoisted(() => {
   const resources = {
@@ -39,6 +40,10 @@ const runtimeMock = vi.hoisted(() => {
       },
     ],
     verifiedFontPaths: ["fonts/dengxian.ttf"],
+    installedRelease: "release-v3",
+    targetRelease: "release-v3",
+    availableRelease: "release-v3",
+    phase: "idle" as const,
     operation: null,
     error: null,
   };
@@ -89,6 +94,7 @@ import {
   installOfficeFontPreset,
   loadAllOfficeResources,
   officeResourcesNeedAttention,
+  officeResourcesReadyForRelease,
   pauseOfficeResources,
   planOfficeResourcesForFile,
   prepareOfficeResourcesForFile,
@@ -135,10 +141,17 @@ describe("Piwork Office resource state", () => {
     expect(runtimeMock.create).toHaveBeenCalledTimes(1);
     expect(runtimeMock.create).toHaveBeenCalledWith({
       assetBaseUrl: "https://onlyoffice.getpi.work/",
+      requiredReleaseIdentity: {
+        releaseId: releaseDescriptor.releaseManifest.releaseId,
+        manifestSha256: releaseDescriptor.releaseManifest.sha256,
+        packageVersion: releaseDescriptor.runtimeIdentity.packageVersion,
+        hostBuildId: releaseDescriptor.runtimeIdentity.hostBuildId,
+      },
     });
     expect(getOfficeResourceSnapshot().status).toBe("ready");
     expect(getVerifiedOfficeFontPaths()).toEqual(["fonts/dengxian.ttf"]);
-    expect(getTargetOfficeReleaseId()).toBeNull();
+    expect(getTargetOfficeReleaseId()).toBe("release-v3");
+    expect(officeResourcesReadyForRelease("release-v3")).toBe(false);
     unsubscribe();
   });
 

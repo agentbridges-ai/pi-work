@@ -61,6 +61,7 @@ import {
   ensureOfficeResources,
   getTargetOfficeReleaseId,
   getVerifiedOfficeFontPaths,
+  officeResourcesReadyForRelease,
   officeResourcesNeedAttention,
   planOfficeResourcesForFile,
   requestOfficeResourceSettings,
@@ -3475,6 +3476,8 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
         if (!approved || disposed) {
           throw new DOMException("Office resource preparation was cancelled", "AbortError");
         }
+      }
+      if (!officeResourcesReadyForRelease(plan.releaseId)) {
         setPreparingResources(true);
         try {
           await applyOfficeResourcePlan(plan);
@@ -3482,6 +3485,9 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
           setPreparingResources(false);
           setPendingResourcePlan(null);
         }
+      }
+      if (!officeResourcesReadyForRelease(plan.releaseId)) {
+        throw new Error(workspaceCopy.office.resourcesNotReady);
       }
       lease = manager.mount(container, {
         ...officeEditorOptions,
@@ -3538,7 +3544,13 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
       .catch((nextError: unknown) => {
         if (disposed) return;
         setError(
-          nextError instanceof Error ? nextError.message : workspaceCopy.office.localPreviewFailed,
+          nextError instanceof Error &&
+            (nextError.name === "OfficeHostPoolExhaustedError" ||
+              nextError.name === "OfficePreviewLimitError")
+            ? workspaceCopy.office.openLimitReached
+            : nextError instanceof Error
+              ? nextError.message
+              : workspaceCopy.office.localPreviewFailed,
         );
         setOpening(false);
       });

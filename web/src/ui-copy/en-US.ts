@@ -1222,7 +1222,10 @@ export const enUSCopyOverrides = {
       legacyConfirmUnavailable:
         "OnlyOffice built-in format confirmation is not loaded. Refresh the page or restart the dev server and try again.",
       localPreviewFailed: "Failed to preview Office file locally.",
+      openLimitReached:
+        "You can open up to 12 Office documents at once. Close an Office tab and try again.",
       manageResources: "Manage Office resources",
+      resourcesNotReady: "Office resources are not fully downloaded and verified yet.",
       prepareResources: "Prepare and open",
       resourcePreparationClose: "Cancel Office resource preparation",
       resourcePreparationDescription: (size: string) =>

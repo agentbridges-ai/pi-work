@@ -1,12 +1,13 @@
-import {
-  createOfficeRuntimeResourceManager,
-  type OfficeDocumentResourceType,
-  type OfficeFontPreset,
-  type OfficeRuntimeResourceManager,
-  type OfficeRuntimeResourceSnapshot,
-  type ResourceErrorCode,
-  type ResourcePlan,
+import type {
+  OfficeDocumentResourceType,
+  OfficeFontPreset,
+  OfficeRuntimeResourceManager,
+  OfficeRuntimeResourceSnapshot,
+  RequiredReleaseIdentity,
+  ResourceErrorCode,
+  ResourcePlan,
 } from "@agentbridges-ai/onlyoffice-browser";
+import releaseDescriptor from "../../release/onlyoffice-release-manifest.json";
 import { resolvePiworkOnlyOfficeAssetBaseUrl } from "./onlyoffice-host-url.js";
 import {
   requestOfficeResourceSettings,
@@ -40,6 +41,12 @@ let snapshot: PiworkOfficeResourceSnapshot = {
   error: null,
 };
 const listeners = new Set<Listener>();
+const requiredReleaseIdentity: RequiredReleaseIdentity = Object.freeze({
+  releaseId: releaseDescriptor.releaseManifest.releaseId,
+  manifestSha256: releaseDescriptor.releaseManifest.sha256,
+  packageVersion: releaseDescriptor.runtimeIdentity.packageVersion,
+  hostBuildId: releaseDescriptor.runtimeIdentity.hostBuildId,
+});
 
 function publish(next: PiworkOfficeResourceSnapshot): void {
   snapshot = next;
@@ -88,9 +95,13 @@ export async function ensureOfficeResources(): Promise<OfficeRuntimeResourceMana
   if (initializePromise) return initializePromise;
 
   publish({ ...snapshot, status: "checking", error: null });
-  initializePromise = createOfficeRuntimeResourceManager({
-    assetBaseUrl: resolvePiworkOnlyOfficeAssetBaseUrl(),
-  })
+  initializePromise = import("@agentbridges-ai/onlyoffice-browser")
+    .then(({ createOfficeRuntimeResourceManager }) =>
+      createOfficeRuntimeResourceManager({
+        assetBaseUrl: resolvePiworkOnlyOfficeAssetBaseUrl(),
+        requiredReleaseIdentity,
+      }),
+    )
     .then((nextManager) => {
       manager = nextManager;
       unsubscribeManager?.();
@@ -118,7 +129,18 @@ export function getVerifiedOfficeFontPaths(): string[] {
 
 export function getTargetOfficeReleaseId(): string | null {
   const resources = manager?.getSnapshot();
-  return resources?.targetRelease ?? resources?.installedRelease ?? null;
+  return resources?.installedRelease ?? null;
+}
+
+export function officeResourcesReadyForRelease(releaseId: string): boolean {
+  const resources = manager?.getSnapshot();
+  return Boolean(
+    resources &&
+    resources.installedRelease === releaseId &&
+    (resources.readiness === "ready" || resources.readiness === "update-available") &&
+    resources.phase === "idle" &&
+    !resources.error,
+  );
 }
 
 async function requestPersistentStorage(requiredBytes: number): Promise<void> {
