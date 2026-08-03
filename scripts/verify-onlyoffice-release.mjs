@@ -137,6 +137,10 @@ assert(
   "release manifest digest is invalid",
 );
 assert(
+  /^[0-9a-f]{64}$/.test(manifest.releaseManifest?.hostBuildId || ""),
+  "release manifest hostBuildId is invalid",
+);
+assert(
   /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(manifest.npmPackage?.integrity || ""),
   "npm package integrity is invalid",
 );
@@ -184,8 +188,17 @@ if (officeRoot) {
     "built officeHost bundle does not match the manifest",
   );
   const hostBundleSource = readFileSync(safeResolve(officeRoot, hostArtifacts[0].path), "utf8");
+  const exactHostIdentity = hostBundleSource.includes(runtimeIdentity.hostBuildId);
+  const composedHostIdentity = `office-host-${runtimeIdentity.packageVersion}-r1`;
+  const versionImport = /from["']\.\/(version-[^"']+\.js)["']/.exec(hostBundleSource)?.[1];
+  const versionBundle = versionImport
+    ? readFileSync(safeResolve(officeRoot, `dist/assets/${versionImport}`), "utf8")
+    : "";
   assert(
-    hostBundleSource.includes(runtimeIdentity.hostBuildId),
+    exactHostIdentity ||
+      (runtimeIdentity.hostBuildId === composedHostIdentity &&
+        hostBundleSource.includes("office-host-${") &&
+        versionBundle.includes(runtimeIdentity.packageVersion)),
     "built officeHost bundle does not contain the release build ID",
   );
   assert(
