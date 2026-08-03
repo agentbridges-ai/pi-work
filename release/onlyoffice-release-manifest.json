@@ -29,12 +29,12 @@
   "runtimeIdentity": {
     "packageVersion": "0.5.9",
     "hostBuildId": "office-host-0.5.9-r1",
-    "assetManifestDigest": "2992ad6f615086d1e1614be0c6abadfbccec7226c38dfe947712d6e33d3de213"
+    "assetManifestDigest": "7e0530bbb5bc3164c0a4f68922e76e302e9e8090a5108bcaff00217442c2ac6e"
   },
   "releaseManifest": {
     "version": 5,
-    "releaseId": "v0.5.9-7ec61a3432a123ed",
-    "sha256": "d4e80ecfd12c90be6c9db7f4654b238333c7274e7d9d8c5e0448c567da3cbce3",
+    "releaseId": "v0.5.9-61cea53e823ce79b",
+    "sha256": "e4b47f56c78fc17bba2f258903ac55847f5288c3d7600f6989ea343d3fc86e7c",
     "hostBuildId": "7e00684560b86b44d4dade82e014957605bed957630251edace79d412d39931d",
     "channel": "stable-v5",
     "deployed": true
@@ -68,7 +68,7 @@
       "repository": "onlyoffice-browser",
       "kind": "compact-asset-manifest",
       "path": "dist/onlyoffice-runtime-assets.json",
-      "sha256": "2992ad6f615086d1e1614be0c6abadfbccec7226c38dfe947712d6e33d3de213"
+      "sha256": "7e0530bbb5bc3164c0a4f68922e76e302e9e8090a5108bcaff00217442c2ac6e"
     },
     {
       "repository": "onlyoffice-browser",
