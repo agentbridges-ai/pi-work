@@ -45,7 +45,7 @@ const requiredReleaseIdentity: RequiredReleaseIdentity = Object.freeze({
   releaseId: releaseDescriptor.releaseManifest.releaseId,
   manifestSha256: releaseDescriptor.releaseManifest.sha256,
   packageVersion: releaseDescriptor.runtimeIdentity.packageVersion,
-  hostBuildId: releaseDescriptor.runtimeIdentity.hostBuildId,
+  hostBuildId: releaseDescriptor.releaseManifest.hostBuildId,
 });
 
 function publish(next: PiworkOfficeResourceSnapshot): void {
