@@ -100,7 +100,7 @@ const officeResourcesMock = vi.hoisted(() => ({
       installedRelease: null,
       targetRelease: "release-v3",
       availableRelease: "release-v3",
-      availablePackageVersion: "0.5.9",
+      availablePackageVersion: "0.5.12",
       storageMode: "http-cache" as const,
       phase: "idle" as const,
       currentChunk: null,
@@ -229,7 +229,7 @@ describe("UserSettingsDialog", () => {
         within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
       ).toBeInTheDocument();
       expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.5.9")),
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.5.12")),
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("progressbar", {
