@@ -94,6 +94,8 @@ describe("Piwork design system workspace contract", () => {
       if (/(?:^|[\s"'`])shadow(?:-[a-z0-9[\]-]+)?(?=$|[\s"'`])/m.test(source))
         violations.push(`${name}: elevation shadow`);
       if (/<button\b/.test(source)) violations.push(`${name}: native button`);
+      if (/\btext-(?:muted|accent)(?![-\w])/.test(source))
+        violations.push(`${name}: surface token used as text`);
     }
     expect(violations).toEqual([]);
   });

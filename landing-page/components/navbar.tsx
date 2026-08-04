@@ -59,8 +59,8 @@ export const Navbar = () => {
               <li key={item.href}>
                 <NextLink
                   className={clsx(
-                    "text-foreground hover:text-accent transition-colors",
-                    "data-[active=true]:text-accent data-[active=true]:font-medium",
+                    "text-foreground transition-colors hover:text-primary",
+                    "data-[active=true]:text-primary data-[active=true]:font-medium",
                   )}
                   href={item.href}
                 >
@@ -79,7 +79,7 @@ export const Navbar = () => {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <TwitterIcon className="text-muted" />
+            <TwitterIcon />
           </a>
           <a
             aria-label="Discord"
@@ -88,7 +88,7 @@ export const Navbar = () => {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <DiscordIcon className="text-muted" />
+            <DiscordIcon />
           </a>
           <a
             aria-label="Github"
@@ -97,7 +97,7 @@ export const Navbar = () => {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <GithubIcon className="text-muted" />
+            <GithubIcon />
           </a>
           <ThemeSwitch />
           <div className="hidden lg:flex">{searchInput}</div>
@@ -121,7 +121,7 @@ export const Navbar = () => {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <GithubIcon className="text-muted" />
+            <GithubIcon />
           </a>
           <ThemeSwitch />
           <IconButton
@@ -159,7 +159,7 @@ export const Navbar = () => {
             {siteConfig.navItems.map((item) => (
               <li key={item.href}>
                 <NextLink
-                  className="block py-2 text-lg text-foreground no-underline transition-colors hover:text-accent"
+                  className="block py-2 text-lg text-foreground no-underline transition-colors hover:text-primary"
                   href={item.href}
                   onClick={() => setIsMenuOpen(false)}
                 >
