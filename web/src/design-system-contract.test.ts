@@ -56,7 +56,10 @@ describe("Piwork design system workspace contract", () => {
     expect(workflow).toContain(
       "bun install --filter piwork-landing-page --backend copyfile --linker hoisted",
     );
-    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain('pull_request:\n    paths:\n      - "package.json"');
+    expect(workflow).toContain(
+      'push:\n    branches:\n      - main\n    paths:\n      - "package.json"',
+    );
     expect(workflow).toContain("if: github.event_name != 'pull_request'");
   });
 
