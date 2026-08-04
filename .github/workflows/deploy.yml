@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Install frozen landing dependencies
-        run: bun install --frozen-lockfile --filter piwork-landing-page
+        run: bun install --filter piwork-landing-page --backend copyfile --linker hoisted --frozen-lockfile
 
       - name: Build static site
         run: bun run --cwd landing-page build
