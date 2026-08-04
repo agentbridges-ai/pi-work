@@ -30,7 +30,11 @@ function productionSourceFiles(root: string): string[] {
 describe("Piwork design system workspace contract", () => {
   it("exposes tokens, components, and patterns as workspace packages", () => {
     const rootPackage = JSON.parse(readFileSync(resolve(repositoryRoot, "package.json"), "utf8"));
+    const landingPackage = JSON.parse(
+      readFileSync(resolve(repositoryRoot, "landing-page/package.json"), "utf8"),
+    );
     expect(rootPackage.workspaces).toContain("packages/*");
+    expect(rootPackage.workspaces).toContain("landing-page");
 
     for (const [path, name] of [
       ["packages/design-tokens/package.json", "@piwork/design-tokens"],
@@ -41,6 +45,19 @@ describe("Piwork design system workspace contract", () => {
       expect(manifest.name).toBe(name);
       expect(manifest.private).toBe(true);
     }
+
+    for (const name of ["@piwork/design-tokens", "@piwork/ui", "@piwork/ui-patterns"]) {
+      expect(landingPackage.dependencies[name], name).toBe("workspace:*");
+    }
+  });
+
+  it("installs the landing workspace and its local packages before deployment", () => {
+    const workflow = readFileSync(resolve(repositoryRoot, ".github/workflows/deploy.yml"), "utf8");
+    expect(workflow).toContain(
+      "bun install --filter piwork-landing-page --backend copyfile --linker hoisted",
+    );
+    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain("if: github.event_name != 'pull_request'");
   });
 
   it("keeps the public token layers semantic and CSS-variable based", () => {
