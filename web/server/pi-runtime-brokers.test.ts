@@ -473,4 +473,46 @@ describe("PiRuntimeBrokers", () => {
     await neverStarted.dispose();
     await expect(neverStarted.start()).rejects.toThrow(/disposed/);
   });
+
+  it("keeps App operations on the root Agent authority", async () => {
+    const handleApp = vi.fn(async (value) => ({ operation: value.operation }));
+    const brokers = new PiRuntimeBrokers({
+      runtimeDir: "/tmp/piwork-runtime-test",
+      sessionId: "session-1",
+      generation: 3,
+      mode: "agent",
+      handleApp,
+    });
+    const context = {
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+    };
+
+    await expect(mocks.handle!(request("app.list"), context)).resolves.toEqual({
+      operation: "app.list",
+    });
+    await expect(mocks.handle!(request("app.versions"), context)).resolves.toEqual({
+      operation: "app.versions",
+    });
+    await expect(mocks.handle!(request("app.deploy"), context)).resolves.toEqual({
+      operation: "app.deploy",
+    });
+    brokers.issueChildEndpoint("child-session", 1, { mode: "agent", readOnlyLocked: false });
+    await expect(
+      mocks.handle!(request("app.deploy", undefined, "child-session", 1), context),
+    ).rejects.toThrow(/root managed task/);
+    await mocks.handle!(request("mode.set", { mode: "plan" }), context);
+    await expect(mocks.handle!(request("app.deploy"), context)).rejects.toThrow(/Plan mode/);
+
+    const unavailable = new PiRuntimeBrokers({
+      runtimeDir: "/tmp/piwork-runtime-test",
+      sessionId: "session-2",
+      generation: 1,
+      mode: "agent",
+    });
+    await expect(mocks.handle!(request("app.list", undefined, "session-2", 1), context)).rejects.toThrow(
+      /App runtime is unavailable/,
+    );
+    expect(unavailable.mode).toBe("agent");
+  });
 });

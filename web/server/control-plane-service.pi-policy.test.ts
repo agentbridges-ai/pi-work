@@ -639,3 +639,53 @@ describe("pinned Pi session authority", () => {
     ).rejects.toThrow(error);
   });
 });
+
+describe("ControlPlaneService scoped helpers", () => {
+  it("uses query-only doubles without leaking membership or role scope", async () => {
+    const membershipRow = {
+      id: "membership-1",
+      tenant_id: "tenant-1",
+      tenant_name: "Tenant",
+      tenant_type: "team",
+      user_id: "user-1",
+      status: "active",
+      is_default: true,
+      org_node_id: "org-root",
+    };
+    const query = vi.fn(async (sql: string) => {
+      const normalized = sql.replace(/\s+/gu, " ").trim();
+      if (normalized.includes("tenant_memberships")) return queryResult([membershipRow]);
+      if (normalized.includes("scoped_role_assignments")) return queryResult([{}]);
+      return queryResult();
+    });
+    const pool = { query } as unknown as Pool;
+    const service = new ControlPlaneService(pool);
+    const activator = vi.fn(async () => undefined);
+    const revoker = vi.fn(async () => undefined);
+    service.setMembershipActivator(activator);
+    service.setMembershipRevoker(revoker);
+
+    expect(service.getDatabasePool()).toBe(pool);
+    await expect(service.listMemberships("user-1")).resolves.toEqual([
+      {
+        id: "membership-1",
+        tenantId: "tenant-1",
+        tenantName: "Tenant",
+        tenantType: "team",
+        userId: "user-1",
+        status: "active",
+        isDefault: true,
+        primaryOrgNodeId: "org-root",
+      },
+    ]);
+    await expect(service.getActiveMembership("user-1")).resolves.toMatchObject({
+      tenantId: "tenant-1",
+      primaryOrgNodeId: "org-root",
+    });
+    await expect(service.can("user-1", "tenant-1", "agent:create")).resolves.toBe(true);
+    await service.syncLegacySystemAdmin("user-1", true);
+    await service.syncLegacySystemAdmin("user-1", false);
+    expect(activator).not.toHaveBeenCalled();
+    expect(revoker).not.toHaveBeenCalled();
+  });
+});

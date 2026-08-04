@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
-import { AppsControlPlane } from "./apps-control-plane.js";
+import { AppsControlPlane, redactAppLogValue } from "./apps-control-plane.js";
 import {
   APP_DEPLOYMENT_PHASES,
   APP_DOMAIN_STATUSES,
@@ -334,5 +334,52 @@ describe("AppsControlPlane persistence paths", () => {
     ).resolves.toBe(true);
     await expect(service.failClaimedOutbox("outbox-1", "worker-1", "failed")).resolves.toBe(true);
     await expect(service.retryOutbox("outbox-1", "worker-1", "retry")).resolves.toBe(true);
+  });
+
+  it("rejects invalid App scopes and immutable deployment inputs before mutation", async () => {
+    const { pool, currentApp } = makePool();
+    currentApp.created_at = "not-a-date";
+    const service = new AppsControlPlane(pool as unknown as Pool);
+
+    await expect(service.listApps(context, { scope: "invalid" as never })).rejects.toThrow(
+      "Invalid App list scope",
+    );
+    await expect(service.listApps(context, { scope: "current-session" })).rejects.toThrow(
+      "sessionId is required",
+    );
+    await expect(
+      service.listVersions(context, "app-1", Buffer.from("0", "utf8").toString("base64url")),
+    ).rejects.toThrow("Invalid pagination cursor");
+    await expect(
+      service.listApps(context, { scope: "tenant", limit: 1 }),
+    ).resolves.toMatchObject({ apps: [expect.objectContaining({ createdAt: "1970-01-01T00:00:00.000Z" })] });
+
+    const deploymentInput = {
+      slug: "demo",
+      sourceDigest: "a".repeat(64),
+      manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
+      bindingManifest: {},
+    } as const;
+    await expect(
+      service.beginDeployment({ ...context, generation: -1 }, deploymentInput),
+    ).rejects.toThrow("session generation");
+    await expect(
+      service.beginDeployment({ ...context, idempotencyKey: "bad key" }, deploymentInput),
+    ).rejects.toThrow("idempotency key");
+    await expect(
+      service.beginDeployment(context, { ...deploymentInput, sourceDigest: "bad" }),
+    ).rejects.toThrow("SHA-256");
+    await expect(
+      service.beginDeployment(context, {
+        ...deploymentInput,
+        manifest: { ...deploymentInput.manifest, version: 2 as never },
+      }),
+    ).rejects.toThrow("Unsupported");
+    await expect(
+      service.setSourceSnapshotKey(context, "app-1", "deployment-1", 4, "../escape"),
+    ).rejects.toThrow("safe user-relative path");
+    expect(redactAppLogValue("Bearer secret_123456789012 and token_123456789012")).toBe(
+      "[REDACTED] and [REDACTED]",
+    );
   });
 });

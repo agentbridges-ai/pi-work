@@ -1,8 +1,10 @@
+import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderBootstrap } from "./pi-bootstrap-channel.js";
+import { nativeHelperService } from "./native-helper.js";
 import type { ResolvedPiSandbox, SessionLaunchContext } from "./session-orchestrator-contract.js";
 
 const fakes = vi.hoisted(() => ({
@@ -122,8 +124,13 @@ function sandbox(overrides: Partial<ResolvedPiSandbox> = {}): ResolvedPiSandbox 
   };
 }
 
-async function fixture(controlPlane?: { resolvePinnedSessionAuthority: ReturnType<typeof vi.fn> }) {
-  const dataRoot = await mkdtemp(join(tmpdir(), "piwork-pi-builder-"));
+async function fixture(
+  controlPlane?: { resolvePinnedSessionAuthority: ReturnType<typeof vi.fn> },
+  overrides: {
+    handleApp?: NonNullable<ConstructorParameters<typeof PiLaunchOptionsBuilder>[0]["handleApp"]>;
+  } = {},
+) {
+  const dataRoot = realpathSync(await mkdtemp(join(tmpdir(), "piwork-pi-builder-")));
   roots.push(dataRoot);
   ensurePiRuntimeLayout(dataRoot);
   const tenantRoot = join(dataRoot, "tenants", "tenant-1");
@@ -169,6 +176,7 @@ async function fixture(controlPlane?: { resolvePinnedSessionAuthority: ReturnTyp
     onTaskEvent,
     deliverTaskResult,
     runtimeObserverForSession: runtimeObserverForSession as never,
+    handleApp: overrides.handleApp,
   });
   return {
     builder,
@@ -446,6 +454,60 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
     expect(value.builder.mcpDetails(SESSION_ID)).toEqual([]);
     launch.onExit?.(sessionInfo(1));
     expect(fakes.brokerInstances[0]!.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("requires Compose authority and exercises the native file and App broker handlers", async () => {
+    const handleApp = vi.fn(async () => ({ ok: true }));
+    const value = await fixture(undefined, { handleApp });
+    const previousMode = process.env.PIWORK_RUNTIME_MODE;
+    process.env.PIWORK_RUNTIME_MODE = "compose";
+    try {
+      await expect(
+        value.builder.build(SESSION_ID, 1, { request: { resolvedSandbox: sandbox() } }),
+      ).rejects.toThrow("tenant-scoped Agent authority");
+    } finally {
+      if (previousMode === undefined) delete process.env.PIWORK_RUNTIME_MODE;
+      else process.env.PIWORK_RUNTIME_MODE = previousMode;
+    }
+
+    await mkdir(join(value.sessionRoot, "workspace"), { recursive: true });
+    await writeFile(join(value.sessionRoot, "workspace", "report.txt"), "report");
+    const createFileAction = vi
+      .spyOn(nativeHelperService, "createFileAction")
+      .mockResolvedValue({
+        id: "11111111-1111-4111-8111-111111111111",
+        action: "file.quickLook",
+        state: "staged",
+      } as never);
+    const launch = await value.builder.build(SESSION_ID, 2, {
+      request: { resolvedSandbox: sandbox() },
+    });
+    const brokerOptions = fakes.brokerInstances.at(-1)!.options;
+    const handleAppRequest = brokerOptions.handleApp as (
+      request: unknown,
+      context: unknown,
+    ) => Promise<unknown>;
+    await expect(handleAppRequest({ operation: "app.list" }, {})).resolves.toEqual({ ok: true });
+    expect(handleApp).toHaveBeenCalledOnce();
+
+    const handleNativeFile = brokerOptions.handleNativeFile as (
+      request: { payload?: unknown },
+      context: unknown,
+    ) => Promise<unknown>;
+    await expect(handleNativeFile({ payload: [] }, {})).rejects.toThrow(
+      "Native file action payload is invalid",
+    );
+    await expect(
+      handleNativeFile({ payload: { action: "not-allowed", path: "report.txt" } }, {}),
+    ).rejects.toThrow("Native file action payload is invalid");
+    await expect(
+      handleNativeFile({ payload: { action: "file.quickLook", path: "report.txt" } }, {}),
+    ).resolves.toMatchObject({ operationId: "11111111-1111-4111-8111-111111111111" });
+    expect(createFileAction).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "file.quickLook", filename: "report.txt" }),
+    );
+    launch.onExit?.(sessionInfo(2));
+    await value.builder.dispose();
   });
 });
 

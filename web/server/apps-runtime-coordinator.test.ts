@@ -1026,4 +1026,56 @@ describe("AppsRuntimeCoordinator", () => {
       "app-1",
     );
   });
+
+  it("routes read, rollback, preview, and stale broker operations through authority", async () => {
+    const fixture = await appFixture();
+    const ready = {
+      ...app("ready"),
+      stableUrl: "https://demo.example.workers.dev",
+      currentDeploymentId: "deployment-1",
+    } as AppRecord;
+    const listApps = vi.fn().mockResolvedValue({ apps: [ready], nextCursor: null });
+    const listVersions = vi.fn().mockResolvedValue({ versions: [], nextCursor: null });
+    const getDeployment = vi.fn().mockResolvedValue(deployment({ artifactKey: "creator-artifact:a" }));
+    const rollback = vi.fn().mockResolvedValue({ app: ready, deployment: deployment() });
+    const getApp = vi.fn().mockResolvedValue(ready);
+    const { coordinator } = harness(
+      { listApps, listVersions, getDeployment, rollback, getApp },
+      fixture.creatorRoot,
+    );
+
+    await expect(
+      coordinator.handleBroker(brokerRequest("app.list", { scope: "tenant" }), brokerContext, brokerScope),
+    ).resolves.toEqual({ apps: [ready], nextCursor: null });
+    await expect(
+      coordinator.handleBroker(
+        brokerRequest("app.versions", { appId: "app-1" }),
+        brokerContext,
+        brokerScope,
+      ),
+    ).resolves.toEqual({ versions: [], nextCursor: null });
+    await expect(
+      coordinator.handleBroker(
+        brokerRequest("app.rollback", { appId: "app-1", deploymentId: "deployment-1" }),
+        brokerContext,
+        brokerScope,
+      ),
+    ).resolves.toEqual({ app: ready, deployment: deployment() });
+    await expect(
+      coordinator.handleBroker(brokerRequest("app.preview", { appId: "app-1" }), brokerContext, brokerScope),
+    ).resolves.toMatchObject({ appId: "app-1", ready: true, url: ready.stableUrl });
+    expect(listApps).toHaveBeenCalledOnce();
+    expect(listVersions).toHaveBeenCalledOnce();
+    expect(getDeployment).toHaveBeenCalledOnce();
+    expect(rollback).toHaveBeenCalledOnce();
+    await expect(
+      coordinator.handleBroker(brokerRequest("app.list", {}), brokerContext, {
+        ...brokerScope,
+        generation: 8,
+      }),
+    ).rejects.toThrow("broker authority is stale");
+    await expect(
+      coordinator.handleBroker(brokerRequest("app.unknown", {}), brokerContext, brokerScope),
+    ).rejects.toThrow("Unsupported App broker operation");
+  });
 });

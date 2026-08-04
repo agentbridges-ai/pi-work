@@ -384,10 +384,47 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
       pollOnce: ReturnType<typeof vi.fn>;
     };
     const coordinator = fakes.appsCoordinators[0] as {
+      options: Record<string, unknown>;
       handleDeploymentTargetQueued: ReturnType<typeof vi.fn>;
     };
 
     expect(outbox.start).toHaveBeenCalledOnce();
+    expect((coordinator.options.getCurrentUser as () => AuthenticatedUser)()).toMatchObject({
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
+    expect((coordinator.options.resolveCreatorRoot as (ownerUserId: string) => string)("user-2")).toBe(
+      `${fakes.root}/tenants/tenant-1/users/user-2/profile`,
+    );
+    const builder = fakes.builders[0] as { options: Record<string, unknown> };
+    const handleApp = builder.options.handleApp as (
+      request: unknown,
+      context: unknown,
+      scope: unknown,
+    ) => Promise<unknown>;
+    expect(await handleApp({ operation: "app.list" }, {}, { sessionId: "session-1" })).toBeUndefined();
+    const deliverTaskResult = builder.options.deliverTaskResult as (
+      parentSessionId: string,
+      message: string,
+    ) => Promise<void>;
+    const parentPrompt = vi.fn(async () => undefined);
+    (fakes.launchers[0]!.getTransport as ReturnType<typeof vi.fn>).mockReturnValue({
+      prompt: parentPrompt,
+    });
+    await deliverTaskResult("session-1", "task result");
+    expect(parentPrompt).toHaveBeenCalledWith("task result", { streamingBehavior: "followUp" });
+    const orchestrator = fakes.orchestrators[0] as {
+      hasSessionData: ReturnType<typeof vi.fn>;
+    };
+    orchestrator.hasSessionData.mockReturnValueOnce(true);
+    const continueAppDevelopment = fakes.routeOptions[0]!.continueAppDevelopment as (
+      source: { sourceSessionId?: string; sourceSnapshotKey?: string },
+    ) => Promise<unknown>;
+    await expect(continueAppDevelopment({ sourceSessionId: "session-existing" })).resolves.toEqual({
+      sessionId: "session-existing",
+      restoredFromSnapshot: false,
+    });
+    await expect(continueAppDevelopment({})).rejects.toThrow("source snapshot");
     const onDeploymentTargetQueued = fakes.routeOptions[0]!
       .onAppDeploymentTargetQueued as () => Promise<void>;
     await expect(onDeploymentTargetQueued()).resolves.toBeUndefined();
