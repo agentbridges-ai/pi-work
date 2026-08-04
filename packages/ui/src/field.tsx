@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import {
   Description as HeroDescription,
   FieldError as HeroFieldError,
@@ -9,7 +10,7 @@ import {
   type TextAreaProps as HeroTextAreaProps,
   type TextFieldProps as HeroTextFieldProps,
 } from "@heroui/react";
-import React, { forwardRef, type ReactNode, type Ref } from "react";
+import { forwardRef, type ReactNode, type Ref } from "react";
 import { cn } from "./utils";
 
 interface FieldPresentationProps {

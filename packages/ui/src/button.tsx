@@ -1,6 +1,7 @@
+/** @jsxImportSource react */
 import { Button as HeroButton, type ButtonProps as HeroButtonProps } from "@heroui/react";
 import { LoaderCircle } from "lucide-react";
-import React, { forwardRef, type AnchorHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { cn } from "./utils";
 
 export type ButtonVariant = "primary" | "secondary" | "tertiary" | "ghost" | "danger";

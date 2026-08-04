@@ -1,5 +1,6 @@
+/** @jsxImportSource react */
 import { Radio as HeroRadio, RadioGroup as HeroRadioGroup, Tabs as HeroTabs } from "@heroui/react";
-import React, { type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { cn } from "./utils";
 
 export interface SegmentedControlItem {
