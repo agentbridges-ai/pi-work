@@ -4,7 +4,12 @@ WEB_DIR := web
 RUNTIME_DIR := .runtime
 CRITICAL_TESTS_FILE := scripts/critical-tests.txt
 COVERAGE_THRESHOLD ?= 80
+VERIFY_SRT ?= 1
 AUTH_CLI := npx --yes auth@1.6.20
+
+ifeq ($(VERIFY_SRT),1)
+VERIFY_SRT_TARGETS := test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc
+endif
 
 .PHONY: help
 help:
@@ -127,7 +132,7 @@ test-srt-pi:
 	fi
 
 .PHONY: verify verify-actions-pinning verify-onlyoffice-release verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
+verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage $(VERIFY_SRT_TARGETS) backup-self-test build
 
 verify-actions-pinning:
 	node ./scripts/verify-github-actions-pinning.mjs
