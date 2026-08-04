@@ -225,6 +225,18 @@ describe("ControlPlaneService membership revocation", () => {
 });
 
 describe("ControlPlaneService permission membership binding", () => {
+  it("exposes the scoped runtime permission check to route guards", async () => {
+    const query = vi.fn().mockResolvedValue(queryResult([{ allowed: 1 }]));
+    const service = new ControlPlaneService({ query } as unknown as Pool);
+
+    await expect(service.can("user-1", "tenant-1", "runtime:view")).resolves.toBe(true);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("p.permission_key=$3"), [
+      "user-1",
+      "tenant-1",
+      "runtime:view",
+    ]);
+  });
+
   it("requires active tenant membership for tenant and org assignments while allowing platform roles", async () => {
     const query = vi.fn().mockResolvedValue(queryResult());
     const service = new ControlPlaneService({ query } as unknown as Pool);

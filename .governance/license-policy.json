@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Misakago",
-  "allowedSpdx": ["MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "MPL-2.0", "0BSD", "CC0-1.0"],
+  "allowedSpdx": ["MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "MPL-2.0", "OFL-1.1", "0BSD", "CC0-1.0"],
   "reviewRequired": ["GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "UNKNOWN"],
   "ratchet": "A new strong-copyleft or unknown license fails dependency review until Leader approval is recorded in exceptions.json. Existing findings remain explicit debt; they are never silently hidden."
 }

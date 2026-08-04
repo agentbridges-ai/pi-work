@@ -129,7 +129,8 @@ function configureProductionEnvironment() {
   );
   if (!apply) return;
   const policies = gh("GET", `${endpoint}/deployment-branch-policies`);
-  if (!policies.some((item) => item.name === policy.productionBranch)) {
+  const branchPolicies = Array.isArray(policies) ? policies : policies?.branch_policies || [];
+  if (!branchPolicies.some((item) => item.name === policy.productionBranch)) {
     gh("POST", `${endpoint}/deployment-branch-policies`, { name: policy.productionBranch });
   }
 }
@@ -191,10 +192,13 @@ function readbackDrift() {
     if (!branchPolicy?.custom_branch_policies || branchPolicy.protected_branches) {
       drift.push(`${policy.productionEnvironment} environment branch policy is not custom-only`);
     }
-    const policies = gh(
+    const policiesResponse = gh(
       "GET",
       `/repos/${repository}/environments/${policy.productionEnvironment}/deployment-branch-policies`,
     );
+    const policies = Array.isArray(policiesResponse)
+      ? policiesResponse
+      : policiesResponse?.branch_policies || [];
     if (
       policies.length !== 1 ||
       policies[0]?.name !== policy.productionBranch ||

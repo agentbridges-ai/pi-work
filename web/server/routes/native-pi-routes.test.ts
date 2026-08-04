@@ -130,7 +130,13 @@ function fixture(
     authority,
     launch: resolvedSandbox,
   }));
-  const controlPlane = { resolveSessionAuthority };
+  const controlPlane = {
+    resolveSessionAuthority,
+    can: vi.fn(
+      async (_userId: string, _tenantId: string, permission: string) =>
+        options.permissions?.includes(permission) ?? false,
+    ),
+  };
   const probeModels = vi.fn(async () => ({
     models: [
       {
@@ -211,6 +217,14 @@ describe("native Pi routes", () => {
     const allowed = fixture({ tenantId: "tenant-1", permissions: ["runtime:view"] });
     expect((await allowed.app.request("/api/metrics")).status).toBe(200);
     expect((await allowed.app.request("/api/diagnostics/runtime")).status).toBe(200);
+
+    const scoped = fixture({
+      tenantId: "tenant-1",
+      governed: true,
+      permissions: ["runtime:view"],
+    });
+    expect((await scoped.app.request("/api/metrics")).status).toBe(200);
+    expect((await scoped.app.request("/api/diagnostics/runtime")).status).toBe(200);
   });
 
   it("rejects legacy backends before session creation", async () => {

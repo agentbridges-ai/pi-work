@@ -1,4 +1,16 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "id": "license-onlyoffice-browser-agpl",
+      "control": "license-compliance",
+      "scope": "web:@agentbridges-ai/onlyoffice-browser",
+      "owner": "Misakago",
+      "rationale": "OnlyOffice browser integration is consumed as the published external client boundary; its AGPL package license is retained as an explicit, time-boxed Leader-reviewed exception.",
+      "trackingIssue": "https://github.com/agentbridges-ai/pi-work/pull/16",
+      "approvedBy": "Misakago",
+      "approvedAt": "2026-08-04T00:00:00Z",
+      "expiresAt": "2026-11-02T00:00:00Z"
+    }
+  ]
 }

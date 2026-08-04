@@ -5,6 +5,7 @@ import type {
   AgentDraftConfig,
   AgentKind,
   AgentModelPolicySnapshot,
+  ControlPlanePermission,
   ResolvedSessionAuthority,
   SessionAuthoritySnapshot,
   TenantMembership,
@@ -769,6 +770,14 @@ export class ControlPlaneService {
   ): Promise<void> {
     if (!(await this.hasTenantPermission(userId, tenantId, permission)))
       throw new Error("Forbidden by scoped authorization.");
+  }
+
+  async can(
+    userId: string,
+    tenantId: string,
+    permission: ControlPlanePermission,
+  ): Promise<boolean> {
+    return this.hasTenantPermission(userId, tenantId, permission);
   }
 
   private async hasTenantPermission(
