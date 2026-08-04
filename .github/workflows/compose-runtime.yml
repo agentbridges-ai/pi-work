@@ -70,6 +70,10 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
             test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
           fi
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_unconfined ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+            test "$(sysctl -n kernel.apparmor_restrict_unprivileged_unconfined)" = "0"
+          fi
 
       - name: Build and start the source stack
         run: make test-compose-migrate
