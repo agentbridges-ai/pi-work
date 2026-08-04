@@ -20,17 +20,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Verify release token configured
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        run: test -n "$RELEASE_PLEASE_TOKEN"
+
       - name: Create or update the Piwork release PR
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PIWORK_RELEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # GITHUB_TOKEN intentionally cannot trigger another workflow from the
-      # release event it creates. Generate evidence in this same trusted run so
-      # releases never depend on a suppressed release-created event.
+      # Generate evidence in this same trusted run so releases do not depend on
+      # a separately triggered release-created event.
       - name: Checkout the published release tag
         if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -42,7 +46,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created == 'true' }}
         id: required-checks
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
           RELEASE_SHA: ${{ steps.release.outputs.sha || github.sha }}
         run: |
           gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls?per_page=20" --jq '.[].head.sha' > release-evidence-shas.txt
@@ -95,7 +99,7 @@ jobs:
       - name: Export SPDX dependency graph
         if: ${{ steps.release.outputs.release_created == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
         run: gh api "/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" > sbom.spdx.json
 
       - name: Upload release evidence and SBOM

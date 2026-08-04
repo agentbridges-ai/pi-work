@@ -56,9 +56,11 @@ let files = [];
 let reviews = [];
 let filesCursor = null;
 let reviewsCursor = null;
+let filesDone = false;
+let reviewsDone = false;
 let repositoryId;
 let headSha = pullRequest.head.sha;
-for (;;) {
+while (!filesDone || !reviewsDone) {
   const data = await graphql(
     `
       query (
@@ -67,12 +69,14 @@ for (;;) {
         $number: Int!
         $filesCursor: String
         $reviewsCursor: String
+        $includeFiles: Boolean!
+        $includeReviews: Boolean!
       ) {
         repository(owner: $owner, name: $name) {
           id
           pullRequest(number: $number) {
             headRefOid
-            files(first: 100, after: $filesCursor) {
+            files(first: 100, after: $filesCursor) @include(if: $includeFiles) {
               nodes {
                 path
               }
@@ -81,7 +85,7 @@ for (;;) {
                 endCursor
               }
             }
-            reviews(first: 100, after: $reviewsCursor) {
+            reviews(first: 100, after: $reviewsCursor) @include(if: $includeReviews) {
               nodes {
                 author {
                   login
@@ -104,19 +108,28 @@ for (;;) {
       owner,
       name: repositoryName,
       number: pullRequestNumber,
-      filesCursor,
-      reviewsCursor,
+      filesCursor: filesDone ? null : filesCursor,
+      reviewsCursor: reviewsDone ? null : reviewsCursor,
+      includeFiles: !filesDone,
+      includeReviews: !reviewsDone,
     },
   );
   repositoryId = data.repository.id;
   headSha = data.repository.pullRequest.headRefOid;
-  files.push(...(data.repository.pullRequest.files.nodes || []));
-  reviews.push(...(data.repository.pullRequest.reviews.nodes || []));
-  const filesPage = data.repository.pullRequest.files.pageInfo;
-  const reviewsPage = data.repository.pullRequest.reviews.pageInfo;
-  filesCursor = filesPage.hasNextPage ? filesPage.endCursor : null;
-  reviewsCursor = reviewsPage.hasNextPage ? reviewsPage.endCursor : null;
-  if (!filesCursor && !reviewsCursor) break;
+  if (!filesDone) {
+    const filesConnection = data.repository.pullRequest.files;
+    files.push(...(filesConnection?.nodes || []));
+    const filesPage = filesConnection?.pageInfo;
+    filesDone = !filesPage?.hasNextPage;
+    filesCursor = filesDone ? null : filesPage.endCursor;
+  }
+  if (!reviewsDone) {
+    const reviewsConnection = data.repository.pullRequest.reviews;
+    reviews.push(...(reviewsConnection?.nodes || []));
+    const reviewsPage = reviewsConnection?.pageInfo;
+    reviewsDone = !reviewsPage?.hasNextPage;
+    reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
+  }
 }
 const highRisk = files.some((file) =>
   policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
