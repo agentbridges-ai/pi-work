@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "landing-page/**"
+      - "packages/design-tokens/**"
+      - "packages/ui/**"
+      - "packages/ui-patterns/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 

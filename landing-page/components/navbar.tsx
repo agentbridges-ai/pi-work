@@ -156,21 +156,15 @@ export const Navbar = () => {
         <div className="border-t border-separator sm:hidden">
           <div className="p-4">{searchInput}</div>
           <ul className="flex flex-col gap-2 px-4 pb-4">
-            {siteConfig.navMenuItems.map((item, index) => (
-              <li key={`${item.label}-${index}`}>
-                <a
-                  className={clsx(
-                    "block py-2 text-lg no-underline",
-                    index === 2
-                      ? "text-accent"
-                      : index === siteConfig.navMenuItems.length - 1
-                        ? "text-danger"
-                        : "text-foreground",
-                  )}
+            {siteConfig.navItems.map((item) => (
+              <li key={item.href}>
+                <NextLink
+                  className="block py-2 text-lg text-foreground no-underline transition-colors hover:text-accent"
                   href={item.href}
+                  onClick={() => setIsMenuOpen(false)}
                 >
                   {item.label}
-                </a>
+                </NextLink>
               </li>
             ))}
           </ul>
