@@ -1,23 +1,23 @@
 {
-  "schemaVersion": 4,
-  "createdAt": "2026-08-03T01:51:31.000Z",
+  "schemaVersion": 5,
+  "createdAt": "2026-08-04T07:30:30.000Z",
   "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
   "repositories": {
     "onlyoffice-x2t-wasm": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-x2t-wasm.git",
-      "version": "9.3.0+2",
-      "tag": "v9.3.0+2",
-      "commitSha": "1bb9b45a399f87ca162eea0c86abd4660f295469"
+      "version": "9.3.0+3",
+      "tag": "v9.3.0+3",
+      "commitSha": "4360541a805477726a06caabd1c64a330377bcf2"
     },
     "onlyoffice-browser": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
       "version": "0.5.12",
-      "commitSha": "3da3e7b624be474f2d4573f32f3acef678fe8bf2"
+      "commitSha": "1cbfda167bb5c3556bc350c4de86a8d5a4c3ffef"
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
       "version": "0.95.0",
-      "integrationBaseCommit": "607a5d3309c77c39a1ec4aa17074621fef55ae99"
+      "integrationBaseCommit": "8a6c23f5aff6db560bbe995bec1fe01f1b45ee6c"
     }
   },
   "npmPackage": {
@@ -30,18 +30,18 @@
   },
   "runtimeIdentity": {
     "packageVersion": "0.5.12",
-    "sourceCommit": "3da3e7b624be474f2d4573f32f3acef678fe8bf2",
+    "sourceCommit": "1cbfda167bb5c3556bc350c4de86a8d5a4c3ffef",
     "hostBuildId": "office-host-0.5.12-r1",
-    "assetManifestDigest": "a6e158288a9e728f1178ff4370ebf6ffadbb4b7c368e9ec19f9544096c6adb78"
+    "assetManifestDigest": "1f05434e73f9cd7ffcc18a7e878dfbdb1b4f8c9f12bba6ec61ba7e8f8a1ab55f"
   },
   "releaseManifest": {
     "version": 5,
-    "releaseId": "v0.5.12-40948d549d546d2c",
-    "sha256": "a208d335e724826917401caccac3905bacaeb4e7b6054d9b579ffb93bca39cb8",
+    "releaseId": "v0.5.12-3f3fd8471473c1c5",
+    "sha256": "152cb4aef80de63e112be389f8a9693cdfbec309f357eaada2421a9789896200",
     "hostBuildId": "133571ec80edc374c4aa425c93ef61ad43e6cd40ce6d355c71c9ed414fe12d67",
     "channel": "stable-v5"
   },
-  "lifecycle": "supported",
+  "lifecycle": "candidate",
   "deployment": {
     "canonicalOrigin": "https://onlyoffice.getpi.work",
     "editorOrigin": "https://office-editor-health.getpi.work"
@@ -63,7 +63,7 @@
       "repository": "onlyoffice-browser",
       "kind": "npm-proxy-api",
       "path": "dist/npm/public-api.js",
-      "sha256": "51f2d0b0668e4cd6adf5f82c56d394a9ca0de0dfca02683095de496f0bd55c1e"
+      "sha256": "d70a1751ee0e06e8d6d57cc175c21f78fd6dba149756e07cc798f0143a8efe03"
     },
     {
       "repository": "onlyoffice-browser",
@@ -75,7 +75,7 @@
       "repository": "onlyoffice-browser",
       "kind": "compact-asset-manifest",
       "path": "dist/onlyoffice-runtime-assets.json",
-      "sha256": "a6e158288a9e728f1178ff4370ebf6ffadbb4b7c368e9ec19f9544096c6adb78"
+      "sha256": "1f05434e73f9cd7ffcc18a7e878dfbdb1b4f8c9f12bba6ec61ba7e8f8a1ab55f"
     },
     {
       "repository": "onlyoffice-browser",
