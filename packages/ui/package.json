@@ -18,6 +18,10 @@
       "import": "./src/heroui.ts"
     }
   },
+  "dependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3"
+  },
   "peerDependencies": {
     "@heroui/react": ">=3.1.0 <4",
     "lucide-react": ">=1.17.0 <2",
