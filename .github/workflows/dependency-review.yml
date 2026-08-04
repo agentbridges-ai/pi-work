@@ -62,7 +62,10 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-          comment-summary-in-pr: always
+          # Fork and Dependabot PR tokens are read-only. Keep the vulnerability
+          # gate for those PRs while only asking same-repository, non-Dependabot
+          # runs to write the optional summary comment.
+          comment-summary-in-pr: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && 'always' || 'never' }}
       - name: Dependency review no-op for bootstrap
         if: ${{ github.event_name == 'pull_request' && steps.dependency_graph.outputs.enabled != 'true' }}
         run: echo "Dependency Review is a controlled no-op until the repository Dependency Graph is enabled."
