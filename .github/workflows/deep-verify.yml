@@ -148,9 +148,18 @@ jobs:
         # coverage once.
         run: make verify VERIFY_SRT=${{ needs.changes.outputs.srt == 'true' && '0' || '1' }} ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
 
-      - name: Run the complete verification suite for an explicit candidate integration
+      - name: Verify the explicit candidate descriptor before integration
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}
-        run: make verify ONLYOFFICE_RELEASE_VERIFY_ARGS=--allow-candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONLYOFFICE_EXPECTED_RELEASE_ID: ${{ inputs.onlyoffice_candidate_release_id }}
+        run: |
+          test -n "${ONLYOFFICE_EXPECTED_RELEASE_ID}"
+          candidate_base_sha="$(git rev-parse refs/remotes/origin/main)"
+          ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA="${candidate_base_sha}" \
+            ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA="${GITHUB_SHA}" \
+            make verify-onlyoffice-release \
+            ONLYOFFICE_RELEASE_VERIFY_ARGS="--online --allow-candidate --candidate-integration"
 
       - name: Enforce pull request diff coverage
         if: ${{ github.event_name == 'pull_request' }}
