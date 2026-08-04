@@ -2,14 +2,13 @@ name: verify
 
 on:
   pull_request:
-    paths-ignore: &non_runtime_paths
+  push:
+    branches: [main]
+    paths-ignore:
       - "**/*.md"
       - "docs/**"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/PULL_REQUEST_TEMPLATE.md"
-  push:
-    branches: [main]
-    paths-ignore: *non_runtime_paths
   workflow_dispatch:
 
 concurrency:
@@ -23,8 +22,13 @@ jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-toolchain
 
@@ -44,7 +48,7 @@ jobs:
         run: make dry-check
 
       - name: Run the critical test suite
-        run: make verify-pi-only-runtime test-targeted test-pi-rpc-contract
+        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted test-pi-rpc-contract
 
       - name: Build the production frontend
         run: make build
@@ -79,7 +83,7 @@ jobs:
       PIWORK_SERVE_FRONTEND: "0"
       PIWORK_RECORD: "0"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: ./.github/actions/setup-toolchain
 
@@ -94,7 +98,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: playwright-better-auth-${{ github.run_id }}
           path: |

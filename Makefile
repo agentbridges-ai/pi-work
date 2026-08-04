@@ -27,7 +27,7 @@ help:
 	  '  make migrate              Apply auth, RBAC, and control-plane schemas' \
 	  '' \
 	  'Checks:' \
-	  '  make verify               Frozen install + toolchain + full tests + OnlyOffice + build' \
+	  '  make verify               Frozen install + toolchain + full tests + build' \
 	  '  make typecheck            Run TypeScript checks' \
 	  '  make test                 Run the full Vitest suite' \
 	  '  make test-coverage        Run the full Vitest suite once and emit LCOV' \
@@ -36,6 +36,8 @@ help:
 	  '  make test-srt-pi          Run real native Pi rpc-entry inside Linux SRT' \
 	  '  make verify-pi-versions   Verify exact Pi and MCP SDK dependency pins' \
 	  '  make verify-pi-only-runtime  Reject legacy Agent runtime surfaces' \
+	  '  make verify-actions-pinning  Reject mutable external GitHub Action references' \
+	  '  make verify-onlyoffice-release  Verify the pinned OnlyOffice descriptor' \
 	  '  make coverage-diff        Enforce 80% per-file diff coverage; whole-file for additions' \
 	  '  make test-e2e             Run Better Auth Playwright E2E tests' \
 	  '  make check                Run quality gates + targeted tests + production build' \
@@ -124,8 +126,14 @@ test-srt-pi:
 		echo 'Skipping Linux-only native Pi SRT smoke on non-Linux.'; \
 	fi
 
-.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
+.PHONY: verify verify-actions-pinning verify-onlyoffice-release verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
+verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
+
+verify-actions-pinning:
+	node ./scripts/verify-github-actions-pinning.mjs
+
+verify-onlyoffice-release:
+	node ./scripts/verify-onlyoffice-release.mjs $(ONLYOFFICE_RELEASE_VERIFY_ARGS)
 
 verify-toolchain:
 	./scripts/verify-toolchain.sh
@@ -181,7 +189,7 @@ deadcode:
 	cd $(WEB_DIR) && bun run deadcode:check
 dry-check:
 	cd $(WEB_DIR) && bun run dry:check
-check: verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract build
+check: verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract build
 
 .PHONY: landing-dev landing-build landing-lint
 landing-dev:

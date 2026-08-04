@@ -2,7 +2,7 @@ name: Linux SRT
 
 on:
   pull_request:
-    paths: &srt_paths
+    paths:
       - ".github/workflows/srt-linux.yml"
       - ".github/actions/setup-toolchain/action.yml"
       - "Makefile"
@@ -27,7 +27,29 @@ on:
       - "web/src/user-space-shell-contract.ts"
   push:
     branches: [main]
-    paths: *srt_paths
+    paths:
+      - ".github/workflows/srt-linux.yml"
+      - ".github/actions/setup-toolchain/action.yml"
+      - "Makefile"
+      - "scripts/verify-native-pi-dependencies.mjs"
+      - "scripts/verify-pi-only-runtime.sh"
+      - "web/bin/user-space.ts"
+      - "web/bun.lock"
+      - "web/package.json"
+      - "web/scripts/pi-rpc-probe.ts"
+      - "web/scripts/verify-pi-rpc-contract.ts"
+      - "web/scripts/verify-srt-pi-rpc.ts"
+      - "web/scripts/verify-srt-isolation.ts"
+      - "web/scripts/verify-srt-user-space-transport.ts"
+      - "web/server/network-security.ts"
+      - "web/server/path-resolver.ts"
+      - "web/server/pi-bootstrap-channel.ts"
+      - "web/server/pi-rpc-contract.ts"
+      - "web/server/pi-rpc-transport.ts"
+      - "web/server/pi-*.ts"
+      - "web/server/managed-mcp.ts"
+      - "web/server/srt-policy.ts"
+      - "web/src/user-space-shell-contract.ts"
   workflow_dispatch:
 
 concurrency:
@@ -42,7 +64,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: ./.github/actions/setup-toolchain
 
