@@ -46,6 +46,7 @@ function fixture() {
       managedSha256: "b".repeat(64),
       changed: true,
     })),
+    listFileActions: vi.fn(async () => []),
     cancelFileAction: vi.fn(async () => undefined),
   };
   const api = new Hono();
@@ -128,5 +129,56 @@ describe("native helper routes", () => {
     );
     expect(response.status).toBe(400);
     expect(service.createFileAction).not.toHaveBeenCalled();
+  });
+
+  it("parses User Space metadata, anchors, lists operations, and maps validation errors", async () => {
+    const { api, service } = fixture();
+    const listed = await api.request("/sessions/session-a/native-file-actions");
+    expect(listed.status).toBe(200);
+    expect(service.listFileActions).toHaveBeenCalledWith("local-user", "session-a");
+
+    const response = await api.request(
+      `/sessions/session-a/native-file-actions?${new URLSearchParams({
+        action: "file.open",
+        filename: "document.pdf",
+        space: "user",
+        path: "docs/document.pdf",
+        mountId: "mount-1",
+        baselineSha256: "b".repeat(64),
+        baselineMtime: "12.5",
+        x: "10",
+        y: "20",
+        width: "640",
+        height: "480",
+      })}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: "pdf",
+      },
+    );
+    expect(response.status).toBe(202);
+    expect(service.createFileAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "file.open",
+        source: expect.objectContaining({
+          space: "user",
+          mountId: "mount-1",
+          baselineMtime: 12.5,
+        }),
+        anchor: { x: 10, y: 20, width: 640, height: 480 },
+      }),
+    );
+
+    const invalid = await api.request(
+      "/sessions/session-a/native-file-actions?action=invalid&filename=x&space=agent&path=x",
+      { method: "POST", body: "x" },
+    );
+    expect(invalid.status).toBe(400);
+    const incompleteAnchor = await api.request(
+      "/sessions/session-a/native-file-actions?action=file.open&filename=x&space=agent&path=x&x=1&y=2",
+      { method: "POST", body: "x" },
+    );
+    expect(incompleteAnchor.status).toBe(400);
   });
 });

@@ -60,4 +60,13 @@ describe("Cloudflare temporary preview proof of work", () => {
       name: "AbortError",
     });
   });
+
+  it("rejects invalid worker timeouts before starting a worker", async () => {
+    await expect(solveCloudflarePreviewChallenge(challenge(), { timeoutMs: 0 })).rejects.toThrow(
+      /timeoutMs is invalid/,
+    );
+    await expect(
+      solveCloudflarePreviewChallenge(challenge(), { timeoutMs: 10 * 60_000 + 1 }),
+    ).rejects.toThrow(/timeoutMs is invalid/);
+  });
 });

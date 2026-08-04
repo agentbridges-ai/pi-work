@@ -335,6 +335,31 @@ describe("Apps Cloudflare account routes", () => {
     );
   });
 
+  it("covers connection refresh/revoke, temporary preview listing, and claim aliases", async () => {
+    const { api, service } = fixture();
+    expect((await api.request("/cloudflare/connections/connection-1")).status).toBe(200);
+    expect(
+      (
+        await api.request("/apps/cloudflare/connections/connection-1/refresh", {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await api.request("/cloudflare/connections/connection-1", { method: "DELETE" })).status,
+    ).toBe(204);
+    expect(
+      (await api.request("/apps/cloudflare/connections/connection-1", { method: "DELETE" })).status,
+    ).toBe(204);
+    expect((await api.request("/apps/cloudflare/temporary")).status).toBe(200);
+    const claim = await api.request("/apps/cloudflare/temporary/preview-1/claim");
+    expect(claim.status).toBe(302);
+    expect(service.getTemporaryClaimUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1" }),
+      "preview-1",
+    );
+  });
+
   it("serves deployment detail and phase events without receipt or credential fields", async () => {
     const { api } = fixture();
     const detail = await api.request("/apps/deployments/deployment-1");

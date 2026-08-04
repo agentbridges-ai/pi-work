@@ -335,4 +335,59 @@ describe("AppsControlPlane persistence paths", () => {
     await expect(service.failClaimedOutbox("outbox-1", "worker-1", "failed")).resolves.toBe(true);
     await expect(service.retryOutbox("outbox-1", "worker-1", "retry")).resolves.toBe(true);
   });
+
+  it("creates a first App publish with stable tenant and Worker identities", async () => {
+    const currentApp = appRow();
+    const currentDeployment = deploymentRow("awaiting_target");
+    const query = vi.fn(async (sql: string) => {
+      const normalized = sql.trim().replace(/\s+/g, " ");
+      if (["begin", "commit", "rollback"].includes(normalized)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes("from tenant_memberships")) {
+        return { rows: [{ id: "member-1", tenant_name: "Acme Team" }], rowCount: 1 };
+      }
+      if (normalized.includes("from scoped_role_assignments")) {
+        return { rows: [{ permission_key: "app:publish" }], rowCount: 1 };
+      }
+      if (normalized.includes("tenant_id=$1 and slug=$2")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes("select coalesce(max(version)")) {
+        return { rows: [{ version: 1 }], rowCount: 1 };
+      }
+      if (normalized.includes("insert into app_deployments")) {
+        return { rows: [currentDeployment], rowCount: 1 };
+      }
+      if (normalized.includes("from apps a left join")) {
+        return { rows: [currentApp], rowCount: 1 };
+      }
+      if (normalized.includes("select * from apps where id=$1")) {
+        return { rows: [currentApp], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    const client = { query, release: vi.fn() };
+    const service = new AppsControlPlane({
+      query,
+      connect: vi.fn().mockResolvedValue(client),
+    } as unknown as Pool);
+
+    const result = await service.beginDeployment(context, {
+      slug: "new-app",
+      name: "New App",
+      sourceDigest: "b".repeat(64),
+      sourceSnapshotKey: "app-1/sources/deployment-1",
+      manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
+      bindingManifest: {},
+    });
+    expect(result.deployment).toMatchObject({ phase: "awaiting_target" });
+    const insert = query.mock.calls.find(([sql]) => String(sql).includes("insert into apps"));
+    expect((insert as unknown as [string, unknown[]] | undefined)?.[1]).toEqual(
+      expect.arrayContaining(["new-app", "New App"]),
+    );
+    expect(String(insert?.[0])).toContain("tenant_handle");
+    expect(String(insert?.[0])).toContain("worker_name");
+    expect(client.release).toHaveBeenCalledOnce();
+  });
 });

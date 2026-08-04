@@ -652,6 +652,130 @@ describe("App runtime drivers", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("covers the official Cloudflare SDK adapter resource, asset, Worker, and domain calls", async () => {
+    const asset: AppStaticAsset = {
+      path: "/index.html",
+      contentType: "text/html",
+      sha256: "c".repeat(64),
+      bytes: new TextEncoder().encode("<main>ok</main>"),
+    };
+    const uploadAsset = vi.fn(async () => ({ jwt: "completion-jwt" }));
+    const versionsList = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "version-uploaded", metadata: { annotations: {} } }]);
+    const client = {
+      kv: {
+        namespaces: {
+          create: vi.fn(async () => ({ id: "kv-id", title: "cache", jurisdiction: "default" })),
+          get: vi.fn(async () => ({ id: "kv-id", title: "cache" })),
+          list: vi
+            .fn()
+            .mockImplementationOnce(async function* () {
+              yield { id: "kv-id", title: "cache" };
+            })
+            .mockImplementationOnce(async function* () {}),
+        },
+      },
+      d1: {
+        database: {
+          create: vi.fn(async () => ({ uuid: "d1-id", name: "main" })),
+          get: vi.fn(async () => ({ uuid: "d1-id", name: "main" })),
+          list: vi.fn(async () => ({ result: [{ uuid: "d1-id", name: "main" }] })),
+        },
+      },
+      r2: {
+        buckets: {
+          create: vi.fn(async () => ({ name: "files" })),
+          get: vi.fn(async () => ({ name: "files", jurisdiction: "eu" })),
+        },
+      },
+      workers: {
+        scripts: {
+          update: vi.fn(async () => ({ migration_tag: "migration-1" })),
+          versions: { list: versionsList },
+          deployments: { create: vi.fn(async () => ({})) },
+          assets: {
+            upload: {
+              create: vi.fn(async () => ({
+                jwt: "upload-jwt",
+                buckets: [[asset.sha256.slice(0, 32)]],
+              })),
+            },
+          },
+          subdomain: {
+            create: vi.fn(async () => ({})),
+            delete: vi.fn(async () => ({})),
+          },
+        },
+        assets: { upload: { create: uploadAsset } },
+        subdomains: { get: vi.fn(async () => ({ subdomain: "account-subdomain" })) },
+        domains: {
+          update: vi.fn(async () => ({
+            id: "domain-1",
+            hostname: "app.example.com",
+            zone_id: "zone-1",
+            cert_id: "certificate-1",
+          })),
+          get: vi.fn(async () => ({
+            id: "domain-1",
+            hostname: "app.example.com",
+            zone_id: "zone-1",
+          })),
+          delete: vi.fn(async () => ({})),
+        },
+      },
+      zones: { get: vi.fn(async () => ({ id: "zone-1", name: "example.com", status: "active" })) },
+    };
+    const api = new CloudflareSdkAppRuntimeApi("account-1", "server-secret-token", client as never);
+
+    await expect(api.createKv("cache")).resolves.toMatchObject({ id: "kv-id", name: "cache" });
+    await expect(api.getKv("kv-id")).resolves.toMatchObject({ id: "kv-id" });
+    await expect(api.findKvByName("cache")).resolves.toMatchObject({ id: "kv-id" });
+    await expect(api.findKvByName("missing")).resolves.toBeNull();
+    await expect(api.createD1("main")).resolves.toMatchObject({ id: "d1-id" });
+    await expect(api.getD1("d1-id")).resolves.toMatchObject({ id: "d1-id" });
+    await expect(api.findD1ByName("main")).resolves.toMatchObject({ id: "d1-id" });
+    await expect(api.createR2("files", "eu")).resolves.toMatchObject({
+      id: "files",
+      jurisdiction: "eu",
+    });
+    await expect(api.getR2("files", "eu")).resolves.toMatchObject({
+      id: "files",
+      jurisdiction: "eu",
+    });
+    await expect(api.uploadAssets("worker", [asset])).resolves.toBe("completion-jwt");
+    await expect(
+      api.uploadWorker({
+        appId: target().appId,
+        workerName: target().workerName,
+        deploymentId: "deployment-sdk",
+        artifact: artifact(),
+        bindings: [],
+        assetsJwt: "completion-jwt",
+        migration: { new_tag: "migration-1" },
+      }),
+    ).resolves.toMatchObject({ versionId: "version-uploaded", migrationTag: "migration-1" });
+    await api.rollbackWorker("worker", "version-old");
+    await api.enableWorkersDev("worker");
+    await api.disableWorkersDev("worker");
+    await expect(api.getWorkersSubdomain()).resolves.toBe("account-subdomain");
+    await expect(api.getZone("zone-1")).resolves.toEqual({
+      id: "zone-1",
+      name: "example.com",
+      status: "active",
+    });
+    await expect(
+      api.attachDomain({ workerName: "worker", hostname: "app.example.com", zoneId: "zone-1" }),
+    ).resolves.toMatchObject({ id: "domain-1" });
+    await expect(api.getDomain("domain-1")).resolves.toMatchObject({
+      id: "domain-1",
+      certificateId: null,
+    });
+    await api.detachDomain("domain-1");
+    expect(uploadAsset).toHaveBeenCalledOnce();
+  });
+
   it("makes the Piwork security wrapper the real Worker entrypoint", () => {
     const wrapped = prepareWrappedWorkerUpload({
       appId: target().appId,
@@ -937,7 +1061,7 @@ describe("App runtime drivers", () => {
       id: "domain-1",
       hostname: "other.example.com",
       zoneId: "a".repeat(32),
-      certificateId: null,
+      certificateId: "certificate-1",
     });
     const driver = new CloudflareAppRuntimeDriver({ apiFactory: () => api });
     await expect(

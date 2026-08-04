@@ -63,11 +63,11 @@ jobs:
         run: ./scripts/selfhost.sh doctor
 
       - name: Build and start the source stack
-        run: ./scripts/selfhost.sh up --source
+        run: make test-compose-migrate
 
       - name: Verify container, SRT, RLS, and health contracts
         run: |
-          ./scripts/selfhost.sh doctor --require-verified
+          make test-compose-runtime
           curl --fail --silent --show-error http://127.0.0.1:3457/api/health/ready
 
       - name: Verify real Pi RPC inside the Compose nested SRT

@@ -158,7 +158,7 @@ status:
 	fi
 stop: dev-fast-stop
 
-.PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi
+.PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-compose-migrate test-compose-runtime test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi
 auth-generate:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for Better Auth schema generation.' >&2; exit 1; fi; \
@@ -176,6 +176,10 @@ control-plane-migrate:
 	  if [ -z "$$DATABASE_URL" ]; then echo 'DATABASE_URL is required for control-plane migrations.' >&2; exit 1; fi; \
 	  cd $(WEB_DIR) && bun scripts/apply-control-plane-migration.ts
 migrate: auth-migrate rbac-migrate control-plane-migrate
+test-compose-migrate:
+	@./scripts/selfhost.sh up --source
+test-compose-runtime:
+	@./scripts/selfhost.sh doctor --require-verified
 test-srt-isolation:
 	@cd $(WEB_DIR) && bun scripts/verify-srt-isolation.ts $${SRT_CANARY_ARGS:---self-test}
 

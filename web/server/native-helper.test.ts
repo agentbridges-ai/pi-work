@@ -2,11 +2,12 @@ import { createServer } from "node:net";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NATIVE_HELPER_PROTOCOL_VERSION,
   NativeHelperService,
   nativeHelperVersionIsNewer,
+  validateNativeHelperAnchor,
 } from "./native-helper.js";
 
 const roots: string[] = [];
@@ -181,6 +182,96 @@ describe("NativeHelperService", () => {
     ).rejects.toMatchObject({ status: 501 });
     value.server.close();
   });
+
+  it("covers bounded anchors, unsupported status, transient actions, and operation listing", async () => {
+    expect(validateNativeHelperAnchor(undefined)).toBeUndefined();
+    expect(validateNativeHelperAnchor({ x: 1, y: 2, width: 10, height: 20 })).toEqual({
+      x: 1,
+      y: 2,
+      width: 10,
+      height: 20,
+    });
+    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 10 })).toThrow(
+      /anchor rectangle/,
+    );
+    await expect(new NativeHelperService({ platform: "linux" }).status()).resolves.toMatchObject({
+      supported: false,
+      connected: false,
+      compatible: false,
+    });
+
+    const value = await fixture();
+    const operation = await value.service.createFileAction({
+      ownerKey: "user-a",
+      sessionId: "session-a",
+      action: "file.open",
+      bytes: new Uint8Array([1, 2, 3]),
+      filename: "nested/path.txt",
+      source: { space: "agent", path: "nested/path.txt", baselineSha256: "not-a-digest" },
+      anchor: { x: 5, y: 6, width: 7, height: 8 },
+      applicationPath: "/Applications/Preview.app",
+    });
+    expect(operation.state).toBe("shown");
+    await expect(value.service.listFileActions("user-a", "session-a")).resolves.toEqual([]);
+    await value.service.cancelFileAction(operation.id);
+    await value.service.dispose();
+    value.server.close();
+  });
+
+  it("handles GitHub release metadata and incompatible manifests without leaking errors", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+      await expect(
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({ latestVersion: null });
+
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ tag_name: "v0.3.0", assets: [] }), { status: 200 }),
+      );
+      await expect(
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({ latestVersion: "0.3.0" });
+
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tag_name: "v0.3.1",
+            assets: [
+              {
+                name: "piwork-helper-0.3.1-manifest.json",
+                browser_download_url: "https://example.test/manifest",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ version: "0.3.0", protocol: { minimum: 1, maximum: 1 } }), {
+          status: 200,
+        }),
+      );
+      await expect(
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({
+        lastError: expect.stringContaining("unavailable"),
+        latestVersion: null,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("nativeHelperVersionIsNewer", () => {
@@ -188,5 +279,7 @@ describe("nativeHelperVersionIsNewer", () => {
     expect(nativeHelperVersionIsNewer("0.2.0", "0.1.9")).toBe(true);
     expect(nativeHelperVersionIsNewer("0.1.0", "0.1.0")).toBe(false);
     expect(nativeHelperVersionIsNewer("bad", "0.1.0")).toBe(false);
+    expect(nativeHelperVersionIsNewer("0.1.0", "0.2.0")).toBe(false);
+    expect(nativeHelperVersionIsNewer("0.1.0", "0.1.0-beta")).toBe(false);
   });
 });

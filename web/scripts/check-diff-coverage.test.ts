@@ -477,6 +477,24 @@ describe("external coverage boundaries", () => {
     ).toThrow(/not declared and wired into CI/);
   });
 
+  it("accepts the Compose Runtime workflow as an external make-target runner", () => {
+    expect(() =>
+      validateExternalCoverageRunner(
+        {
+          path: "web/scripts/compose-migrate.ts",
+          reason: "Compose migration.",
+          runner: { kind: "make-target", target: "test-compose-migrate" },
+          evidence: ["Makefile", ".github/workflows/compose-runtime.yml"],
+        },
+        {
+          criticalTests: "",
+          makefile: "test-compose-migrate:\n\ttrue\n",
+          workflow: "- run: make test-compose-migrate\n",
+        },
+      ),
+    ).not.toThrow();
+  });
+
   it("requires changed external boundaries to update all declared evidence", () => {
     const boundary = {
       path: "web/server/index.ts",
