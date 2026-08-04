@@ -12,9 +12,26 @@ const {
 } = releaseVerifier;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const base = JSON.parse(
+const descriptor = JSON.parse(
   readFileSync(resolve(root, "release/onlyoffice-release-manifest.json"), "utf8"),
 );
+// Candidate integration intentionally checks a candidate descriptor in the
+// repository. Keep the broad verifier unit suite independent from that mutable
+// release lifecycle by projecting a small, allowlisted schema-4 fixture for
+// tests that exercise the legacy supported path. Candidate-specific tests below
+// still construct schema-5/candidate values from this same identity.
+const base =
+  descriptor.lifecycle === "candidate"
+    ? {
+        ...descriptor,
+        schemaVersion: 4,
+        lifecycle: "supported",
+        releaseManifest: {
+          ...descriptor.releaseManifest,
+          releaseId: "v0.5.12-40948d549d546d2c",
+        },
+      }
+    : descriptor;
 const rootPackage = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const webPackage = JSON.parse(readFileSync(resolve(root, "web/package.json"), "utf8"));
 const runtimeManifest = {
@@ -22,6 +39,7 @@ const runtimeManifest = {
   releaseId: base.releaseManifest.releaseId,
   packageVersion: base.npmPackage.version,
   hostBuildId: base.releaseManifest.hostBuildId,
+  sourceCommit: base.runtimeIdentity.sourceCommit,
   runtimeManifestSha256: base.runtimeIdentity.assetManifestDigest,
   x2t: {
     version: base.repositories["onlyoffice-x2t-wasm"].version,
@@ -663,9 +681,21 @@ describe("published OnlyOffice descriptor verification", () => {
     expect(result.observedStableReleaseId).toBe("different-current-stable");
   });
   it("requires schema 5 immutable manifests to bind the Host source commit", async () => {
-    const candidate = { ...pinned, schemaVersion: 5, lifecycle: "candidate" };
+    const missingSourceRuntime = { ...runtimeManifest, sourceCommit: undefined };
+    const candidate = {
+      ...pinned,
+      schemaVersion: 5,
+      lifecycle: "candidate",
+      releaseManifest: {
+        ...pinned.releaseManifest,
+        sha256: createHash("sha256").update(JSON.stringify(missingSourceRuntime)).digest("hex"),
+      },
+    };
     await expect(
-      verifyPublishedOnlyOfficeRelease(candidate, publishedFetch() as never),
+      verifyPublishedOnlyOfficeRelease(
+        candidate,
+        publishedFetch({ runtime: missingSourceRuntime }) as never,
+      ),
     ).rejects.toThrow("schema 5 runtime manifest source commit");
 
     const declaredRuntime = {
