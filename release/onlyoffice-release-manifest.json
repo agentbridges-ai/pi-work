@@ -1,18 +1,18 @@
 {
-  "schemaVersion": 4,
-  "createdAt": "2026-08-03T01:51:31.000Z",
+  "schemaVersion": 5,
+  "createdAt": "2026-08-04T12:00:00.000Z",
   "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
   "repositories": {
     "onlyoffice-x2t-wasm": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-x2t-wasm.git",
-      "version": "9.3.0+2",
-      "tag": "v9.3.0+2",
-      "commitSha": "1bb9b45a399f87ca162eea0c86abd4660f295469"
+      "version": "9.3.0+3",
+      "tag": "v9.3.0+3",
+      "commitSha": "4360541a805477726a06caabd1c64a330377bcf2"
     },
     "onlyoffice-browser": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
-      "version": "0.5.12",
-      "commitSha": "3da3e7b624be474f2d4573f32f3acef678fe8bf2"
+      "version": "0.5.13",
+      "commitSha": "844699cd4c7c76db8647f24d300de3cc3bbef101"
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
@@ -22,26 +22,26 @@
   },
   "npmPackage": {
     "name": "@agentbridges-ai/onlyoffice-browser",
-    "version": "0.5.12",
+    "version": "0.5.13",
     "publish": true,
-    "integrity": "sha512-WZBwiss68Glrac+GrM7qVxDwDvLgCcIg8m2nbbjmNbtUZYoK+aZSy0IbMN7PITGWb02CXFtxsImpM4xRj0FIXQ==",
-    "gitHead": "3da3e7b624be474f2d4573f32f3acef678fe8bf2",
-    "sourceCommit": "3da3e7b624be474f2d4573f32f3acef678fe8bf2"
+    "integrity": "sha512-00SSlMuSqLk4khEiVN+oaMEXfgC9FpMpczYJ0Yl/9xucqR8HWLY2ffc+yHRg2H7zpvljq7txIngWCMauzxy/uw==",
+    "gitHead": "4ed9febf1d4851279f817abd0b857bc874943128",
+    "sourceCommit": "4ed9febf1d4851279f817abd0b857bc874943128"
   },
   "runtimeIdentity": {
-    "packageVersion": "0.5.12",
-    "sourceCommit": "3da3e7b624be474f2d4573f32f3acef678fe8bf2",
-    "hostBuildId": "office-host-0.5.12-r1",
-    "assetManifestDigest": "8461e25ed17576759d05f3cc301ff6226e1766a3ac5e783c1e29d67587b18264"
+    "packageVersion": "0.5.13",
+    "sourceCommit": "844699cd4c7c76db8647f24d300de3cc3bbef101",
+    "hostBuildId": "office-host-0.5.13-r1",
+    "assetManifestDigest": "3b4516f64bf361f75a2f78aab8ce2a8cc7ba461e2058c71c08ec5bdd24f57f98"
   },
   "releaseManifest": {
     "version": 5,
-    "releaseId": "v0.5.12-fd3fbc60abd50785",
-    "sha256": "6ff5158bc3af3cfa135b2f3352409f568f86e55309121be40a531d1e00b7efe7",
-    "hostBuildId": "133571ec80edc374c4aa425c93ef61ad43e6cd40ce6d355c71c9ed414fe12d67",
+    "releaseId": "v0.5.13-add5af77cb298fe9",
+    "sha256": "e5c69eae668e2c801dafaff7fae9995066b67e30e15864609a4bfbb9e1bcd7a0",
+    "hostBuildId": "42f78c4cfea1b77f0ae5caa339aebaadfd8f48946b7ea8cbbfe54f1d4f1d13da",
     "channel": "stable-v5"
   },
-  "lifecycle": "supported",
+  "lifecycle": "candidate",
   "deployment": {
     "canonicalOrigin": "https://onlyoffice.getpi.work",
     "editorOrigin": "https://office-editor-health.getpi.work"
@@ -50,7 +50,7 @@
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "1ca63bd481273f9c1cebc3438290c3f2c35e04cd5966a1506f752fe9262991dc"
+      "sha256": "d437825de8ae32c8a10cb8863ad4141e840e39f21ceef7b44b3f0853be1c44f5"
     },
     {
       "repository": "onlyoffice-browser",
@@ -63,19 +63,19 @@
       "repository": "onlyoffice-browser",
       "kind": "npm-proxy-api",
       "path": "dist/npm/public-api.js",
-      "sha256": "51f2d0b0668e4cd6adf5f82c56d394a9ca0de0dfca02683095de496f0bd55c1e"
+      "sha256": "83f60fddb2ed588200e383c32d9312ad376945aabc17be21cb4b3f289e311762"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "editor-host-bundle",
-      "path": "dist/assets/officeHost-v0.5.12-QoxlGwew.js",
-      "sha256": "3713da14a37e55782dcea4b16597f03244d96c26cbd906c85d1885f7c1a14ce7"
+      "path": "dist/assets/officeHost-v0.5.13-C_LxmYyO.js",
+      "sha256": "0947aee17ff4f601151080af684af35b3257855243b669adeaf2d259d341b37e"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "compact-asset-manifest",
       "path": "dist/onlyoffice-runtime-assets.json",
-      "sha256": "8461e25ed17576759d05f3cc301ff6226e1766a3ac5e783c1e29d67587b18264"
+      "sha256": "3b4516f64bf361f75a2f78aab8ce2a8cc7ba461e2058c71c08ec5bdd24f57f98"
     },
     {
       "repository": "onlyoffice-browser",
