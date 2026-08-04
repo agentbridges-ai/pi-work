@@ -60,6 +60,11 @@ services:
     security_opt:
       - no-new-privileges:true
       - seccomp:./compose/runtime/seccomp.json
+      # Bubblewrap needs to create a capability-bearing nested user namespace.
+      # Keep the explicit seccomp profile, no-new-privileges, and zero Linux
+      # capabilities as the Runtime boundary while avoiding Docker's default
+      # AppArmor profile denying that inner namespace on Ubuntu 24.04+.
+      - apparmor=unconfined
     pids_limit: 256
     mem_limit: ${PIWORK_RUNTIME_MEMORY_LIMIT:-2g}
     tmpfs:
