@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { compileSrtPolicy, deriveTaskSrtPolicy } from "./srt-policy.js";
+import { COMPOSE_NESTED_BWRAP_PATH, compileSrtPolicy, deriveTaskSrtPolicy } from "./srt-policy.js";
 
 function fixture() {
   const tenantsRoot = mkdtempSync(join(tmpdir(), "piwork-srt-"));
@@ -103,6 +103,8 @@ describe("SRT policy compiler", () => {
     });
     expect(native.enableWeakerNestedSandbox).toBe(false);
     expect(nested.enableWeakerNestedSandbox).toBe(true);
+    expect(native.bwrapPath).toBeUndefined();
+    expect(nested.bwrapPath).toBe(COMPOSE_NESTED_BWRAP_PATH);
   });
 
   it("rejects a knowledge path from another tenant", () => {

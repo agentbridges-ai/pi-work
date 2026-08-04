@@ -10,7 +10,7 @@ import {
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compileSrtPolicy } from "../web/server/srt-policy.js";
+import { COMPOSE_NESTED_BWRAP_PATH, compileSrtPolicy } from "../web/server/srt-policy.js";
 import { preparePiSessionLayout } from "../web/server/pi-session-layout.js";
 import { resolvePinnedSrtRuntime } from "../web/server/pi-runtime-resolver.js";
 
@@ -27,7 +27,7 @@ const capEff = status.match(/^CapEff:\s*([0-9a-f]+)$/mu)?.[1];
 if (capEff && !/^0+$/u.test(capEff)) throw new Error("Runtime container retained capabilities");
 
 const bwrap = spawnSync(
-  "bwrap",
+  COMPOSE_NESTED_BWRAP_PATH,
   [
     "--ro-bind",
     "/",

@@ -29,6 +29,12 @@ COPY --chown=piwork:piwork web /workspace/web
 COPY --chown=piwork:piwork packages /workspace/packages
 COPY --chown=piwork:piwork scripts /workspace/scripts
 
+# This root-owned helper is selected only by the server's typed
+# compose-nested SRT policy.  Native Linux uses sandbox-runtime's normal
+# bubblewrap --dev path.
+COPY --chown=root:root compose/runtime/piwork-bwrap-wrapper.sh /usr/local/bin/piwork-bwrap
+RUN chmod 0555 /usr/local/bin/piwork-bwrap
+
 WORKDIR /workspace/web
 USER piwork:piwork
 ENTRYPOINT ["/usr/bin/tini", "--"]

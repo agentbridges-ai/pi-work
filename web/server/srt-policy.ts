@@ -15,6 +15,9 @@ export interface DomainPolicyLayer {
  */
 export type SrtExecutionMode = "native" | "compose-nested";
 
+/** Root-owned runtime helper present only in the fixed Compose image. */
+export const COMPOSE_NESTED_BWRAP_PATH = "/usr/local/bin/piwork-bwrap";
+
 export interface SrtPolicyInput {
   tenantsRoot: string;
   tenantRoot: string;
@@ -503,5 +506,6 @@ export function compileSrtPolicy(input: SrtPolicyInput): SandboxRuntimeConfig {
     // no environment value or browser request is read here.
     enableWeakerNestedSandbox: input.executionMode === "compose-nested",
     enableWeakerNetworkIsolation: false,
+    ...(input.executionMode === "compose-nested" ? { bwrapPath: COMPOSE_NESTED_BWRAP_PATH } : {}),
   };
 }
