@@ -146,7 +146,7 @@ status:
 		./scripts/selfhost.sh status; \
 		api_port="$${PIWORK_HTTP_PORT:-3457}"; \
 		edge_headers="$$(curl -fsS -D - -o /dev/null "http://127.0.0.1:$$api_port/build-info" || true)"; \
-		printf '%s\n' "$$edge_headers" | rg -qi '^X-Piwork-Edge:\s*piwork-caddy\r?$$' || (echo 'Published port is not served by Piwork Caddy' >&2; exit 1); \
+		printf '%s\n' "$$edge_headers" | grep -Eqi '^X-Piwork-Edge:[[:space:]]*piwork-caddy[[:space:]]*$$' || (echo 'Published port is not served by Piwork Caddy' >&2; exit 1); \
 		curl -fsS "http://127.0.0.1:$$api_port/api/health/ready" >/dev/null && echo "Compose API ready: http://127.0.0.1:$$api_port" || (echo 'Compose API is not ready' >&2; exit 1); \
 		curl -fsS "http://127.0.0.1:$$api_port/" >/dev/null && echo "Compose frontend ready: http://127.0.0.1:$$api_port" || (echo 'Compose frontend is not ready' >&2; exit 1); \
 	else \
