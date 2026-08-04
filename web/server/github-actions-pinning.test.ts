@@ -78,7 +78,7 @@ describe("GitHub Actions supply-chain pins", () => {
     expect(toolchain).toContain("path: ~/.bun/install/cache");
     expect(toolchain).toContain("hashFiles('web/bun.lock', 'landing-page/bun.lock')");
     expect(verify).toContain("path: ~/.cache/ms-playwright");
-    expect(deploy).toContain("bun install --backend copyfile --linker isolated --frozen-lockfile");
+    expect(deploy).toContain("bun install --frozen-lockfile --backend copyfile --linker isolated");
     expect(deploy).toContain("bunx --no-install wrangler pages deploy");
     expect(deploy).toContain("Production Pages deployments must run from refs/heads/main.");
     expect(deploy).toContain("DEPLOY_URL");

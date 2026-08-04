@@ -64,7 +64,7 @@ jobs:
 
       - name: Install frozen landing dependencies
         working-directory: landing-page
-        run: bun install --backend copyfile --linker isolated --frozen-lockfile
+        run: bun install --frozen-lockfile --backend copyfile --linker isolated
 
       - name: Lint landing page
         working-directory: landing-page
