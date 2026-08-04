@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { contrastRatio, parseColor, relativeLuminance } from "./color-contrast.js";
 
 const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const css = readFileSync(resolve(srcRoot, "index.css"), "utf8");
+const css = readFileSync(resolve(srcRoot, "../../packages/design-tokens/src/theme.css"), "utf8");
 
 function extractBlock(selectorStart: string): string {
   const selectorIndex = css.indexOf(selectorStart);

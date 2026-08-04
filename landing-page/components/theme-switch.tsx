@@ -1,6 +1,6 @@
 import { FC, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import clsx from "clsx";
+import { IconButton } from "@piwork/ui";
 
 import { SunFilledIcon, MoonFilledIcon } from "@/components/icons";
 
@@ -22,21 +22,17 @@ export const ThemeSwitch: FC<ThemeSwitchProps> = ({ className }) => {
     setIsMounted(true);
   }, []);
 
-
   if (!isMounted) return <div aria-hidden className="w-6 h-6" />;
 
   return (
-    <button
-      aria-label={`Switch to ${isLight ? "dark" : "light"} mode`}
-      className={clsx(
-        "px-px transition-opacity hover:opacity-80 cursor-pointer",
-        "inline-flex items-center justify-center",
-        "w-auto h-auto bg-transparent rounded-lg text-muted",
-        className,
-      )}
-      onClick={handleToggle}
+    <IconButton
+      className={className}
+      label={`Switch to ${isLight ? "dark" : "light"} mode`}
+      size="sm"
+      variant="ghost"
+      onPress={handleToggle}
     >
       {isLight ? <SunFilledIcon size={22} /> : <MoonFilledIcon size={22} />}
-    </button>
+    </IconButton>
   );
 };

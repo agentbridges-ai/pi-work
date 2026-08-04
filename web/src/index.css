@@ -7,6 +7,7 @@
 @import "@heroui/styles/themes/default";
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/variants";
+@import "@piwork/design-tokens/theme.css";
 
 /* HeroUI is Piwork's accessibility engine. Import only the component styles
    used by the product instead of shipping the complete component catalog. */
@@ -40,6 +41,9 @@
 @import "@heroui/styles/components/textfield.css" layer(components);
 @import "@heroui/styles/components/toast.css" layer(components);
 @import "@heroui/styles/components/toolbar.css" layer(components);
+
+@source "../../packages/ui/src";
+@source "../../packages/ui-patterns/src";
 
 @font-face {
   font-family: "JetBrains Mono Variable";
@@ -85,221 +89,6 @@
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-}
-
-@theme {
-  --font-sans: var(--piwork-font-family);
-  --font-serif: var(--piwork-font-family);
-  --font-mono: var(--piwork-font-family);
-  --color-background: var(--background);
-  --color-foreground: var(--piwork-text-foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-muted: var(--default);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-tertiary-foreground: var(--tertiary-foreground);
-  --color-disabled-foreground: var(--disabled-foreground);
-  --color-border: var(--border);
-  --color-control-border: var(--control-border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-focus: var(--focus);
-  --color-preview-drop-indicator: var(--preview-drop-indicator);
-  --color-overlay: var(--backdrop);
-  --color-surface: var(--surface);
-  --color-surface-weak: var(--surface-tertiary);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-accent: var(--accent-soft);
-  --color-accent-foreground: var(--accent-soft-foreground);
-  --color-danger: var(--danger);
-  --color-danger-foreground: var(--danger-foreground);
-  --color-danger-muted: var(--danger-muted);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-warning-muted: var(--warning-muted);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-success-muted: var(--success-muted);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-info-muted: var(--info-muted);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-}
-
-:root {
-  color-scheme: light;
-
-  --piwork-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --piwork-code-font-family:
-    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-
-  /* Warm neutral workbench palette. Interaction hierarchy comes from contrast, not hue. */
-  --background: oklch(0.9789 0.0013 106.42);
-  --surface: oklch(1 0 0);
-  --surface-secondary: oklch(0.9851 0 0);
-  --surface-tertiary: oklch(0.9642 0 0);
-  --overlay: oklch(1 0 0);
-  --backdrop: oklch(0.2103 0.0013 106.42 / 0.62);
-  --foreground: oklch(0.3174 0.0091 88.75);
-  --muted: oklch(0.55 0.0046 91.47);
-  --tertiary-foreground: oklch(0.55 0.0046 91.47);
-  --disabled-foreground: oklch(0.7852 0.0028 106.46);
-  --border: oklch(0.9337 0.0013 106.43);
-  --control-border: oklch(0.65 0.0028 106.46);
-  --separator: var(--border);
-  --scrollbar: oklch(0.7852 0.0028 106.46);
-  --default: oklch(0.9549 0.0013 106.42);
-  --default-foreground: var(--foreground);
-  --field-background: oklch(1 0 0);
-  --field-border: var(--control-border);
-  --field-foreground: var(--foreground);
-  --field-placeholder: oklch(0.55 0.0046 91.47);
-  --segment: oklch(0.9549 0.0013 106.42);
-  --segment-foreground: var(--foreground);
-  --link: var(--foreground);
-  --accent: oklch(0.2103 0.0013 106.42);
-  --accent-foreground: oklch(1 0 0);
-  --accent-soft: oklch(0.915 0.0013 106.42);
-  --accent-soft-foreground: var(--foreground);
-  --accent-hover: oklch(0.2768 0.0013 106.42);
-  --focus: var(--muted);
-  --success: oklch(0.6898 0.2057 144.69);
-  --success-foreground: oklch(0.2103 0.0013 106.42);
-  --success-soft: oklch(0.953955 0.019852 154.898);
-  --warning: oklch(0.7686 0.1621 74.86);
-  --warning-foreground: oklch(0.2103 0.0013 106.42);
-  --warning-soft: oklch(0.971734 0.023076 75.863);
-  --danger: oklch(0.6682 0.1874 23.67);
-  --danger-foreground: oklch(0.2103 0.0013 106.42);
-  --danger-soft: oklch(0.956016 0.018725 25.604);
-
-  /* Fixed geometry, type, spacing, motion, and stacking contracts. */
-  --piwork-control-radius: 6px;
-  --piwork-panel-radius: 10px;
-  --piwork-composer-width: 736px;
-  --piwork-composer-bottom-inset: 144px;
-  --piwork-composer-gap: 24px;
-  --piwork-titlebar-height: 40px;
-  --piwork-titlebar-control-size: 31px;
-  --piwork-composer-radius: 12px;
-  --piwork-composer-bottom-gap: 9px;
-  --piwork-composer-border-width: 1px;
-  --piwork-composer-control-size: 28px;
-  --piwork-composer-control-half-size: calc(var(--piwork-composer-control-size) / 2);
-  --piwork-composer-control-edge-inset: 8px;
-  --piwork-composer-control-row-outset: calc(
-    var(--piwork-composer-horizontal-padding) - var(--piwork-composer-control-edge-inset)
-  );
-  --piwork-message-bubble-radius: var(--piwork-panel-radius);
-  --piwork-control-height-sm: 32px;
-  --piwork-control-height-md: 40px;
-  --piwork-control-height-touch: 44px;
-  --piwork-space-1: 4px;
-  --piwork-space-2: 8px;
-  --piwork-space-3: 12px;
-  --piwork-space-4: 16px;
-  --piwork-space-6: 24px;
-  --piwork-space-8: 32px;
-  --piwork-space-12: 48px;
-  --piwork-text-caption-size: 0.75rem;
-  --piwork-text-caption-line-height: 1rem;
-  --piwork-text-label-size: 0.8125rem;
-  --piwork-text-label-line-height: 1.125rem;
-  --piwork-text-body-size: 0.875rem;
-  --piwork-text-body-line-height: 1.3125rem;
-  --piwork-text-lead-size: 1rem;
-  --piwork-text-lead-line-height: 1.5rem;
-  --piwork-text-title-size: 1.25rem;
-  --piwork-text-title-line-height: 1.75rem;
-  --piwork-text-display-size: 1.75rem;
-  --piwork-text-display-line-height: 2.25rem;
-  --piwork-text-code-size: 0.8125rem;
-  --piwork-text-code-line-height: 1.25rem;
-  --piwork-duration-feedback: 120ms;
-  --piwork-duration-overlay: 220ms;
-  --piwork-duration-layout: 320ms;
-  --piwork-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --piwork-z-base: 0;
-  --piwork-z-sticky: 10;
-  --piwork-z-popover: 30;
-  --piwork-z-overlay: 40;
-  --piwork-z-modal: 50;
-  --piwork-z-toast: 60;
-  --piwork-z-drag: 70;
-  --piwork-composer-horizontal-padding: 12px;
-  --piwork-composer-control-bottom-padding: var(--piwork-composer-control-edge-inset);
-  --piwork-composer-inner-width: calc(
-    var(--piwork-composer-width) - (var(--piwork-composer-border-width) * 2)
-  );
-  --piwork-composer-text-width: calc(
-    var(--piwork-composer-inner-width) - (var(--piwork-composer-horizontal-padding) * 2)
-  );
-  --piwork-text-foreground: var(--foreground);
-  --piwork-text-muted: var(--muted);
-  --piwork-text-disabled: var(--disabled-foreground);
-
-  --input: var(--field-background);
-  --ring: var(--focus);
-  --primary: var(--accent);
-  --primary-foreground: var(--accent-foreground);
-  --secondary: var(--default);
-  --secondary-foreground: var(--default-foreground);
-  --default-hover: color-mix(in oklch, var(--foreground) 6%, var(--default));
-  --default-active: color-mix(in oklch, var(--foreground) 10%, var(--default));
-  --danger-muted: var(--danger-soft);
-  --warning-muted: var(--warning-soft);
-  --success-muted: var(--success-soft);
-  --info: var(--accent);
-  --info-foreground: var(--accent-foreground);
-  --info-muted: var(--accent-soft);
-  --chart-1: oklch(from var(--accent) calc(l - 0.24) c h);
-  --chart-2: oklch(from var(--accent) calc(l - 0.12) c h);
-  --chart-3: var(--accent);
-  --chart-4: oklch(from var(--accent) calc(l + 0.12) c h);
-  --chart-5: oklch(from var(--accent) calc(l + 0.24) c h);
-  --card: var(--surface);
-  --card-foreground: var(--foreground);
-  --popover: var(--overlay);
-  --popover-foreground: var(--foreground);
-  --muted-foreground: var(--muted);
-
-  --radius: var(--piwork-control-radius) !important;
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: var(--piwork-control-radius);
-  --radius-lg: var(--piwork-panel-radius);
-  --radius-xl: var(--piwork-panel-radius);
-  --radius-2xl: var(--piwork-composer-radius);
-  --radius-3xl: var(--piwork-composer-radius);
-  --radius-4xl: var(--piwork-composer-radius);
-
-  --piwork-sidebar-background: var(--surface-tertiary);
-  --piwork-list-selected: var(--accent-soft);
-  --piwork-list-hover: var(--default);
-  --piwork-session-selected: var(--piwork-list-selected);
-  --piwork-session-hover: var(--piwork-list-hover);
-  --piwork-conversation-background: var(--background);
-  --piwork-user-message-background: var(--surface);
-  --piwork-user-message-border: var(--border);
-  --piwork-editor-foreground: var(--foreground);
-  --piwork-text-selection-background: color-mix(in oklab, var(--foreground) 18%, var(--background));
-  --piwork-markdown-foreground: var(--piwork-editor-foreground);
-  --piwork-markdown-divider: color-mix(in oklab, var(--border), var(--foreground) 36%);
-  --piwork-composer-background: var(--surface);
-  --piwork-composer-border: var(--border);
-  --piwork-composer-tray-background: var(--background);
-  --piwork-tool-card-background: var(--surface);
-  --piwork-tool-card-border: var(--border);
-  --preview-drop-indicator: var(--foreground);
 }
 
 /* Typography is an application-wide contract. OnlyOffice renders in its own
@@ -1160,54 +949,6 @@
   overflow: hidden;
 }
 
-/* Dark mode preserves the same neutral hierarchy with light-on-charcoal controls. */
-:root.dark,
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --background: oklch(0.2178 0 0);
-  --surface: oklch(0.2603 0 0);
-  --surface-secondary: oklch(0.2264 0 0);
-  --surface-tertiary: oklch(0.3132 0 0);
-  --overlay: oklch(0.2603 0 0);
-  --backdrop: oklch(0.1 0 0 / 0.72);
-  --foreground: oklch(0.8884 0 0);
-  --muted: oklch(0.64 0 0);
-  --tertiary-foreground: oklch(0.64 0 0);
-  --disabled-foreground: oklch(0.4855 0 0);
-  --border: oklch(0.3132 0 0);
-  --control-border: oklch(0.55 0 0);
-  --scrollbar: oklch(0.4855 0 0);
-  --default: oklch(0.3132 0 0);
-  --field-background: oklch(0.2603 0 0);
-  --field-placeholder: oklch(0.64 0 0);
-  --link: var(--foreground);
-  --accent: oklch(0.8884 0 0);
-  --accent-foreground: oklch(0.2178 0 0);
-  --accent-soft: var(--default);
-  --accent-hover: oklch(0.95 0 0);
-  --focus: var(--muted);
-  --success: oklch(0.7027 0.1923 137.13);
-  --success-foreground: oklch(0.2178 0 0);
-  --success-soft: oklch(0.30178 0.052294 156.085);
-  --warning: oklch(0.8419 0.1589 81.46);
-  --warning-foreground: oklch(0.2178 0 0);
-  --warning-soft: oklch(0.339112 0.057799 75.199);
-  --danger: oklch(0.6405 0.1947 24.48);
-  --danger-foreground: oklch(0.2178 0 0);
-  --danger-soft: oklch(0.271932 0.075706 23.599);
-  --piwork-sidebar-background: var(--surface);
-  --piwork-list-selected: var(--accent-soft);
-  --piwork-list-hover: var(--surface-tertiary);
-  --piwork-conversation-background: var(--background);
-  --piwork-user-message-background: var(--surface-tertiary);
-  --piwork-user-message-border: var(--border);
-  --piwork-editor-foreground: oklch(0.95 0 0);
-  --piwork-composer-background: var(--surface);
-  --piwork-composer-border: var(--border);
-  --piwork-composer-tray-background: var(--background);
-  --piwork-tool-card-background: var(--surface);
-  --piwork-tool-card-border: var(--border);
-}
 /* Scrollbar styling — desktop only.
    On mobile/touch devices, custom ::-webkit-scrollbar overrides switch
    from native overlay scrollbars to classic always-visible ones, which
