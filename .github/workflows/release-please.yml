@@ -10,8 +10,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  checks: read
   contents: write
   pull-requests: write
+  statuses: read
 
 jobs:
   release-please:
@@ -43,24 +45,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.release.outputs.sha || github.sha }}
         run: |
-          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs?per_page=100" > release-check-runs.json
-          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/status?per_page=100" > release-statuses.json
+          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls?per_page=20" --jq '.[].head.sha' > release-evidence-shas.txt
+          printf '%s\n' "${RELEASE_SHA}" >> release-evidence-shas.txt
+          sort -u release-evidence-shas.txt | while read -r sha; do
+            gh api "/repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?per_page=100" > "release-check-runs-${sha}.json"
+            gh api "/repos/${GITHUB_REPOSITORY}/commits/${sha}/status?per_page=100" > "release-statuses-${sha}.json"
+          done
           node <<'NODE'
           const { appendFileSync, readFileSync } = require("node:fs");
           const policy = JSON.parse(readFileSync(".governance/github-policy.json", "utf8"));
-          const checkRuns = JSON.parse(readFileSync("release-check-runs.json", "utf8")).check_runs || [];
-          const statuses = JSON.parse(readFileSync("release-statuses.json", "utf8")).statuses || [];
-          const required = new Set(policy.requiredChecks);
-          const urls = new Set([
-            ...checkRuns
-              .filter((run) => required.has(run.name) && run.conclusion === "success")
-              .map((run) => run.html_url),
-            ...statuses
-              .filter((status) => required.has(status.context) && status.state === "success")
-              .map((status) => status.target_url),
-          ].filter(Boolean));
-          if (!urls.size) throw new Error("No successful required-check URLs found for release commit");
-          appendFileSync(process.env.GITHUB_OUTPUT, `urls=${[...urls].join(",")}\n`);
+          const required = new Map(policy.requiredChecks.map((name) => [name, new Set()]));
+          const shas = readFileSync("release-evidence-shas.txt", "utf8")
+            .split(/\r?\n/)
+            .map((sha) => sha.trim())
+            .filter(Boolean);
+          const add = (context, url) => {
+            if (required.has(context) && url) required.get(context).add(url);
+          };
+          for (const sha of shas) {
+            const checkRuns = JSON.parse(readFileSync(`release-check-runs-${sha}.json`, "utf8"))
+              .check_runs || [];
+            for (const run of checkRuns) {
+              if (run.conclusion === "success") add(run.name, run.html_url);
+            }
+            const statuses = JSON.parse(readFileSync(`release-statuses-${sha}.json`, "utf8"))
+              .statuses || [];
+            for (const status of statuses) {
+              if (status.state === "success") add(status.context, status.target_url);
+            }
+          }
+          const missing = [...required]
+            .filter(([, urls]) => urls.size === 0)
+            .map(([context]) => context);
+          if (missing.length) {
+            throw new Error(`Missing successful required-check URLs: ${missing.join(", ")}`);
+          }
+          const urls = [...new Set([...required.values()].flatMap((values) => [...values]))];
+          appendFileSync(process.env.GITHUB_OUTPUT, `urls=${urls.join(",")}\n`);
           NODE
 
       - name: Generate release evidence

@@ -58,6 +58,7 @@
     "web/src/user-space-shell/**",
     "web/src/ws*.ts",
     "web/src/api.ts",
+    "web/src/*office*",
     "web/src/**/*office*",
     ".github/**",
     ".governance/**",
