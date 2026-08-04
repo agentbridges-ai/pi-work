@@ -223,7 +223,15 @@ NODE
 up() {
   load_config
   select_mode
-  if [[ "$mode" == "source" ]]; then compose up -d --build; else compose up -d; fi
+  if [[ "$mode" == "source" ]]; then
+    # The source overlay is intentionally read-only.  Docker needs the nested
+    # node_modules mountpoint to exist in that bind mount before it can attach
+    # the named volume; otherwise a read-only rootfs fails container startup.
+    mkdir -p "$ROOT_DIR/web/node_modules"
+    compose up -d --build
+  else
+    compose up -d
+  fi
   compose --profile migrate run --rm migrate
 }
 

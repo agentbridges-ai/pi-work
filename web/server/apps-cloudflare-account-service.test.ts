@@ -834,6 +834,161 @@ describe("AppCloudflareAccountService", () => {
     expect(query.mock.calls[1][1]).toEqual(["deployment-1", "app-1", 7, "tenant-1"]);
   });
 
+  it("resolves creator-owned Temporary and BYOC credentials only from matching authority", async () => {
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const temporarySecret = encryptSecret(
+      JSON.stringify({ apiToken: "temporary-token", tokenId: "temporary-token-id" }),
+      masterKey,
+      1,
+      "apps-cloudflare:temporary:tenant-1:preview-1:credential",
+    );
+    const oauthSecret = encryptSecret(
+      JSON.stringify({
+        accessToken: "oauth-access-token",
+        refreshToken: "oauth-refresh-token",
+        tokenType: "Bearer",
+        grantedScopes: ["provider.workers.write"],
+        accessExpiresAt: "2026-08-04T09:00:00.000Z",
+      }),
+      masterKey,
+      1,
+      "apps-cloudflare:connection:tenant-1:connection-1:credential",
+    );
+    const connection = {
+      id: "connection-1",
+      tenant_id: "tenant-1",
+      scope: "user",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      account_id: "account-1",
+      account_name: "Account",
+      granted_scopes: ["provider.workers.write"],
+      status: "active",
+      credential_ciphertext: oauthSecret.ciphertext,
+      credential_iv: oauthSecret.iv,
+      credential_auth_tag: oauthSecret.authTag,
+      credential_key_version: oauthSecret.keyVersion,
+      access_expires_at: "2026-08-04T09:00:00.000Z",
+    };
+    const temporary = {
+      id: "preview-1",
+      app_id: "app-1",
+      tenant_id: "tenant-1",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      account_id: "temporary-account-1",
+      status: "ready",
+      expires_at: "2026-08-04T09:00:00.000Z",
+      credential_ciphertext: temporarySecret.ciphertext,
+      credential_iv: temporarySecret.iv,
+      credential_auth_tag: temporarySecret.authTag,
+      credential_key_version: temporarySecret.keyVersion,
+    };
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from app_deployments d join apps a")) {
+        return {
+          rows: [
+            {
+              id: "deployment-1",
+              app_id: "app-1",
+              app_generation: 7,
+              generation: 7,
+              target_kind: "temporary",
+              temporary_preview_id: "preview-1",
+              binding_manifest: {},
+            },
+          ],
+        };
+      }
+      if (sql.includes("from cloudflare_temporary_previews")) return { rows: [temporary] };
+      if (sql.includes("from cloudflare_connections")) return { rows: [connection] };
+      if (sql.includes("from apps where")) {
+        return {
+          rows: [
+            {
+              id: "app-1",
+              owner_user_id: "user-1",
+              target_kind: "byoc",
+              cloudflare_connection_id: "connection-1",
+            },
+          ],
+        };
+      }
+      if (sql.includes("scoped_role_assignments")) return { rows: [{ allowed: true }] };
+      throw new Error(`Unexpected credential query: ${sql}`);
+    });
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client: clientFixture(),
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+
+    await expect(
+      service.resolveDeploymentCredential(context, "app-1", "deployment-1", 7),
+    ).resolves.toEqual({
+      target: "temporary",
+      accountId: "temporary-account-1",
+      apiToken: "temporary-token",
+      connectionId: null,
+      temporaryAccountId: "preview-1",
+      expiresAt: "2026-08-04T09:00:00.000Z",
+    });
+
+    query.mockImplementation(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from app_deployments d join apps a")) {
+        return {
+          rows: [
+            {
+              id: "deployment-1",
+              app_id: "app-1",
+              app_generation: 7,
+              generation: 7,
+              target_kind: "byoc",
+              cloudflare_connection_id: "connection-1",
+              binding_manifest: {},
+            },
+          ],
+        };
+      }
+      if (sql.includes("from cloudflare_connections")) return { rows: [connection] };
+      if (sql.includes("from apps where")) {
+        return {
+          rows: [
+            {
+              id: "app-1",
+              owner_user_id: "user-1",
+              target_kind: "byoc",
+              cloudflare_connection_id: "connection-1",
+            },
+          ],
+        };
+      }
+      if (sql.includes("scoped_role_assignments")) return { rows: [{ allowed: true }] };
+      throw new Error(`Unexpected BYOC credential query: ${sql}`);
+    });
+
+    await expect(
+      service.resolveDeploymentCredential(context, "app-1", "deployment-1", 7),
+    ).resolves.toMatchObject({
+      target: "byoc",
+      accountId: "account-1",
+      apiToken: "oauth-access-token",
+      connectionId: "connection-1",
+      temporaryAccountId: null,
+    });
+    await expect(
+      service.resolveConnectionCredential(context, "app-1", "connection-1"),
+    ).resolves.toMatchObject({
+      target: "byoc",
+      accountId: "account-1",
+      apiToken: "oauth-access-token",
+      connectionId: "connection-1",
+    });
+  });
+
   it("single-flights concurrent refreshes and rotates credentials with a DB CAS", async () => {
     const now = new Date("2026-08-04T08:00:00.000Z");
     const oldCredential = encryptSecret(
@@ -1898,5 +2053,499 @@ describe("AppCloudflareAccountService", () => {
     expect(clientQuery.mock.calls.some(([sql]) => String(sql).includes("status='completed'"))).toBe(
       false,
     );
+  });
+
+  it("projects only scoped connection and temporary-account metadata", async () => {
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const connectionCredential = encryptSecret(
+      JSON.stringify({
+        accessToken: "access-secret",
+        refreshToken: "refresh-secret",
+        tokenType: "Bearer",
+        grantedScopes: ["provider.workers.write", "provider.zone.read"],
+        accessExpiresAt: "2026-08-04T09:00:00.000Z",
+      }),
+      masterKey,
+      1,
+      "apps-cloudflare:connection:tenant-1:connection-1:credential",
+    );
+    const connectionRow = {
+      id: "connection-1",
+      tenant_id: "tenant-1",
+      scope: "user",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      account_id: "account-1",
+      account_name: "Account",
+      granted_scopes: ["provider.workers.write", "provider.zone.read"],
+      status: "active",
+      access_expires_at: "2026-08-04T09:00:00.000Z",
+      last_refreshed_at: now,
+      created_at: now,
+      updated_at: now,
+      revoked_at: null,
+      credential_ciphertext: connectionCredential.ciphertext,
+      credential_iv: connectionCredential.iv,
+      credential_auth_tag: connectionCredential.authTag,
+      credential_key_version: connectionCredential.keyVersion,
+    };
+    const temporaryRow = {
+      id: "preview-1",
+      app_id: "app-1",
+      tenant_id: "tenant-1",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      account_id: "temporary-account",
+      account_name: "Temporary",
+      status: "ready",
+      account_expires_at: "2026-08-04T08:30:00.000Z",
+      claim_expires_at: "2026-08-04T08:20:00.000Z",
+      expires_at: "2026-08-04T08:20:00.000Z",
+      claim_ciphertext: "claim-ciphertext",
+      claim_iv: "claim-iv",
+      claim_auth_tag: "claim-auth-tag",
+      claimed_connection_id: null,
+      policies_accepted_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("with abandoned_previews")) return { rows: [], rowCount: 0 };
+      if (sql.includes("update cloudflare_oauth_states")) return { rows: [], rowCount: 0 };
+      if (sql.includes("from cloudflare_connections where id")) {
+        return { rows: [connectionRow] };
+      }
+      if (sql.includes("from cloudflare_connections") && sql.includes("where tenant_id")) {
+        return { rows: [connectionRow] };
+      }
+      if (sql.includes("from cloudflare_temporary_previews")) {
+        return { rows: [temporaryRow] };
+      }
+      throw new Error(`Unexpected projection query: ${sql}`);
+    });
+    const client = clientFixture();
+    vi.mocked(client.listZones).mockResolvedValue([
+      { id: "zone-1", name: "example.com", status: "active" },
+    ]);
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client,
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+
+    await expect(service.listConnections(context)).resolves.toMatchObject([
+      { id: "connection-1", accountId: "account-1", status: "active" },
+    ]);
+    await expect(service.getConnection(context, "connection-1")).resolves.toMatchObject({
+      id: "connection-1",
+      grantedScopes: ["provider.workers.write", "provider.zone.read"],
+    });
+    await expect(service.listConnectionZones(context, "connection-1")).resolves.toEqual([
+      { id: "zone-1", name: "example.com", status: "active" },
+    ]);
+    expect(client.listZones).toHaveBeenCalledWith("access-secret");
+    await expect(service.listTemporaryAccounts(context)).resolves.toMatchObject([
+      {
+        id: "preview-1",
+        accountId: "temporary-account",
+        claimAvailable: true,
+        ownerMembershipId: "member-1",
+      },
+    ]);
+    expect(JSON.stringify(query.mock.calls)).not.toContain("access-secret");
+  });
+
+  it("rejects stale connection authority and refreshes an expiring credential", async () => {
+    const staleQuery = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from apps where")) {
+        return {
+          rows: [
+            {
+              id: "app-1",
+              owner_user_id: "user-1",
+              target_kind: "unassigned",
+              cloudflare_connection_id: null,
+            },
+          ],
+        };
+      }
+      if (sql.includes("from scoped_role_assignments")) return { rows: [{ allowed: true }] };
+      throw new Error(`Unexpected stale connection query: ${sql}`);
+    });
+    const staleService = new AppCloudflareAccountService({ query: staleQuery } as unknown as Pool, {
+      ...enabled,
+      client: clientFixture(),
+      masterKey: () => masterKey,
+    });
+    await expect(
+      staleService.resolveConnectionCredential(context, "app-1", "connection-1"),
+    ).rejects.toThrow(/connection authority is stale/i);
+
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const oldCredential = encryptSecret(
+      JSON.stringify({
+        accessToken: "old-access",
+        refreshToken: "old-refresh",
+        tokenType: "Bearer",
+        grantedScopes: ["provider.workers.write"],
+        accessExpiresAt: "2026-08-04T08:00:30.000Z",
+      }),
+      masterKey,
+      1,
+      "apps-cloudflare:connection:tenant-1:connection-1:credential",
+    );
+    const oldConnection = {
+      id: "connection-1",
+      tenant_id: "tenant-1",
+      scope: "user",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      account_id: "account-1",
+      account_name: "Account",
+      granted_scopes: ["provider.workers.write"],
+      status: "active",
+      credential_ciphertext: oldCredential.ciphertext,
+      credential_iv: oldCredential.iv,
+      credential_auth_tag: oldCredential.authTag,
+      credential_key_version: oldCredential.keyVersion,
+      access_expires_at: "2026-08-04T08:00:30.000Z",
+      last_refreshed_at: now,
+      created_at: now,
+      updated_at: now,
+      revoked_at: null,
+    };
+    let connectionReads = 0;
+    let refreshedConnection: typeof oldConnection | undefined;
+    const query = vi.fn(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from apps where")) {
+        return {
+          rows: [
+            {
+              id: "app-1",
+              owner_user_id: "user-1",
+              target_kind: "byoc",
+              cloudflare_connection_id: "connection-1",
+            },
+          ],
+        };
+      }
+      if (sql.includes("from scoped_role_assignments")) return { rows: [{ allowed: true }] };
+      if (sql.includes("select * from cloudflare_connections")) {
+        connectionReads += 1;
+        if (connectionReads === 1) return { rows: [oldConnection] };
+        return { rows: [refreshedConnection || oldConnection] };
+      }
+      if (sql.includes("update cloudflare_connections set account_name")) {
+        refreshedConnection = {
+          ...oldConnection,
+          account_name: "Refreshed Account",
+          access_expires_at: "2026-08-04T09:00:00.000Z",
+          credential_ciphertext: String(values?.[2]),
+          credential_iv: String(values?.[3]),
+          credential_auth_tag: String(values?.[4]),
+          credential_key_version: Number(values?.[5]),
+        };
+        return { rows: [refreshedConnection] };
+      }
+      if (sql.includes("control_plane_audit_log")) return { rows: [] };
+      throw new Error(`Unexpected refresh-on-resolve query: ${sql}`);
+    });
+    const client = clientFixture();
+    vi.mocked(client.refreshAccessToken).mockResolvedValue({
+      accountId: "account-1",
+      accountName: "Refreshed Account",
+      accessToken: "new-access",
+      refreshToken: "new-refresh",
+      grantedScopes: ["provider.workers.write"],
+      accessExpiresAt: "2026-08-04T09:00:00.000Z",
+    });
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client,
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+    await expect(
+      service.resolveConnectionCredential(context, "app-1", "connection-1"),
+    ).resolves.toMatchObject({
+      target: "byoc",
+      accountId: "account-1",
+      apiToken: "new-access",
+      connectionId: "connection-1",
+    });
+    expect(client.refreshAccessToken).toHaveBeenCalledWith("old-refresh", ["provider.workers.write"]);
+  });
+
+  it("revokes a connection and clears App targets after remote confirmation", async () => {
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const credential = encryptSecret(
+      JSON.stringify({
+        accessToken: "access-secret",
+        refreshToken: "refresh-secret",
+        tokenType: "Bearer",
+        grantedScopes: ["provider.workers.write"],
+        accessExpiresAt: "2026-08-04T09:00:00.000Z",
+      }),
+      masterKey,
+      1,
+      "apps-cloudflare:connection:tenant-1:connection-1:credential",
+    );
+    const connection = {
+      id: "connection-1",
+      tenant_id: "tenant-1",
+      scope: "user",
+      owner_user_id: "user-1",
+      account_id: "account-1",
+      account_name: "Account",
+      granted_scopes: ["provider.workers.write"],
+      status: "active",
+      credential_ciphertext: credential.ciphertext,
+      credential_iv: credential.iv,
+      credential_auth_tag: credential.authTag,
+      credential_key_version: credential.keyVersion,
+      access_expires_at: "2026-08-04T09:00:00.000Z",
+      last_refreshed_at: now,
+      created_at: now,
+      updated_at: now,
+      revoked_at: null,
+    };
+    const initialQuery = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from cloudflare_connections where id")) return { rows: [connection] };
+      throw new Error(`Unexpected revoke query: ${sql}`);
+    });
+    const transactionQuery = vi.fn(async (sql: string) => {
+      if (sql === "begin" || sql === "commit" || sql === "rollback") return { rows: [] };
+      if (sql.includes("cloudflare_connections set status='revoked'")) return { rows: [] };
+      if (sql.includes("update apps set target_kind='unassigned'")) return { rows: [] };
+      if (sql.includes("control_plane_audit_log")) return { rows: [] };
+      throw new Error(`Unexpected revoke transaction query: ${sql}`);
+    });
+    const client = clientFixture();
+    const pool = {
+      query: initialQuery,
+      connect: vi.fn().mockResolvedValue({ query: transactionQuery, release: vi.fn() }),
+    } as unknown as Pool;
+    const service = new AppCloudflareAccountService(pool, {
+      ...enabled,
+      client,
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+
+    await expect(service.revokeConnection(context, "connection-1")).resolves.toBeUndefined();
+    expect(client.revokeToken).toHaveBeenCalledWith("access-secret");
+    expect(transactionQuery.mock.calls.some(([sql]) => String(sql).includes("credential_ciphertext=null"))).toBe(
+      true,
+    );
+    expect(
+      transactionQuery.mock.calls.some(([sql]) => String(sql).includes("temporary_preview_id=null")),
+    ).toBe(true);
+  });
+
+  it("sets and reads unassigned, temporary, and BYOC App targets", async () => {
+    const app = { id: "app-1", tenant_id: "tenant-1", owner_user_id: "user-1" };
+    const connection = {
+      id: "connection-1",
+      tenant_id: "tenant-1",
+      scope: "user",
+      owner_user_id: "user-1",
+      status: "active",
+      account_id: "account-1",
+      account_name: "Account",
+    };
+    const temporary = {
+      id: "preview-1",
+      tenant_id: "tenant-1",
+      owner_user_id: "user-1",
+      owner_membership_id: "member-1",
+      app_id: "app-1",
+      status: "ready",
+      expires_at: "2026-08-04T09:00:00.000Z",
+      account_id: "temporary-account",
+      account_name: "Temporary",
+    };
+    const appWithTarget = (target: string, targetId: string | null = null) => ({
+      ...app,
+      target_kind: target,
+      cloudflare_connection_id: target === "byoc" ? targetId : null,
+      temporary_preview_id: target === "temporary" ? targetId : null,
+    });
+    const makeTransactionClient = (target: "unassigned" | "temporary" | "byoc") => {
+      const selected = target === "temporary" ? temporary : target === "byoc" ? connection : null;
+      const targetId = selected?.id || null;
+      const clientQuery = vi.fn(async (sql: string) => {
+        if (sql === "begin" || sql === "commit" || sql === "rollback") return { rows: [] };
+        if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+        if (sql.includes("from scoped_role_assignments")) return { rows: [{ allowed: true }] };
+        if (sql.includes("from apps where id=$1 and tenant_id=$2 for update")) {
+          return { rows: [app] };
+        }
+        if (sql.includes("from cloudflare_connections where id")) return { rows: [connection] };
+        if (sql.includes("select account_id,account_name from cloudflare_temporary_previews")) {
+          return { rows: [{ account_id: "temporary-account", account_name: "Temporary" }] };
+        }
+        if (sql.includes("from cloudflare_temporary_previews") && sql.includes("limit 1")) {
+          return { rows: [temporary] };
+        }
+        if (sql.includes("update apps set target_kind")) {
+          return { rows: [appWithTarget(target, targetId)] };
+        }
+        if (sql.includes("control_plane_audit_log")) return { rows: [] };
+        throw new Error(`Unexpected target transaction query: ${sql}`);
+      });
+      return { query: clientQuery, release: vi.fn() };
+    };
+    const poolQuery = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("from apps where id=$1 and tenant_id=$2 limit 1")) {
+        return { rows: [appWithTarget("temporary", "preview-1")] };
+      }
+      if (sql.includes("from cloudflare_temporary_previews where id")) {
+        return { rows: [{ account_id: "temporary-account", account_name: "Temporary" }] };
+      }
+      throw new Error(`Unexpected target read query: ${sql}`);
+    });
+    const pool = {
+      query: poolQuery,
+      connect: vi
+        .fn()
+        .mockResolvedValueOnce(makeTransactionClient("unassigned"))
+        .mockResolvedValueOnce(makeTransactionClient("temporary"))
+        .mockResolvedValueOnce(makeTransactionClient("byoc")),
+    } as unknown as Pool;
+    const service = new AppCloudflareAccountService(pool, {
+      ...enabled,
+      client: clientFixture(),
+      masterKey: () => masterKey,
+      now: () => new Date("2026-08-04T08:00:00.000Z"),
+    });
+
+    await expect(service.setAppTarget(context, "app-1", { target: "unassigned" })).resolves.toEqual(
+      {
+        appId: "app-1",
+        target: "unassigned",
+        connectionId: null,
+        temporaryAccountId: null,
+        accountId: null,
+        accountName: null,
+      },
+    );
+    await expect(
+      service.setAppTarget(context, "app-1", {
+        target: "temporary",
+        temporaryAccountId: "preview-1",
+      }),
+    ).resolves.toMatchObject({ target: "temporary", accountId: "temporary-account" });
+    await expect(
+      service.setAppTarget(context, "app-1", { target: "byoc", connectionId: "connection-1" }),
+    ).resolves.toMatchObject({ target: "byoc", accountId: "account-1" });
+    await expect(service.getAppTarget(context, "app-1")).resolves.toEqual({
+      appId: "app-1",
+      target: "temporary",
+      connectionId: null,
+      temporaryAccountId: "preview-1",
+      accountId: "temporary-account",
+      accountName: "Temporary",
+    });
+  });
+
+  it("projects deployment receipts and falls back to the current deployment event", async () => {
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const receipt = {
+      id: "receipt-1",
+      app_id: "app-1",
+      deployment_id: "deployment-1",
+      target_kind: "byoc",
+      cloudflare_connection_id: "connection-1",
+      temporary_preview_id: null,
+      logical_key: "worker",
+      resource_kind: "worker",
+      mode: "create",
+      ownership: "created",
+      external_id: "worker-1",
+      external_name: "piwork-worker",
+      step_status: "ready",
+      metadata: { route: "worker" },
+      error_code: null,
+      error_message: null,
+      created_at: now,
+      updated_at: now,
+    };
+    const deployment = {
+      id: "deployment-1",
+      app_id: "app-1",
+      version: 2,
+      phase: "ready",
+      target_kind: "byoc",
+      source_digest: "a".repeat(64),
+      manifest: {
+        version: 1,
+        runtime: "cloudflare-workers",
+        exposure: { workersDev: true },
+      },
+      cloudflare_version_id: "version-1",
+      stable_url: "https://app.example.com",
+      error_code: null,
+      error_message: null,
+      created_by: "user-1",
+      created_at: now,
+      deployed_at: now,
+      current_deployment_id: "deployment-1",
+      preview_id: null,
+    };
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-1" }] };
+      if (sql.includes("with abandoned_previews")) return { rows: [], rowCount: 0 };
+      if (sql.includes("update cloudflare_oauth_states")) return { rows: [], rowCount: 0 };
+      if (sql.includes("from app_resource_receipts")) return { rows: [receipt] };
+      if (sql.includes("from app_deployments d join apps a")) {
+        return { rows: [deployment] };
+      }
+      if (sql.includes("from control_plane_audit_log")) return { rows: [] };
+      throw new Error(`Unexpected deployment projection query: ${sql}`);
+    });
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client: clientFixture(),
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+
+    await expect(service.listDeploymentReceipts(context, "deployment-1")).resolves.toEqual([
+      {
+        id: "receipt-1",
+        appId: "app-1",
+        deploymentId: "deployment-1",
+        target: "byoc",
+        connectionId: "connection-1",
+        temporaryAccountId: null,
+        logicalKey: "worker",
+        resourceKind: "worker",
+        mode: "create",
+        ownership: "created",
+        externalId: "worker-1",
+        externalName: "piwork-worker",
+        stepStatus: "ready",
+        metadata: { route: "worker" },
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        errorCode: null,
+        errorMessage: null,
+      },
+    ]);
+    await expect(service.listDeploymentEvents(context, "deployment-1")).resolves.toEqual([
+      {
+        id: "deployment-1:current",
+        deploymentId: "deployment-1",
+        phase: "ready",
+        timestamp: now.toISOString(),
+        code: null,
+      },
+    ]);
   });
 });
