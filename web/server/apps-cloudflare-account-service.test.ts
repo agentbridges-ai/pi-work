@@ -2277,7 +2277,9 @@ describe("AppCloudflareAccountService", () => {
       apiToken: "new-access",
       connectionId: "connection-1",
     });
-    expect(client.refreshAccessToken).toHaveBeenCalledWith("old-refresh", ["provider.workers.write"]);
+    expect(client.refreshAccessToken).toHaveBeenCalledWith("old-refresh", [
+      "provider.workers.write",
+    ]);
   });
 
   it("revokes a connection and clears App targets after remote confirmation", async () => {
@@ -2339,11 +2341,15 @@ describe("AppCloudflareAccountService", () => {
 
     await expect(service.revokeConnection(context, "connection-1")).resolves.toBeUndefined();
     expect(client.revokeToken).toHaveBeenCalledWith("access-secret");
-    expect(transactionQuery.mock.calls.some(([sql]) => String(sql).includes("credential_ciphertext=null"))).toBe(
-      true,
-    );
     expect(
-      transactionQuery.mock.calls.some(([sql]) => String(sql).includes("temporary_preview_id=null")),
+      transactionQuery.mock.calls.some(([sql]) =>
+        String(sql).includes("credential_ciphertext=null"),
+      ),
+    ).toBe(true);
+    expect(
+      transactionQuery.mock.calls.some(([sql]) =>
+        String(sql).includes("temporary_preview_id=null"),
+      ),
     ).toBe(true);
   });
 

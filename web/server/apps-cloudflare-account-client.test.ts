@@ -220,21 +220,23 @@ describe("Cloudflare temporary account client", () => {
       fetch: request,
     });
 
-    await expect(client.refreshAccessToken("old-refresh", ["account.read"])).resolves.toMatchObject({
-      accountId: "account-1",
-      accountName: "Account",
-      accessToken: "access-secret",
-      refreshToken: "old-refresh",
-      grantedScopes: ["workers.write"],
-    });
+    await expect(client.refreshAccessToken("old-refresh", ["account.read"])).resolves.toMatchObject(
+      {
+        accountId: "account-1",
+        accountName: "Account",
+        accessToken: "access-secret",
+        refreshToken: "old-refresh",
+        grantedScopes: ["workers.write"],
+      },
+    );
     await expect(client.listZones("access-secret")).resolves.toEqual([
       { id: "zone-1", name: "example.com", status: "active" },
     ]);
     await expect(client.revokeToken("access-secret")).resolves.toBeUndefined();
     expect(String(request.mock.calls[0]?.[1]?.body)).toContain("grant_type=refresh_token");
-    expect(
-      (request.mock.calls[0]?.[1]?.headers as Headers).get("authorization"),
-    ).toMatch(/^Basic /u);
+    expect((request.mock.calls[0]?.[1]?.headers as Headers).get("authorization")).toMatch(
+      /^Basic /u,
+    );
   });
 
   it("rejects unsafe redirect URLs and incomplete provider responses", async () => {
