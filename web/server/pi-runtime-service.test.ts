@@ -230,4 +230,183 @@ describe("Pi Runtime service", () => {
       ),
     ).rejects.toThrow("preparation");
   });
+
+  it("routes requests through the scoped transport and rejects malformed authority", async () => {
+    const requestedRoot = await mkdtemp(join(tmpdir(), "piwork-runtime-service-"));
+    roots.push(requestedRoot);
+    const dataRoot = realpathSync(requestedRoot);
+    const transport = fakeTransport();
+    const launcher = {
+      launch: vi.fn(async (options: any) => ({
+        sessionId: options.sessionId,
+        state: "ready",
+        thinkingLevel: "off",
+        mode: "agent",
+        cwd: options.workingDirectory,
+        createdAt: Date.now(),
+        backendType: "pi",
+        transport: "pi-rpc",
+        generation: options.runtimeScope.generation,
+        piVersion: "0.82.1",
+      })),
+      getTransport: vi.fn(() => transport),
+      validateLaunchGeneration: vi.fn(() => true),
+      getSession: vi.fn(() => ({ sessionId: scope.sessionId, generation: scope.generation })),
+      isAlive: vi.fn(() => true),
+      kill: vi.fn(async () => true),
+      killAll: vi.fn(async () => undefined),
+    };
+    const service = new PiRuntimeService({
+      dataRoot,
+      trustedExtensionPath: fileURLToPath(new URL("./pi-trusted-extension.ts", import.meta.url)),
+      executionMode: "native",
+      launcher: launcher as never,
+    });
+    const handle = service.handler();
+    const peer = connection();
+    const prepared = (await handle(
+      {
+        version: 1,
+        kind: "request",
+        id: "prepare",
+        operation: "launch.prepare",
+        scope,
+        payload: preparePayload(),
+        mac: "test",
+      },
+      peer,
+    )) as { nonce: string };
+    await handle(
+      {
+        version: 1,
+        kind: "request",
+        id: "bootstrap",
+        operation: "launch.bootstrap",
+        scope,
+        payload: bootstrapPayload(prepared.nonce),
+        mac: "test",
+      },
+      peer,
+    );
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "rpc",
+          operation: "request",
+          scope,
+          payload: { input: { type: "get_state" }, awaitResponse: true },
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "input",
+          operation: "request",
+          scope,
+          payload: { input: { type: "prompt", message: "hello" } },
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toEqual({ accepted: true });
+    await expect(handle({ version: 1, kind: "request", id: "interrupt", operation: "interrupt", scope, payload: {}, mac: "test" }, peer)).resolves.toEqual({ interrupted: true });
+    await expect(handle({ version: 1, kind: "request", id: "status", operation: "status", scope, payload: {}, mac: "test" }, peer)).resolves.toMatchObject({ alive: true });
+    await expect(handle({ version: 1, kind: "request", id: "kill", operation: "kill", scope, payload: {}, mac: "test" }, peer)).resolves.toEqual({ killed: true });
+    expect(transport.abort).toHaveBeenCalledOnce();
+    expect(transport.sendInput).toHaveBeenCalledOnce();
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "missing-input",
+          operation: "request",
+          scope,
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).rejects.toThrow("input is required");
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "stale-status",
+          operation: "status",
+          scope: { ...scope, generation: 2 },
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toMatchObject({ alive: true });
+    await expect(service.shutdown()).resolves.toBeUndefined();
+    expect(launcher.killAll).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed for invalid launch and bootstrap policies", async () => {
+    const requestedRoot = await mkdtemp(join(tmpdir(), "piwork-runtime-service-"));
+    roots.push(requestedRoot);
+    const service = new PiRuntimeService({
+      dataRoot: realpathSync(requestedRoot),
+      trustedExtensionPath: fileURLToPath(new URL("./pi-trusted-extension.ts", import.meta.url)),
+      executionMode: "native",
+      launcher: { killAll: vi.fn(async () => undefined) } as never,
+    });
+    const handle = service.handler();
+    const peer = connection();
+    const base = preparePayload();
+    for (const payload of [
+      null,
+      { ...base, version: 2 },
+      { ...base, mode: "invalid" },
+      { ...base, network: { allowedDomains: "bad", deniedDomains: [] } },
+      { ...base, managedSkillPaths: "bad" },
+      { ...base, model: { provider: "openai" } },
+      { ...base, thinkingLevel: "invalid" },
+      { ...base, resumeSessionPath: "../escape" },
+    ]) {
+      await expect(
+        handle(
+          { version: 1, kind: "request", id: "invalid", operation: "launch.prepare", scope, payload, mac: "test" },
+          peer,
+        ),
+      ).rejects.toThrow();
+    }
+    const prepared = (await handle(
+      {
+        version: 1,
+        kind: "request",
+        id: "prepare",
+        operation: "launch.prepare",
+        scope,
+        payload: base,
+        mac: "test",
+      },
+      peer,
+    )) as { nonce: string };
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "invalid-bootstrap",
+          operation: "launch.bootstrap",
+          scope,
+          payload: { ...bootstrapPayload(prepared.nonce), taskPolicy: { depth: "bad" } },
+          mac: "test",
+        },
+        peer,
+      ),
+    ).rejects.toThrow(/task policy/);
+  });
 });

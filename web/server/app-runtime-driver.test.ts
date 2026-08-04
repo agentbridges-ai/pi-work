@@ -937,7 +937,7 @@ describe("App runtime drivers", () => {
       id: "domain-1",
       hostname: "other.example.com",
       zoneId: "a".repeat(32),
-      certificateId: null,
+      certificateId: "certificate-1",
     });
     const driver = new CloudflareAppRuntimeDriver({ apiFactory: () => api });
     await expect(

@@ -54,6 +54,7 @@ function fixture(
       connection: { id: "connection-1" },
       returnPath: "/apps?view=mine",
     }),
+    cancelOAuth: vi.fn().mockResolvedValue({ returnPath: "/apps?view=mine" }),
     refreshConnection: vi.fn().mockResolvedValue({ id: "connection-1" }),
     revokeConnection: vi.fn().mockResolvedValue(undefined),
     getConnection: vi.fn().mockResolvedValue({ id: "connection-1" }),
@@ -369,5 +370,39 @@ describe("Apps Cloudflare account routes", () => {
     expect(connections.status).toBe(503);
     expect(service.provisionTemporaryAccount).not.toHaveBeenCalled();
     expect(service.listConnections).not.toHaveBeenCalled();
+  });
+
+  it("covers browser-safe connection, preview, target, and OAuth callback routes", async () => {
+    const { api, service } = fixture();
+    await expect((await api.request("/apps/cloudflare/connections")).json()).resolves.toEqual({
+      connections: [],
+    });
+    await expect((await api.request("/cloudflare/connections/connection-1")).json()).resolves.toEqual({
+      connection: { id: "connection-1" },
+    });
+    expect((await api.request("/apps/cloudflare/connections/connection-1/refresh", { method: "POST" })).status).toBe(200);
+    expect((await api.request("/apps/cloudflare/connections/connection-1", { method: "DELETE" })).status).toBe(204);
+    await expect((await api.request("/apps/cloudflare/temporary")).json()).resolves.toEqual({ previews: [] });
+    expect((await api.request("/apps/cloudflare/temporary/preview-1/claim")).status).toBe(302);
+    await expect((await api.request("/apps/cloudflare/targets/app-1")).json()).resolves.toEqual({
+      target: { appId: "app-1", target: "unassigned" },
+    });
+    const invalidTarget = await api.request("/apps/deployments/deployment-1/target", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ target: "unknown" }),
+    });
+    expect(invalidTarget.status).toBe(400);
+    const denied = await api.request(
+      "/cloudflare/oauth/callback?state=opaque-state&error=access_denied",
+    );
+    expect(denied.status).toBe(302);
+    expect(denied.headers.get("location")).toContain("cloudflare=denied");
+    const missingCode = await api.request("/cloudflare/oauth/callback?state=opaque-state");
+    expect(missingCode.status).toBe(400);
+    expect(service.cancelOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({ membershipId: "member-1" }),
+      "opaque-state",
+    );
   });
 });

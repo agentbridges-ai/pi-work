@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  NATIVE_FILE_ACTIONS,
   NATIVE_HELPER_PROTOCOL_VERSION,
   NativeHelperService,
   nativeHelperVersionIsNewer,
+  validateNativeHelperAnchor,
 } from "./native-helper.js";
 
 const roots: string[] = [];
@@ -180,6 +182,79 @@ describe("NativeHelperService", () => {
       }),
     ).rejects.toMatchObject({ status: 501 });
     value.server.close();
+  });
+
+  it("validates native presentation anchors and exposes only owner-scoped edits", async () => {
+    expect(validateNativeHelperAnchor(undefined)).toBeUndefined();
+    expect(
+      validateNativeHelperAnchor({ x: 10, y: 20, width: 300, height: 200 }),
+    ).toEqual({ x: 10, y: 20, width: 300, height: 200 });
+    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 1 })).toThrow(
+      /anchor/,
+    );
+    expect(() => validateNativeHelperAnchor({ x: Infinity, y: 0, width: 1, height: 1 })).toThrow(
+      /anchor/,
+    );
+
+    const value = await fixture();
+    const operation = await value.service.createFileAction({
+      ownerKey: "user-a",
+      sessionId: "session-a",
+      action: "file.nativeEdit",
+      bytes: new Uint8Array([1, 2, 3]),
+      filename: "nested/unsafe:name.bin",
+      source: { space: "agent", path: "nested/unsafe:name.bin" },
+      anchor: { x: 1, y: 2, width: 3, height: 4 },
+    });
+    await expect(value.service.listFileActions("user-a", "session-a")).resolves.toEqual([
+      operation,
+    ]);
+    await expect(value.service.listFileActions("other-user", "session-a")).resolves.toEqual([]);
+    await value.service.cancelFileAction(operation.id, "session-a", "user-a");
+    await expect(value.service.listFileActions("user-a", "session-a")).resolves.toEqual([]);
+    await value.service.dispose();
+    value.server.close();
+  });
+
+  it("supports every declared macOS action and reports unavailable helpers", async () => {
+    const value = await fixture();
+    for (const action of NATIVE_FILE_ACTIONS) {
+      await expect(
+        value.service.createFileAction({
+          ownerKey: "user-a",
+          sessionId: "session-a",
+          action,
+          bytes: new Uint8Array([1]),
+          filename: `${action}.txt`,
+          source: { space: "agent", path: `${action}.txt` },
+        }),
+      ).resolves.toMatchObject({ action });
+    }
+    value.server.close();
+
+    const unavailable = new NativeHelperService({
+      platform: "darwin",
+      socketPath: join(tmpdir(), "piwork-missing-helper.sock"),
+      stagingRoot: join(tmpdir(), "piwork-missing-helper-staging"),
+      fetchLatestVersion: async () => {
+        throw new Error("release unavailable");
+      },
+    });
+    await expect(unavailable.status({ refreshLatest: true })).resolves.toMatchObject({
+      supported: true,
+      connected: false,
+      lastError: expect.stringMatching(/unavailable|release unavailable/),
+    });
+    await expect(
+      unavailable.createFileAction({
+        ownerKey: "user-a",
+        sessionId: "session-a",
+        action: "invalid" as never,
+        bytes: new Uint8Array(),
+        filename: "x",
+        source: { space: "agent", path: "x" },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });
 

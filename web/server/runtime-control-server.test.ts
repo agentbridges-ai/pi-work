@@ -29,6 +29,22 @@ afterEach(async () => {
 });
 
 describe("Piwork Runtime Unix control channel", () => {
+  it("rejects unsafe server limits and relative client socket paths", async () => {
+    const authenticator = new RuntimeControlAuthenticator(randomBytes(32));
+    expect(
+      () =>
+        new RuntimeControlServer({
+          socketPath: "/tmp/piwork-runtime.sock",
+          authenticator,
+          handler: async () => undefined,
+          maxInFlight: 0,
+        }),
+    ).toThrow(/maxInFlight/);
+    const client = new RuntimeControlClient({ socketPath: "runtime.sock", authenticator });
+    await expect(client.request(scope, "status")).rejects.toThrow(/absolute/);
+    await client.close();
+  });
+
   it("serves authenticated requests, events, and fragmented LF frames", async () => {
     const root = await mkdtemp(join(tmpdir(), "piwork-runtime-control-"));
     roots.push(root);
