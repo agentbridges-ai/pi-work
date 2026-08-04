@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderBootstrap } from "./pi-bootstrap-channel.js";
-import { nativeHelperService } from "./native-helper.js";
 import type { ResolvedPiSandbox, SessionLaunchContext } from "./session-orchestrator-contract.js";
 
 const fakes = vi.hoisted(() => ({
@@ -82,6 +81,8 @@ vi.mock("./local-paths.js", async (importOriginal) => ({
 import { PiLaunchOptionsBuilder } from "./pi-launch-options-builder.js";
 import { PiProviderVault } from "./pi-provider-vault.js";
 import { ensurePiRuntimeLayout } from "./pi-runtime-layout.js";
+import { ENV } from "./environment.js";
+import { nativeHelperService } from "./native-helper.js";
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const MODEL = { key: "openai/model", provider: "openai", modelId: "model" };
@@ -139,6 +140,10 @@ async function fixture(
   const registerSecrets = vi.fn();
   const onTaskEvent = vi.fn();
   const deliverTaskResult = vi.fn(async () => undefined);
+  const handleApp = vi.fn(async (_request: unknown, _context: unknown, scope: unknown) => ({
+    ok: true,
+    scope,
+  }));
   const observer = { record: vi.fn() };
   const runtimeObserverForSession = vi.fn(() => observer);
   fakes.prepare.mockImplementation(({ sessionRoot: root }: { sessionRoot: string }) => ({
@@ -171,12 +176,13 @@ async function fixture(
     internalTransport: { unixSocketPath: "/tmp/internal.sock" },
     providerVault: new PiProviderVault([provider()]),
     issueUserSpaceCapability: () => "issued-user-space-capability",
+    nativeHelperOwnerKey: "native-owner",
     controlPlane: controlPlane as never,
+    handleApp: overrides.handleApp ?? handleApp,
     registerRecordingSensitiveValues: registerSecrets,
     onTaskEvent,
     deliverTaskResult,
     runtimeObserverForSession: runtimeObserverForSession as never,
-    handleApp: overrides.handleApp,
   });
   return {
     builder,
@@ -186,6 +192,7 @@ async function fixture(
     registerSecrets,
     onTaskEvent,
     deliverTaskResult,
+    handleApp,
     observer,
     runtimeObserverForSession,
   };
@@ -282,6 +289,95 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
     expect(value.onTaskEvent).toHaveBeenCalledWith(SESSION_ID, {
       type: "task_progress",
     });
+  });
+
+  it("requires compose authority and forwards App/native-file broker requests", async () => {
+    vi.stubEnv(ENV.PIWORK_RUNTIME_MODE, "compose");
+    const composeValue = await fixture();
+    await expect(
+      composeValue.builder.build(SESSION_ID, 1, {
+        request: { resolvedSandbox: sandbox() },
+      }),
+    ).rejects.toThrow("Compose Pi Runtime requires a tenant-scoped Agent authority");
+    vi.unstubAllEnvs();
+
+    const value = await fixture();
+    const authority = {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
+      agentDefinitionId: "agent-1",
+      agentVersionId: "version-1",
+      effectivePolicyHash: "a".repeat(64),
+    };
+    const context: SessionLaunchContext = {
+      request: { resolvedSandbox: sandbox() },
+      persisted: {
+        id: SESSION_ID,
+        authority,
+        offlineQueue: [],
+        processedClientMessageIds: [],
+      },
+    };
+    const launch = await value.builder.build(SESSION_ID, 5, context);
+    expect(launch.runtimeScope).toEqual({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
+      sessionId: SESSION_ID,
+      generation: 5,
+    });
+    const brokerOptions = fakes.brokerInstances.at(-1)!.options;
+    await expect(
+      (brokerOptions.handleApp as (request: unknown, brokerContext: unknown) => Promise<unknown>)(
+        { operation: "app.list" },
+        { signal: new AbortController().signal },
+      ),
+    ).resolves.toMatchObject({ ok: true, scope: { generation: 5, sessionId: SESSION_ID } });
+    expect(value.handleApp).toHaveBeenCalledWith(
+      { operation: "app.list" },
+      { signal: expect.any(AbortSignal) },
+      expect.objectContaining({ workspaceDir: join(value.sessionRoot, "workspace") }),
+    );
+
+    await expect(
+      (brokerOptions.handleNativeFile as (request: unknown) => Promise<unknown>)({ payload: null }),
+    ).rejects.toThrow("Native file action payload is invalid");
+    await expect(
+      (brokerOptions.handleNativeFile as (request: unknown) => Promise<unknown>)({
+        payload: { action: "file.quickLook", path: "../outside.txt" },
+      }),
+    ).rejects.toThrow("outside Agent Space");
+
+    const workspaceDir = join(value.sessionRoot, "workspace");
+    await mkdir(workspaceDir, { recursive: true });
+    await writeFile(join(workspaceDir, "report.txt"), "hello");
+    const createFileAction = vi.spyOn(nativeHelperService, "createFileAction").mockResolvedValue({
+      id: "native-operation-1",
+      action: "file.quickLook",
+      state: "completed",
+    } as never);
+    await expect(
+      (brokerOptions.handleNativeFile as (request: unknown) => Promise<unknown>)({
+        payload: { action: "file.quickLook", path: "report.txt" },
+      }),
+    ).resolves.toEqual({
+      operationId: "native-operation-1",
+      action: "file.quickLook",
+      state: "completed",
+    });
+    expect(createFileAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerKey: "native-owner",
+        sessionId: SESSION_ID,
+        filename: "report.txt",
+        source: expect.objectContaining({ path: "report.txt", space: "agent" }),
+      }),
+    );
+    createFileAction.mockRestore();
+    launch.onExit?.(sessionInfo(5));
   });
 
   it("restores Pi state, resolves pinned authority, and disposes superseded generations", async () => {

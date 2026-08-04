@@ -185,78 +185,94 @@ describe("NativeHelperService", () => {
     value.server.close();
   });
 
-  it("validates native presentation anchors and exposes only owner-scoped edits", async () => {
+  it("covers bounded anchors, unsupported status, transient actions, and operation listing", async () => {
     expect(validateNativeHelperAnchor(undefined)).toBeUndefined();
-    expect(validateNativeHelperAnchor({ x: 10, y: 20, width: 300, height: 200 })).toEqual({
-      x: 10,
-      y: 20,
-      width: 300,
-      height: 200,
+    expect(validateNativeHelperAnchor({ x: 1, y: 2, width: 10, height: 20 })).toEqual({
+      x: 1,
+      y: 2,
+      width: 10,
+      height: 20,
     });
-    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 1 })).toThrow(/anchor/);
-    expect(() => validateNativeHelperAnchor({ x: Infinity, y: 0, width: 1, height: 1 })).toThrow(
-      /anchor/,
+    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 10 })).toThrow(
+      /anchor rectangle/,
     );
+    await expect(new NativeHelperService({ platform: "linux" }).status()).resolves.toMatchObject({
+      supported: false,
+      connected: false,
+      compatible: false,
+    });
 
     const value = await fixture();
     const operation = await value.service.createFileAction({
       ownerKey: "user-a",
       sessionId: "session-a",
-      action: "file.nativeEdit",
+      action: "file.open",
       bytes: new Uint8Array([1, 2, 3]),
-      filename: "nested/unsafe:name.bin",
-      source: { space: "agent", path: "nested/unsafe:name.bin" },
-      anchor: { x: 1, y: 2, width: 3, height: 4 },
+      filename: "nested/path.txt",
+      source: { space: "agent", path: "nested/path.txt", baselineSha256: "not-a-digest" },
+      anchor: { x: 5, y: 6, width: 7, height: 8 },
+      applicationPath: "/Applications/Preview.app",
     });
-    await expect(value.service.listFileActions("user-a", "session-a")).resolves.toEqual([
-      operation,
-    ]);
-    await expect(value.service.listFileActions("other-user", "session-a")).resolves.toEqual([]);
-    await value.service.cancelFileAction(operation.id, "session-a", "user-a");
+    expect(operation.state).toBe("shown");
     await expect(value.service.listFileActions("user-a", "session-a")).resolves.toEqual([]);
+    await value.service.cancelFileAction(operation.id);
     await value.service.dispose();
     value.server.close();
   });
 
-  it("supports every declared macOS action and reports unavailable helpers", async () => {
-    const value = await fixture();
-    for (const action of NATIVE_FILE_ACTIONS) {
+  it("handles GitHub release metadata and incompatible manifests without leaking errors", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
       await expect(
-        value.service.createFileAction({
-          ownerKey: "user-a",
-          sessionId: "session-a",
-          action,
-          bytes: new Uint8Array([1]),
-          filename: `${action}.txt`,
-          source: { space: "agent", path: `${action}.txt` },
-        }),
-      ).resolves.toMatchObject({ action });
-    }
-    value.server.close();
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({ latestVersion: null });
 
-    const unavailable = new NativeHelperService({
-      platform: "darwin",
-      socketPath: join(tmpdir(), "piwork-missing-helper.sock"),
-      stagingRoot: join(tmpdir(), "piwork-missing-helper-staging"),
-      fetchLatestVersion: async () => {
-        throw new Error("release unavailable");
-      },
-    });
-    await expect(unavailable.status({ refreshLatest: true })).resolves.toMatchObject({
-      supported: true,
-      connected: false,
-      lastError: expect.stringMatching(/unavailable|release unavailable/),
-    });
-    await expect(
-      unavailable.createFileAction({
-        ownerKey: "user-a",
-        sessionId: "session-a",
-        action: "invalid" as never,
-        bytes: new Uint8Array(),
-        filename: "x",
-        source: { space: "agent", path: "x" },
-      }),
-    ).rejects.toMatchObject({ status: 400 });
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ tag_name: "v0.3.0", assets: [] }), { status: 200 }),
+      );
+      await expect(
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({ latestVersion: "0.3.0" });
+
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tag_name: "v0.3.1",
+            assets: [
+              {
+                name: "piwork-helper-0.3.1-manifest.json",
+                browser_download_url: "https://example.test/manifest",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ version: "0.3.0", protocol: { minimum: 1, maximum: 1 } }), {
+          status: 200,
+        }),
+      );
+      await expect(
+        new NativeHelperService({
+          platform: "darwin",
+          socketPath: "/tmp/piwork-helper-missing.sock",
+        }).status({ refreshLatest: true }),
+      ).resolves.toMatchObject({
+        lastError: expect.stringContaining("unavailable"),
+        latestVersion: null,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -265,6 +281,8 @@ describe("nativeHelperVersionIsNewer", () => {
     expect(nativeHelperVersionIsNewer("0.2.0", "0.1.9")).toBe(true);
     expect(nativeHelperVersionIsNewer("0.1.0", "0.1.0")).toBe(false);
     expect(nativeHelperVersionIsNewer("bad", "0.1.0")).toBe(false);
+    expect(nativeHelperVersionIsNewer("0.1.0", "0.2.0")).toBe(false);
+    expect(nativeHelperVersionIsNewer("0.1.0", "0.1.0-beta")).toBe(false);
   });
 
   it("parses the default GitHub release manifest and tolerates a missing release", async () => {

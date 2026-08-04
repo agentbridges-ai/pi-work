@@ -112,4 +112,36 @@ describe("Piwork Runtime Unix control channel", () => {
     await client.close();
     await new Promise<void>((resolve) => rawServer.close(() => resolve()));
   });
+
+  it("normalizes handler failures and rejects unsafe client/server options", async () => {
+    const root = await mkdtemp(join(tmpdir(), "piwork-runtime-control-"));
+    roots.push(root);
+    const socketPath = join(root, "runtime.sock");
+    const authenticator = new RuntimeControlAuthenticator(randomBytes(32));
+    expect(
+      () =>
+        new RuntimeControlServer({
+          socketPath,
+          authenticator,
+          maxInFlight: 0,
+          handler: async () => ({}),
+        }),
+    ).toThrow(/maxInFlight/);
+    await expect(
+      new RuntimeControlClient({ socketPath: "relative.sock", authenticator }).connect(),
+    ).rejects.toThrow(/socket path must be absolute/);
+
+    const server = new RuntimeControlServer({
+      socketPath,
+      authenticator,
+      handler: async () => {
+        throw new Error("runtime handler failed");
+      },
+    });
+    await server.start();
+    const client = new RuntimeControlClient({ socketPath, authenticator });
+    await expect(client.request(scope, "status")).rejects.toThrow("runtime handler failed");
+    await client.close();
+    await server.close();
+  });
 });

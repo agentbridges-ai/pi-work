@@ -336,130 +336,58 @@ describe("AppsControlPlane persistence paths", () => {
     await expect(service.retryOutbox("outbox-1", "worker-1", "retry")).resolves.toBe(true);
   });
 
-  it("rejects invalid App scopes and immutable deployment inputs before mutation", async () => {
-    const { pool, currentApp } = makePool();
-    currentApp.created_at = "not-a-date";
-    const service = new AppsControlPlane(pool as unknown as Pool);
-
-    await expect(service.listApps(context, { scope: "invalid" as never })).rejects.toThrow(
-      "Invalid App list scope",
-    );
-    await expect(service.listApps(context, { scope: "current-session" })).rejects.toThrow(
-      "sessionId is required",
-    );
-    await expect(
-      service.listVersions(context, "app-1", Buffer.from("0", "utf8").toString("base64url")),
-    ).rejects.toThrow("Invalid pagination cursor");
-    await expect(service.listApps(context, { scope: "tenant", limit: 1 })).resolves.toMatchObject({
-      apps: [expect.objectContaining({ createdAt: "1970-01-01T00:00:00.000Z" })],
+  it("creates a first App publish with stable tenant and Worker identities", async () => {
+    const currentApp = appRow();
+    const currentDeployment = deploymentRow("awaiting_target");
+    const query = vi.fn(async (sql: string) => {
+      const normalized = sql.trim().replace(/\s+/g, " ");
+      if (["begin", "commit", "rollback"].includes(normalized)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes("from tenant_memberships")) {
+        return { rows: [{ id: "member-1", tenant_name: "Acme Team" }], rowCount: 1 };
+      }
+      if (normalized.includes("from scoped_role_assignments")) {
+        return { rows: [{ permission_key: "app:publish" }], rowCount: 1 };
+      }
+      if (normalized.includes("tenant_id=$1 and slug=$2")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes("select coalesce(max(version)")) {
+        return { rows: [{ version: 1 }], rowCount: 1 };
+      }
+      if (normalized.includes("insert into app_deployments")) {
+        return { rows: [currentDeployment], rowCount: 1 };
+      }
+      if (normalized.includes("from apps a left join")) {
+        return { rows: [currentApp], rowCount: 1 };
+      }
+      if (normalized.includes("select * from apps where id=$1")) {
+        return { rows: [currentApp], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
     });
+    const client = { query, release: vi.fn() };
+    const service = new AppsControlPlane({
+      query,
+      connect: vi.fn().mockResolvedValue(client),
+    } as unknown as Pool);
 
-    const deploymentInput = {
-      slug: "demo",
-      sourceDigest: "a".repeat(64),
+    const result = await service.beginDeployment(context, {
+      slug: "new-app",
+      name: "New App",
+      sourceDigest: "b".repeat(64),
+      sourceSnapshotKey: "app-1/sources/deployment-1",
       manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
       bindingManifest: {},
-    } as const;
-    await expect(
-      service.beginDeployment({ ...context, generation: -1 }, deploymentInput),
-    ).rejects.toThrow("session generation");
-    await expect(
-      service.beginDeployment({ ...context, idempotencyKey: "bad key" }, deploymentInput),
-    ).rejects.toThrow("idempotency key");
-    await expect(
-      service.beginDeployment(context, { ...deploymentInput, sourceDigest: "bad" }),
-    ).rejects.toThrow("SHA-256");
-    await expect(
-      service.beginDeployment(context, {
-        ...deploymentInput,
-        manifest: { ...deploymentInput.manifest, version: 2 as never },
-      }),
-    ).rejects.toThrow("Unsupported");
-    await expect(
-      service.setSourceSnapshotKey(context, "app-1", "deployment-1", 4, "../escape"),
-    ).rejects.toThrow("safe user-relative path");
-    expect(redactAppLogValue("Bearer secret_123456789012 and token_123456789012")).toBe(
-      "[REDACTED] and [REDACTED]",
+    });
+    expect(result.deployment).toMatchObject({ phase: "awaiting_target" });
+    const insert = query.mock.calls.find(([sql]) => String(sql).includes("insert into apps"));
+    expect((insert as unknown as [string, unknown[]] | undefined)?.[1]).toEqual(
+      expect.arrayContaining(["new-app", "New App"]),
     );
-  });
-
-  it("fails closed for stale outbox work, invalid domains, memberships, permissions, and leases", async () => {
-    const { pool } = makePool();
-    const service = new AppsControlPlane(pool as unknown as Pool);
-    await expect(
-      service.setCustomDomain(context, "app-1", {
-        hostname: "localhost",
-        connectionId: "connection-1",
-        zoneId: "zone-1",
-        leaseToken: "lease-1",
-      }),
-    ).rejects.toThrow("valid public custom-domain");
-
-    const staleOutboxQuery = vi
-      .fn()
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    const staleOutbox = new AppsControlPlane({ query: staleOutboxQuery } as unknown as Pool);
-    await expect(staleOutbox.completeOutbox("outbox-1", "worker-1")).resolves.toBe(false);
-    expect(staleOutboxQuery).toHaveBeenCalledTimes(2);
-
-    const mismatchedMembership = new AppsControlPlane({
-      query: vi.fn(async (sql: string) =>
-        sql.includes("from tenant_memberships")
-          ? { rows: [{ id: "other-membership" }], rowCount: 1 }
-          : { rows: [], rowCount: 0 },
-      ),
-    } as unknown as Pool);
-    await expect(mismatchedMembership.listApps(context, { scope: "tenant" })).rejects.toThrow(
-      "Tenant membership not found",
-    );
-
-    const forbiddenClient = {
-      query: vi.fn(async (sql: string) => {
-        const normalized = sql.replace(/\s+/gu, " ").trim();
-        if (normalized === "begin" || normalized === "rollback") return { rows: [], rowCount: 0 };
-        if (normalized.includes("select * from apps where"))
-          return { rows: [appRow()], rowCount: 1 };
-        if (normalized.includes("from tenant_memberships")) {
-          return {
-            rows: [{ id: "member-1", tenant_id: "tenant-1", user_id: "user-1" }],
-            rowCount: 1,
-          };
-        }
-        return { rows: [], rowCount: 0 };
-      }),
-      release: vi.fn(),
-    };
-    const forbidden = new AppsControlPlane({
-      connect: vi.fn(async () => forbiddenClient),
-    } as unknown as Pool);
-    await expect(forbidden.archive(context, "app-1")).rejects.toThrow(
-      "Forbidden by scoped authorization",
-    );
-
-    const staleLeaseClient = {
-      query: vi.fn(async (sql: string) => {
-        const normalized = sql.replace(/\s+/gu, " ").trim();
-        if (normalized === "begin" || normalized === "rollback") return { rows: [], rowCount: 0 };
-        if (normalized.includes("select * from apps where"))
-          return { rows: [appRow()], rowCount: 1 };
-        if (normalized.includes("from tenant_memberships")) {
-          return {
-            rows: [{ id: "member-1", tenant_id: "tenant-1", user_id: "user-1" }],
-            rowCount: 1,
-          };
-        }
-        if (normalized.includes("from scoped_role_assignments"))
-          return { rows: [{ permission_key: "app:manage-own" }], rowCount: 1 };
-        return { rows: [], rowCount: 0 };
-      }),
-      release: vi.fn(),
-    };
-    const staleLease = new AppsControlPlane({
-      connect: vi.fn(async () => staleLeaseClient),
-    } as unknown as Pool);
-    await expect(
-      staleLease.markDeploymentDeploying(context, "app-1", "deployment-1", 4, "expired"),
-    ).rejects.toThrow("lease is stale or expired");
+    expect(String(insert?.[0])).toContain("tenant_handle");
+    expect(String(insert?.[0])).toContain("worker_name");
+    expect(client.release).toHaveBeenCalledOnce();
   });
 });

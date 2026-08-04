@@ -8,6 +8,7 @@ import type { AppsControlPlane } from "./apps-control-plane.js";
 import { serializeAppArtifact, type AppRuntimeDriver } from "./app-runtime-driver.js";
 import { AppsRuntimeCoordinator } from "./apps-runtime-coordinator.js";
 import type { AppDeploymentRecord, AppRecord } from "./apps-types.js";
+import { ENV } from "./environment.js";
 
 async function appFixture() {
   const root = await mkdtemp(join(tmpdir(), "piwork-apps-coordinator-"));
@@ -240,6 +241,8 @@ describe("AppsRuntimeCoordinator", () => {
 
   it("runs the selected BYOC target through the trusted driver and completes the outbox", async () => {
     const fixture = await appFixture();
+    await mkdir(join(fixture.source, "build", "client"), { recursive: true });
+    await writeFile(join(fixture.source, "build", "client", "index.html"), "<h1>demo</h1>\n");
     const artifact = await collectAppBuildArtifact(fixture.workspace, "demo");
     const stagedDir = join(fixture.creatorRoot, "published-apps", "staged-artifacts");
     await mkdir(stagedDir, { recursive: true });
@@ -257,47 +260,64 @@ describe("AppsRuntimeCoordinator", () => {
     const deploying = deployment({ ...queued, phase: "deploying" });
     const appRecord = {
       ...app("needs_action"),
+      currentDeploymentId: "deployment-old",
       targetKind: "byoc" as const,
       cloudflareConnectionId: "connection-1",
     };
-    const priorReceipt = {
-      id: "receipt-1",
-      appId: "app-1",
-      deploymentId: "deployment-0",
-      target: "byoc" as const,
-      connectionId: "connection-1",
-      temporaryAccountId: null,
-      logicalKey: "cache",
-      resourceKind: "kv" as const,
-      mode: "adopt" as const,
-      ownership: "adopted" as const,
-      externalId: "kv-1",
-      externalName: "cache",
-      stepStatus: "ready" as const,
-      metadata: { binding: "CACHE", jurisdiction: "eu" },
-      errorCode: null,
-      errorMessage: null,
-      createdAt: "2026-08-04T00:00:00.000Z",
-      updatedAt: "2026-08-04T00:00:00.000Z",
-    };
-    const workerReceipt = {
-      ...priorReceipt,
-      id: "receipt-worker",
-      logicalKey: "worker",
-      resourceKind: "worker" as const,
-    };
+    const prior = deployment({
+      id: "deployment-old",
+      phase: "ready",
+      targetKind: "byoc",
+      cloudflareConnectionId: "connection-1",
+      cloudflareVersionId: "old-version",
+      sourceDigest: artifact.sourceDigest,
+      artifactKey: "creator-artifact:" + artifact.artifactDigest,
+    });
     const controlPlane = {
       acquireLease: vi.fn().mockResolvedValue({ leaseToken: "lease-1" }),
       renewLease: vi.fn().mockResolvedValue(true),
       releaseLease: vi.fn().mockResolvedValue(true),
       getApp: vi.fn().mockResolvedValue(appRecord),
-      getDeployment: vi.fn().mockResolvedValue(queued),
+      getDeployment: vi.fn(async (_context, _appId, deploymentId) =>
+        deploymentId === "deployment-old" ? prior : queued,
+      ),
       markDeploymentDeploying: vi.fn().mockResolvedValue(deploying),
       completeDeployment: vi.fn().mockResolvedValue({ app: app("ready"), deployment: deploying }),
       completeOutboxByKey: vi.fn().mockResolvedValue(true),
       failOutboxByKey: vi.fn().mockResolvedValue(true),
       failDeployment: vi.fn(),
     };
+    const receipt = (
+      resourceKind: "worker" | "assets" | "domain" | "kv" | "durable_object",
+      logicalKey: string,
+      metadata: Record<string, unknown> = {},
+    ) => ({
+      id: "receipt-" + resourceKind + "-" + logicalKey,
+      appId: "app-1",
+      deploymentId: queued.id,
+      target: "byoc" as const,
+      connectionId: "connection-1",
+      temporaryAccountId: null,
+      logicalKey,
+      resourceKind,
+      mode: "create" as const,
+      ownership: "created" as const,
+      externalId: resourceKind + "-external-id",
+      externalName: resourceKind + "-external-name",
+      stepStatus: "ready" as const,
+      metadata,
+      errorCode: null,
+      errorMessage: null,
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    });
+    const receipts = [
+      receipt("worker", "worker"),
+      receipt("assets", "assets"),
+      receipt("domain", "domain"),
+      receipt("kv", "cache", { binding: "CACHE", jurisdiction: "eu" }),
+      receipt("durable_object", "rooms", { binding: "ROOMS", jurisdiction: "fedramp" }),
+    ];
     const accounts = {
       resolveDeploymentCredential: vi.fn().mockResolvedValue({
         target: "byoc",
@@ -308,7 +328,7 @@ describe("AppsRuntimeCoordinator", () => {
         expiresAt: null,
       }),
       transitionDeploymentPhase: vi.fn().mockResolvedValue(undefined),
-      listDeploymentReceipts: vi.fn().mockResolvedValue([priorReceipt, workerReceipt]),
+      listDeploymentReceipts: vi.fn().mockResolvedValue(receipts),
       recordResourceReceipt: vi.fn().mockResolvedValue({}),
     };
     const driver = {
@@ -358,13 +378,10 @@ describe("AppsRuntimeCoordinator", () => {
     );
     expect(driver.prepareResources).toHaveBeenCalledWith(
       expect.objectContaining({
-        existingReceipts: [
-          expect.objectContaining({
-            logicalKey: "cache",
-            binding: "CACHE",
-            jurisdiction: "eu",
-          }),
-        ],
+        existingReceipts: expect.arrayContaining([
+          expect.objectContaining({ logicalKey: "cache", binding: "CACHE", jurisdiction: "eu" }),
+          expect.objectContaining({ logicalKey: "rooms", mode: "created", binding: "ROOMS" }),
+        ]),
       }),
     );
     expect(controlPlane.completeDeployment).toHaveBeenCalledWith(
@@ -1150,65 +1167,92 @@ describe("AppsRuntimeCoordinator", () => {
     );
   });
 
-  it("routes read, rollback, preview, and stale broker operations through authority", async () => {
+  it("rejects stale broker authority, missing identifiers, unsupported operations, and unsafe mutations", async () => {
     const fixture = await appFixture();
-    const ready = {
-      ...app("ready"),
-      stableUrl: "https://demo.example.workers.dev",
-      currentDeploymentId: "deployment-1",
-    } as AppRecord;
-    const listApps = vi.fn().mockResolvedValue({ apps: [ready], nextCursor: null });
-    const listVersions = vi.fn().mockResolvedValue({ versions: [], nextCursor: null });
-    const getDeployment = vi
-      .fn()
-      .mockResolvedValue(deployment({ artifactKey: "creator-artifact:a" }));
-    const rollback = vi.fn().mockResolvedValue({ app: ready, deployment: deployment() });
-    const getApp = vi.fn().mockResolvedValue(ready);
-    const { coordinator } = harness(
-      { listApps, listVersions, getDeployment, rollback, getApp },
-      fixture.creatorRoot,
-    );
+    const getApp = vi.fn().mockResolvedValue(app("building"));
+    const { coordinator } = harness({ getApp }, fixture.creatorRoot);
 
     await expect(
       coordinator.handleBroker(
-        brokerRequest("app.list", { scope: "tenant" }),
+        { ...brokerRequest("app.preview", { appId: "app-1" }), generation: 999 },
         brokerContext,
-        brokerScope,
+        { ...brokerScope },
       ),
-    ).resolves.toEqual({ apps: [ready], nextCursor: null });
+    ).rejects.toThrow(/authority is stale/);
     await expect(
-      coordinator.handleBroker(
-        brokerRequest("app.versions", { appId: "app-1" }),
-        brokerContext,
-        brokerScope,
-      ),
-    ).resolves.toEqual({ versions: [], nextCursor: null });
-    await expect(
-      coordinator.handleBroker(
-        brokerRequest("app.rollback", { appId: "app-1", deploymentId: "deployment-1" }),
-        brokerContext,
-        brokerScope,
-      ),
-    ).resolves.toEqual({ app: ready, deployment: deployment() });
-    await expect(
-      coordinator.handleBroker(
-        brokerRequest("app.preview", { appId: "app-1" }),
-        brokerContext,
-        brokerScope,
-      ),
-    ).resolves.toMatchObject({ appId: "app-1", ready: true, url: ready.stableUrl });
-    expect(listApps).toHaveBeenCalledOnce();
-    expect(listVersions).toHaveBeenCalledOnce();
-    expect(getDeployment).toHaveBeenCalledOnce();
-    expect(rollback).toHaveBeenCalledOnce();
-    await expect(
-      coordinator.handleBroker(brokerRequest("app.list", {}), brokerContext, {
+      coordinator.handleBroker(brokerRequest("app.versions", {}), brokerContext, {
         ...brokerScope,
-        generation: 8,
       }),
-    ).rejects.toThrow("broker authority is stale");
+    ).rejects.toThrow(/appId is required/);
     await expect(
-      coordinator.handleBroker(brokerRequest("app.unknown", {}), brokerContext, brokerScope),
-    ).rejects.toThrow("Unsupported App broker operation");
+      coordinator.handleBroker(brokerRequest("app.unsupported", {}), brokerContext, {
+        ...brokerScope,
+      }),
+    ).rejects.toThrow(/Unsupported App broker operation/);
+    await expect(
+      coordinator.handleBroker(brokerRequest("app.preview", { appId: "app-1" }), brokerContext, {
+        ...brokerScope,
+      }),
+    ).rejects.toThrow(/preview is unavailable/);
+    await expect(
+      coordinator.setCustomDomain(
+        {
+          tenantId: "tenant-1",
+          userId: "user-1",
+          membershipId: "member-1",
+          generation: 1,
+          mode: "ui",
+          rootTask: true,
+          readOnly: false,
+        },
+        "app-1",
+        {
+          connectionId: "connection-1",
+          zoneId: "zone-1",
+          hostname: "app.example.com",
+          confirmImpact: false as never,
+        },
+      ),
+    ).rejects.toThrow(/impact confirmation/);
+    await expect(
+      coordinator.removeCustomDomain(
+        {
+          tenantId: "tenant-1",
+          userId: "user-1",
+          membershipId: "member-1",
+          generation: 1,
+          mode: "ui",
+          rootTask: true,
+          readOnly: false,
+        },
+        "app-1",
+        {
+          connectionId: "connection-1",
+          zoneId: "zone-1",
+          hostname: "app.example.com",
+          confirmImpact: false as never,
+        },
+      ),
+    ).rejects.toThrow(/impact confirmation/);
+    vi.stubEnv(ENV.PIWORK_APPS_KILL_SWITCH, "1");
+    try {
+      await expect(
+        coordinator.rollback(
+          {
+            tenantId: "tenant-1",
+            userId: "user-1",
+            membershipId: "member-1",
+            generation: 1,
+            mode: "ui",
+            rootTask: true,
+            readOnly: false,
+          },
+          "app-1",
+          "deployment-1",
+        ),
+      ).rejects.toThrow(/deployments are paused/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

@@ -304,6 +304,65 @@ describe("PiRuntimeBrokers", () => {
     expect(handleNativeFile).toHaveBeenCalledOnce();
   });
 
+  it("gates App mutations to the root Agent task and delegates read-only operations", async () => {
+    const handleApp = vi.fn(async (value: { operation: string }) => ({
+      operation: value.operation,
+    }));
+    const brokers = new PiRuntimeBrokers({
+      runtimeDir: "/tmp/piwork-runtime-test",
+      sessionId: "session-1",
+      generation: 3,
+      mode: "agent",
+      handleApp,
+    });
+    const context = {
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+    };
+
+    await expect(mocks.handle!(request("app.list"), context)).resolves.toEqual({
+      operation: "app.list",
+    });
+    await expect(mocks.handle!(request("app.versions"), context)).resolves.toEqual({
+      operation: "app.versions",
+    });
+    await expect(mocks.handle!(request("app.deploy"), context)).resolves.toEqual({
+      operation: "app.deploy",
+    });
+    expect(handleApp).toHaveBeenCalledTimes(3);
+
+    await mocks.handle!(request("mode.set", { mode: "plan" }), context);
+    await expect(mocks.handle!(request("app.deploy"), context)).rejects.toThrow(
+      /unavailable in Plan mode/u,
+    );
+
+    const child = brokers.issueChildEndpoint("child-session", 1, {
+      mode: "agent",
+      readOnlyLocked: false,
+    });
+    expect(child.capability).toEqual(expect.any(String));
+    await expect(
+      mocks.handle!(request("app.deploy", undefined, "child-session", 1), context),
+    ).rejects.toThrow(/root managed task/u);
+    await expect(
+      mocks.handle!(request("app.list", undefined, "child-session", 1), context),
+    ).resolves.toEqual({ operation: "app.list" });
+
+    const unavailable = new PiRuntimeBrokers({
+      runtimeDir: "/tmp/piwork-runtime-test",
+      sessionId: "session-2",
+      generation: 1,
+      mode: "agent",
+    });
+    const unavailableContext = {
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+    };
+    await expect(
+      mocks.handle!(request("app.list", undefined, "session-2", 1), unavailableContext),
+    ).rejects.toThrow(/App runtime is unavailable/u);
+  });
+
   it("exposes only configured endpoints and delegates public MCP controls", async () => {
     const withoutServices = new PiRuntimeBrokers({
       runtimeDir: "/tmp/piwork-runtime-test",

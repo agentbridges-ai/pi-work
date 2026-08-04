@@ -147,6 +147,90 @@ describe("AppsControlPlane safety gates", () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
+  it("rejects invalid pagination, generation, snapshot, domain, and idempotency inputs early", async () => {
+    const connect = vi.fn();
+    const service = new AppsControlPlane({ connect } as unknown as Pool);
+    const query = vi.fn(async (sql: string) => {
+      const normalized = sql.trim().replace(/\s+/g, " ");
+      if (normalized.includes("from tenant_memberships")) {
+        return { rows: [{ id: "member-1" }], rowCount: 1 };
+      }
+      if (normalized.includes("from scoped_role_assignments")) {
+        return { rows: [{ permission_key: "app:manage-own" }], rowCount: 1 };
+      }
+      if (
+        normalized.includes("from apps a left join") ||
+        normalized.includes("select * from apps")
+      ) {
+        return { rows: [{ id: "app-1", owner_user_id: "user-1" }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const readService = new AppsControlPlane({ query } as unknown as Pool);
+
+    await expect(readService.listApps(agentContext, { scope: "invalid" as never })).rejects.toThrow(
+      /Invalid App list scope/,
+    );
+    await expect(readService.listApps(agentContext, { scope: "current-session" })).rejects.toThrow(
+      /sessionId is required/,
+    );
+    await expect(readService.listVersions(agentContext, "app-1", "not-a-number")).rejects.toThrow(
+      /Invalid pagination cursor/,
+    );
+    await expect(
+      service.beginDeployment(
+        { ...agentContext, generation: -1 },
+        {
+          slug: "demo",
+          sourceDigest: "a".repeat(64),
+          manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
+          bindingManifest: {},
+        },
+      ),
+    ).rejects.toThrow(/valid session generation/);
+    await expect(
+      service.beginDeployment(agentContext, {
+        slug: "demo",
+        sourceDigest: "not-a-digest",
+        manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
+        bindingManifest: {},
+      }),
+    ).rejects.toThrow(/SHA-256 source digest/);
+    await expect(
+      service.beginDeployment(
+        { ...agentContext, idempotencyKey: "contains spaces" },
+        {
+          slug: "demo",
+          sourceDigest: "a".repeat(64),
+          manifest: { version: 1, runtime: "cloudflare-workers", exposure: { workersDev: true } },
+          bindingManifest: {},
+        },
+      ),
+    ).rejects.toThrow(/Invalid idempotency key/);
+    await expect(
+      service.setSourceSnapshotKey(agentContext, "app-1", "deployment-1", 1, "../escape"),
+    ).rejects.toThrow(/safe user-relative path/);
+    await expect(
+      service.setCustomDomain(agentContext, "app-1", {
+        hostname: "app.localhost",
+        connectionId: "connection-1",
+        zoneId: "zone-1",
+        leaseToken: "lease-1",
+      }),
+    ).rejects.toThrow(/valid public custom-domain/);
+    await expect(
+      service.markCustomDomainState(agentContext, {
+        appId: "app-1",
+        appGeneration: 1,
+        hostname: "not a hostname",
+        status: "failed",
+        sslStatus: "failed",
+        leaseToken: "lease-1",
+      }),
+    ).rejects.toThrow(/valid public custom-domain/);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
   it("never exposes another member's source snapshot through continue development", async () => {
     const query = vi
       .fn()

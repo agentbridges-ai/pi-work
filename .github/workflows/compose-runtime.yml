@@ -65,7 +65,7 @@ jobs:
         run: ./scripts/selfhost.sh doctor
 
       - name: Build and start the source stack
-        run: ./scripts/selfhost.sh up --source
+        run: make test-compose-migrate
 
       - name: Verify container, SRT, RLS, and health contracts
         run: |

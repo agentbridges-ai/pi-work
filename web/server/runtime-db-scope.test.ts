@@ -78,4 +78,39 @@ describe("Runtime database scope", () => {
     ]);
     expect(String(insert?.[0])).toContain("generation <= excluded.generation");
   });
+
+  it("rebuilds a tenant projection atomically and rejects cross-tenant rows", async () => {
+    const fixture = clientFixture();
+    const database = { connect: vi.fn(async () => fixture.client) } as unknown as {
+      connect(): Promise<PoolClient>;
+    };
+    const store = new RuntimeSessionIndexStore({ database });
+    await store.rebuild(scope, [{ scope, lifecycle: "running" }]);
+    expect(fixture.query.mock.calls.map(([sql]) => String(sql))).toEqual([
+      "begin",
+      expect.stringContaining("piwork.tenant_id"),
+      "delete from runtime_session_index where tenant_id=$1",
+      expect.stringContaining("insert into runtime_session_index"),
+      "commit",
+    ]);
+
+    await expect(
+      store.rebuild(scope, [{ scope: { ...scope, tenantId: "tenant-b" }, lifecycle: "ready" }]),
+    ).rejects.toThrow("crossed tenant scope");
+    expect(fixture.query.mock.calls.at(-1)?.[0]).toBe("rollback");
+  });
+
+  it("marks failed sessions and closes only an internally owned pool", async () => {
+    const fixture = clientFixture();
+    const database = { connect: vi.fn(async () => fixture.client) } as unknown as {
+      connect(): Promise<PoolClient>;
+    };
+    const store = new RuntimeSessionIndexStore({ database });
+    await store.markStopped(scope, "failed");
+    expect(fixture.query.mock.calls.at(-2)?.[1]).toContain("failed");
+    await expect(store.close()).resolves.toBeUndefined();
+
+    const owned = new RuntimeSessionIndexStore();
+    await expect(owned.close()).resolves.toBeUndefined();
+  });
 });

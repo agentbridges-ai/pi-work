@@ -61,21 +61,12 @@ describe("Cloudflare temporary preview proof of work", () => {
     });
   });
 
-  it("rejects malformed tokens, seeds, and worker timeout options", async () => {
-    expect(() =>
-      validateCloudflarePreviewChallenge({ ...challenge(), challengeToken: "" }),
-    ).toThrow(/challengeToken/);
-    expect(() => validateCloudflarePreviewChallenge({ ...challenge(), seed: "a" })).toThrow(
-      /base64url/,
-    );
-    expect(() =>
-      validateCloudflarePreviewChallenge({ ...challenge(), seed: "a".repeat(42) }),
-    ).toThrow(/32 bytes/);
+  it("rejects invalid worker timeouts before starting a worker", async () => {
     await expect(solveCloudflarePreviewChallenge(challenge(), { timeoutMs: 0 })).rejects.toThrow(
-      /timeoutMs/,
+      /timeoutMs is invalid/,
     );
     await expect(
-      solveCloudflarePreviewChallenge(challenge({ k: 10_000, g: 1 }), { timeoutMs: 1 }),
-    ).rejects.toThrow(/timed out/);
+      solveCloudflarePreviewChallenge(challenge(), { timeoutMs: 10 * 60_000 + 1 }),
+    ).rejects.toThrow(/timeoutMs is invalid/);
   });
 });

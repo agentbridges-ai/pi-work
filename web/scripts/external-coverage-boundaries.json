@@ -229,6 +229,75 @@
         "test": "web/server/vite-config.test.ts"
       },
       "evidence": ["web/server/vite-config.test.ts"]
+    },
+    {
+      "path": "web/scripts/apply-control-plane-migration.ts",
+      "reason": "This one-shot PostgreSQL migration is executed as a real Bun process by the authenticated E2E migration target, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-e2e"
+      },
+      "evidence": [
+        "Makefile",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/compose-migrate.ts",
+      "reason": "This migration orchestrator runs as the real Compose migrate service, including child Bun processes and PostgreSQL role grants, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-compose-migrate"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/compose-runtime.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/scripts/verify-runtime-rls.ts",
+      "reason": "This file is the real PostgreSQL RLS canary executed inside the Linux Compose Web container, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-compose-runtime"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/compose-runtime.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/server/runtime-entry.ts",
+      "reason": "The Runtime entrypoint launches the native Pi service inside the verified Linux Compose container and cannot be instrumented by the Web Vitest process.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-compose-migrate"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/compose-runtime.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
+    },
+    {
+      "path": "web/server/runtime-security-gate.ts",
+      "reason": "The Runtime security gate is evaluated by the real Compose Runtime entrypoint against container markers and capabilities, outside Vitest V8 instrumentation.",
+      "runner": {
+        "kind": "make-target",
+        "target": "test-compose-migrate"
+      },
+      "evidence": [
+        "Makefile",
+        ".github/workflows/compose-runtime.yml",
+        "web/scripts/check-diff-coverage.ts",
+        "web/scripts/check-diff-coverage.test.ts"
+      ]
     }
   ]
 }

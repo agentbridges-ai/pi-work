@@ -8,6 +8,7 @@ import type {
 const mocks = vi.hoisted(() => ({
   consumeBootstrap: vi.fn(),
   createAgentSpace: vi.fn(),
+  inspectAppSource: vi.fn(),
   requestBroker: vi.fn(),
   localExec: vi.fn(),
   nativeDefinitions: [] as Array<{
@@ -50,6 +51,12 @@ vi.mock("./pi-bootstrap-channel.js", async (importOriginal) => ({
 
 vi.mock("./pi-broker-client.js", () => ({
   requestPiBroker: mocks.requestBroker,
+}));
+
+vi.mock("./app-build.js", () => ({
+  APP_BUILD_COMMAND: "bun run build",
+  APP_BUILD_TIMEOUT_MS: 1_000,
+  inspectAppSource: mocks.inspectAppSource,
 }));
 
 import {
@@ -242,6 +249,10 @@ beforeEach(() => {
       writeFile: vi.fn(),
       access: vi.fn(),
     },
+  });
+  mocks.inspectAppSource.mockResolvedValue({
+    sourceRoot: "/tmp/app-source",
+    sourceDigest: "a".repeat(64),
   });
   mocks.localExec.mockResolvedValue({ exitCode: 0 });
   mocks.requestBroker.mockImplementation(async (options: { operation?: string }) =>
@@ -475,6 +486,86 @@ describe("Piwork trusted Pi extension runtime", () => {
       }),
     );
     expect(bash?.options.exposeSessionEnvironment).toBe(false);
+  });
+
+  it("builds Apps once, then delegates the explicit App lifecycle tools", async () => {
+    const plan = await extensionFixture();
+    for (const name of ["rollback_app", "delete_app", "restore_app", "open_app_preview"]) {
+      await expect(
+        executeTool(
+          plan,
+          name,
+          name === "delete_app"
+            ? { appId: "app-1", publishIntent: "user_requested" }
+            : name === "rollback_app"
+              ? { appId: "app-1", deploymentId: "deployment-1" }
+              : { appId: "app-1" },
+        ),
+      ).rejects.toThrow(/App mutations are unavailable in Plan mode/u);
+    }
+
+    const value = await extensionFixture({ mode: "agent" });
+    const updates: unknown[] = [];
+    mocks.localExec.mockImplementationOnce(
+      async (_command: string, _cwd: string, options: { onData(data: Buffer): void }) => {
+        options.onData(Buffer.from("build complete\n"));
+        return { exitCode: 0 };
+      },
+    );
+    await expect(
+      executeTool(
+        value,
+        "deploy_app",
+        {
+          path: ".",
+          appId: "app-1",
+          slug: "demo",
+          dryRun: true,
+          publishIntent: "user_requested",
+        },
+        value.context,
+        (update) => updates.push(update),
+      ),
+    ).resolves.toMatchObject({ details: { ok: true } });
+    expect(mocks.inspectAppSource).toHaveBeenLastCalledWith(process.cwd(), ".");
+    expect(mocks.localExec).toHaveBeenLastCalledWith(
+      "bun run build",
+      "/tmp/app-source",
+      expect.objectContaining({ timeout: 1_000, signal: expect.any(AbortSignal) }),
+    );
+    expect(updates).toEqual([
+      { content: [{ type: "text", text: "build complete\n" }], details: { phase: "building" } },
+    ]);
+
+    await expect(executeTool(value, "list_apps", { scope: "mine" })).resolves.toMatchObject({
+      details: { ok: true },
+    });
+    await expect(
+      executeTool(value, "list_app_versions", { appId: "app-1" }),
+    ).resolves.toMatchObject({ details: { ok: true } });
+    await expect(
+      executeTool(value, "rollback_app", { appId: "app-1", deploymentId: "deployment-1" }),
+    ).resolves.toMatchObject({ details: { ok: true } });
+    await expect(
+      executeTool(value, "delete_app", { appId: "app-1", publishIntent: "user_requested" }),
+    ).resolves.toMatchObject({ details: { ok: true } });
+    await expect(executeTool(value, "restore_app", { appId: "app-1" })).resolves.toMatchObject({
+      details: { ok: true },
+    });
+    await expect(executeTool(value, "open_app_preview", { appId: "app-1" })).resolves.toMatchObject(
+      { details: { ok: true } },
+    );
+    expect(mocks.requestBroker.mock.calls.map(([options]) => options.operation)).toEqual(
+      expect.arrayContaining([
+        "app.deploy",
+        "app.list",
+        "app.versions",
+        "app.rollback",
+        "app.delete",
+        "app.restore",
+        "app.preview",
+      ]),
+    );
   });
 
   it("brokers typed native file actions in Agent mode and rejects Plan mode", async () => {

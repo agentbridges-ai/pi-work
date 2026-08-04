@@ -59,18 +59,24 @@ describe("request context", () => {
     });
   });
 
-  it("keeps the authenticated database scope inside the request async context", async () => {
-    const scope = {
-      tenantId: "tenant-1",
-      userId: "user-1",
-      membershipId: "membership-1",
-      orgNodeId: "org-root",
-    } as const;
+  it("propagates the tenant database scope through the request context", async () => {
     const app = new Hono();
-    registerRequestContext(app, { getDatabaseScope: () => scope });
+    registerRequestContext(app, {
+      getDatabaseScope: () => ({
+        userId: "user-1",
+        tenantId: "tenant-1",
+        membershipId: "member-1",
+        orgNodeId: "org-root",
+      }),
+    });
     app.get("/scoped", (c) => c.json(getRuntimeDbContext()));
-
     const response = await app.request("/scoped");
-    expect(await response.json()).toEqual(scope);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      userId: "user-1",
+      tenantId: "tenant-1",
+      membershipId: "member-1",
+      orgNodeId: "org-root",
+    });
   });
 });
