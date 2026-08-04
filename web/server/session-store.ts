@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import type { AgentMessage } from "../shared/pi-browser-protocol.js";
 import { AtomicJsonStore } from "./atomic-json-store.js";
 import type { SessionAuthoritySnapshot } from "./control-plane-types.js";
+import { log } from "./logger.js";
 import { requireSessionId } from "./path-policy.js";
 
 /**
@@ -300,7 +301,10 @@ export class SessionStore {
       try {
         this.saveSync(pending);
       } catch (error) {
-        console.error(`[session-store] Failed to save session ${normalized.id}:`, error);
+        log.error("session-store", "Failed to save session", {
+          sessionId: normalized.id,
+          error: error instanceof Error ? error.name : "UnknownError",
+        });
       }
     }, 150);
     this.debounceTimers.set(normalized.id, timer);

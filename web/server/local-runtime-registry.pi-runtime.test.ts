@@ -309,6 +309,29 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
     await registry.dispose();
   });
 
+  it("stops managed processes when the user disk quota monitor reports an overage", async () => {
+    const registry = new LocalRuntimeRegistry(3456, undefined, undefined, undefined, undefined, {
+      internalTransport: { unixSocketPath: "/tmp/internal.sock" },
+      dataRoot: fakes.root,
+    });
+    const principal = registry.acquirePrincipal(user())!;
+    const quota = fakes.quotas[0] as {
+      callback: (snapshot: unknown) => Promise<void>;
+    };
+
+    await quota.callback({
+      usedBytes: 2_048,
+      reservedBytes: 0,
+      maxBytes: 1_024,
+    });
+
+    expect(
+      (fakes.launchers[0] as { killAll: ReturnType<typeof vi.fn> }).killAll,
+    ).toHaveBeenCalledWith({ shutdown: false });
+    principal.release();
+    await registry.dispose();
+  });
+
   it("reserves one process lease per generation and releases it on every terminal path", async () => {
     const registry = new LocalRuntimeRegistry(3456, undefined, undefined, undefined, undefined, {
       internalTransport: { unixSocketPath: "/tmp/internal.sock" },

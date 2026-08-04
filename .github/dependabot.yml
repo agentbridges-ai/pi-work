@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
+  - package-ecosystem: bun
+    directory: /landing-page
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      action-patches:
+        update-types: [patch, minor]

@@ -46,6 +46,12 @@ help:
 	  '  make format-check        Verify Prettier formatting' \
 	  '  make deadcode             Run the dead-code TypeScript project' \
 	  '  make dry-check            Run duplication check' \
+	  '  make governance-check    Verify governance policy, docs, exceptions, and ownership' \
+	  '  make security-check      Run dependency audit and license policy checks' \
+	  '  make landing-check       Run frozen Landing install, lint, typecheck, build, and smoke' \
+	  '  make release-check       Verify Release Please, versions, and release boundaries' \
+	  '  make github-governance-check  Read back GitHub governance settings' \
+	  '  make github-governance-apply  Dry-run/apply GitHub Teams, Rulesets, and merge settings' \
 	  '' \
 	  'Build:' \
 	  '  make build                Build frontend dist' \
@@ -61,11 +67,16 @@ help:
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
 # Linux, so keep installed package metadata private to this checkout. A hoisted
 # layout also gives the runtime, its transitive Pi modules, and TypeScript one
-# canonical dependency tree inside the SRT allow-read root.
+# canonical dependency tree inside the SRT allow-read root. Shared local packages
+# additionally resolve their peer dependencies through the independent Web tree.
 install:
 	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
+	cd landing-page && bun install --backend copyfile --linker isolated --frozen-lockfile
 	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
+	fi
+	@if [ ! -e "packages/node_modules" ] && [ ! -L "packages/node_modules" ]; then \
+		ln -s ../web/node_modules packages/node_modules; \
 	fi
 
 agent-browser:
@@ -126,8 +137,8 @@ test-srt-pi:
 		echo 'Skipping Linux-only native Pi SRT smoke on non-Linux.'; \
 	fi
 
-.PHONY: verify verify-actions-pinning verify-onlyoffice-release verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
+.PHONY: verify verify-actions-pinning verify-onlyoffice-release verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check governance-check security-check landing-check release-check github-governance-check github-governance-apply check
+verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify governance-check security-check lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
 
 verify-actions-pinning:
 	node ./scripts/verify-github-actions-pinning.mjs
@@ -189,7 +200,21 @@ deadcode:
 	cd $(WEB_DIR) && bun run deadcode:check
 dry-check:
 	cd $(WEB_DIR) && bun run dry:check
-check: verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract build
+governance-check:
+	node ./scripts/governance/check-governance.mjs
+	node ./scripts/governance/governance-fixtures.mjs
+	node ./scripts/verify-github-actions-pinning.mjs
+security-check:
+	node ./scripts/governance/security-check.mjs
+landing-check:
+	node ./scripts/governance/landing-check.mjs
+release-check:
+	node ./scripts/governance/release-check.mjs
+github-governance-check:
+	node ./scripts/governance/github-governance.mjs
+github-governance-apply:
+	node ./scripts/governance/github-governance.mjs $(GITHUB_GOVERNANCE_ARGS)
+check: governance-check security-check release-check verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract landing-check build
 
 .PHONY: landing-dev landing-build landing-lint
 landing-dev:

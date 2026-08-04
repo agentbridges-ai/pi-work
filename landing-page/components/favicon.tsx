@@ -4,9 +4,7 @@ import { useEffect } from "react";
 
 export function Favicon() {
   useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>(
-      'link[data-site-favicon="true"]',
-    );
+    const link = document.querySelector<HTMLLinkElement>('link[data-site-favicon="true"]');
 
     if (!link) {
       return;
@@ -14,11 +12,13 @@ export function Favicon() {
 
     const updateFavicon = () => {
       const isDark = document.documentElement.classList.contains("dark");
+
       link.href = isDark ? "/favicon-dark.png" : "/favicon.png";
     };
 
     updateFavicon();
     const observer = new MutationObserver(updateFavicon);
+
     observer.observe(document.documentElement, {
       attributeFilter: ["class"],
       attributes: true,
@@ -27,5 +27,5 @@ export function Favicon() {
     return () => observer.disconnect();
   }, []);
 
-  return <link data-site-favicon="true" rel="icon" href="/favicon.png" />;
+  return <link data-site-favicon="true" href="/favicon.png" rel="icon" />;
 }

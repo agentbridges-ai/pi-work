@@ -1,0 +1,38 @@
+name: release evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      required_check_urls:
+        description: Comma-separated URLs for the required checks that produced this evidence
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+      - name: Generate release evidence
+        env:
+          REQUIRED_CHECK_URLS: ${{ inputs.required_check_urls || '' }}
+        run: node scripts/governance/release-evidence.mjs --output release-evidence.json
+      - name: Export SPDX dependency graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" > sbom.spdx.json
+      - name: Upload release evidence and SBOM
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: piwork-release-evidence-${{ github.event.release.tag_name || github.run_id }}
+          path: |
+            release-evidence.json
+            sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 365

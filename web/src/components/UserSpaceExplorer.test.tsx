@@ -2766,7 +2766,7 @@ describe("UserSpaceExplorer", () => {
     const clickDetachedControl = (label: string) => {
       const button = popoutDocument.querySelector(`button[aria-label='${label}']`);
       expect(button).not.toBeNull();
-      act(() =>
+      void act(() =>
         button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
       );
     };
@@ -4211,6 +4211,25 @@ describe("UserSpaceExplorer", () => {
     expect(screen.getByTitle("Office 本地编辑 report.docx")).toBe(reportPreview);
     expect(screen.getByTitle("Office 本地编辑 budget.xlsx")).toBe(budgetPreview);
     expect(mockCreateOfficeEditor).toHaveBeenCalledTimes(2);
+  });
+
+  it("handles a preview-body drop by requesting a detached window", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "预览 app.ts" }));
+      const bodyArea = screen.getByTestId("user-space-preview-body-area");
+      fireEvent.drop(bodyArea, {
+        dataTransfer: {
+          getData: vi.fn(() => "uw-mounted:app.ts"),
+        },
+      });
+
+      expect(openSpy).toHaveBeenCalledWith("", "_blank", expect.stringContaining("width=1180"));
+    } finally {
+      openSpy.mockRestore();
+    }
   });
 
   it("moves the OnlyOffice tab with single ownership, restores edit mode, and can dock it back", async () => {
@@ -10385,10 +10404,10 @@ describe("UserSpaceExplorer", () => {
         value: originalInnerWidth - 180,
       });
       fireEvent(window, new Event("resize"));
-      act(() => vi.advanceTimersByTime(179));
+      void act(() => vi.advanceTimersByTime(179));
       expect(officeHost).toHaveStyle({ width: "640px" });
 
-      act(() => vi.advanceTimersByTime(1));
+      void act(() => vi.advanceTimersByTime(1));
       expect(officeHost.style.width).toBe("");
       expect(officeHost.style.right).toBe("");
       expect(screen.queryByTestId("onlyoffice-browser-resize-mask")).not.toBeInTheDocument();

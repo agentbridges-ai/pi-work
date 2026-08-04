@@ -48,7 +48,7 @@ import {
   type UserSpaceShellFileSystem,
   type UserSpaceShellVisibility,
 } from "./user-space-shell/index.js";
-import { USER_SPACE_BASH_MOUNT_NAME } from "./user-space-shell-contract.js";
+import { USER_SPACE_BASH_MOUNT_NAME } from "../shared/user-space-shell-contract.js";
 import {
   createRuokCleanupScript,
   createRuokSetupScript,

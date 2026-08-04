@@ -1,0 +1,80 @@
+name: dependency review
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "web/bun.lock"
+      - "web/package.json"
+      - "landing-page/bun.lock"
+      - "landing-page/package.json"
+      - ".github/dependabot.yml"
+      - ".github/workflows/dependency-review.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Detect Dependency Graph availability
+        id: dependency_graph
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          response_file="$RUNNER_TEMP/dependency-graph.json"
+          status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GITHUB_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom")"
+          case "$status" in
+            200)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "Dependency Graph is not enabled yet; Dependency Review is a controlled bootstrap no-op."
+              ;;
+            *)
+              echo "Dependency Graph probe returned HTTP $status"
+              sed -n '1,80p' "$response_file"
+              exit 1
+              ;;
+          esac
+
+      - name: Dependency Review
+        if: ${{ github.event_name == 'pull_request' && steps.dependency_graph.outputs.enabled == 'true' }}
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # Fork and Dependabot PR tokens are read-only. Keep the vulnerability
+          # gate for those PRs while only asking same-repository, non-Dependabot
+          # runs to write the optional summary comment.
+          comment-summary-in-pr: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && 'always' || 'never' }}
+      - name: Dependency review no-op for bootstrap
+        if: ${{ github.event_name == 'pull_request' && steps.dependency_graph.outputs.enabled != 'true' }}
+        run: echo "Dependency Review is a controlled no-op until the repository Dependency Graph is enabled."
+      - name: Dependency review no-op for non-PR refs
+        if: ${{ github.event_name != 'pull_request' }}
+        run: echo "Dependency Review runs only for pull requests; this ref is a deterministic no-op."
+      - name: Audit web dependencies
+        working-directory: web
+        run: bun audit --audit-level=high
+      - name: Audit Landing dependencies
+        working-directory: landing-page
+        run: bun audit --audit-level=high

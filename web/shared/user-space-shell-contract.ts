@@ -101,7 +101,7 @@ export const USER_SPACE_BASH_BOUNDARY_SUMMARY = [
   "Text files should normally stay remote and use read/write/edit; checkout/checkin are intended mainly for binary files.",
   "sed -i, awk system(), and find -exec/-execdir/-delete/-ok/-okdir are unavailable.",
   "cp and mv operate on files only; shell-created symlinks last only for the current shell invocation.",
-  "The shell has only the virtual root / and the active browser-authorized directory under /<current user space name>; the mounted directory name updates when the active User Space changes, and host paths do not exist.",
+  "The shell has only the virtual root / and the active browser-authorized directory under /<current user space name>; mounted names update with the active User Space and host paths do not exist.",
 ] as const;
 
 export function formatUserSpaceBashCapabilities(): string {

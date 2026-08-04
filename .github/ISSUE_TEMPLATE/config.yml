@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密安全报告
+    url: https://github.com/agentbridges-ai/pi-work/security/advisories/new
+    about: 请使用 GitHub Private Vulnerability Reporting，不要公开披露漏洞。

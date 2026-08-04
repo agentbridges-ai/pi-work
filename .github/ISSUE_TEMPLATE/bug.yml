@@ -1,0 +1,30 @@
+name: Bug report
+description: 报告可复现的问题
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要在 Issue 中披露安全漏洞；安全问题请使用 SECURITY.md 的 Private Vulnerability Reporting。
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本或 commit
+    validations:
+      required: true

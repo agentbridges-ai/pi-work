@@ -2,8 +2,8 @@
 @import "@heroui/styles";
 @import "@piwork/design-tokens/theme.css";
 
-@source "../../packages/ui/src";
-@source "../../packages/ui-patterns/src";
+@source "../node_modules/@piwork/ui/src";
+@source "../node_modules/@piwork/ui-patterns/src";
 
 @custom-variant dark (&:is(.dark *));
 
