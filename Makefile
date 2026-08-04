@@ -67,11 +67,15 @@ help:
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
 # Linux, so keep installed package metadata private to this checkout. A hoisted
 # layout also gives the runtime, its transitive Pi modules, and TypeScript one
-# canonical dependency tree inside the SRT allow-read root.
+# canonical dependency tree inside the SRT allow-read root. Shared local packages
+# additionally resolve their peer dependencies through the independent Web tree.
 install:
 	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
 	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
+	fi
+	@if [ ! -e "packages/node_modules" ] && [ ! -L "packages/node_modules" ]; then \
+		ln -s ../web/node_modules packages/node_modules; \
 	fi
 
 agent-browser:
