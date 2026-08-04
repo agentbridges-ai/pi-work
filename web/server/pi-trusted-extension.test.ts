@@ -771,6 +771,54 @@ describe("Piwork trusted Pi extension runtime", () => {
     ).rejects.toThrow(/unavailable/u);
   });
 
+  it("keeps App broker tools scoped to the root Agent and fails closed without a broker", async () => {
+    const plan = await extensionFixture();
+    await expect(executeTool(plan, "deploy_app", { path: "demo" })).rejects.toThrow(/Plan mode/u);
+    await expect(executeTool(plan, "list_apps", { scope: "tenant" })).resolves.toMatchObject({
+      details: { ok: true },
+    });
+    await expect(executeTool(plan, "list_app_versions", { appId: "app-1" })).resolves.toMatchObject(
+      { details: { ok: true } },
+    );
+
+    const agent = await extensionFixture({ mode: "agent" });
+    for (const [name, params] of [
+      ["rollback_app", { appId: "app-1", deploymentId: "deployment-1" }],
+      ["delete_app", { appId: "app-1", publishIntent: "user_requested" }],
+      ["restore_app", { appId: "app-1" }],
+      ["open_app_preview", { appId: "app-1" }],
+    ] as const) {
+      await expect(executeTool(agent, name, params)).resolves.toMatchObject({
+        details: { ok: true },
+      });
+    }
+    expect(mocks.requestBroker.mock.calls.map(([options]) => options.operation)).toEqual(
+      expect.arrayContaining([
+        "app.list",
+        "app.versions",
+        "app.rollback",
+        "app.delete",
+        "app.restore",
+        "app.preview",
+      ]),
+    );
+
+    const child = await extensionFixture({
+      mode: "agent",
+      taskPolicy: { depth: 1, maxDepth: 2, maxParallel: 4 },
+    });
+    await expect(
+      executeTool(child, "rollback_app", { appId: "app-1", deploymentId: "deployment-1" }),
+    ).rejects.toThrow(/root Agent/u);
+
+    const unavailable = await extensionFixture({
+      taskPolicy: { depth: 0, maxDepth: 2, maxParallel: 4 },
+    });
+    await expect(executeTool(unavailable, "list_apps", { scope: "tenant" })).rejects.toThrow(
+      /Managed App runtime/u,
+    );
+  });
+
   it("keeps Plan mode until explicit execution confirmation", async () => {
     const value = await extensionFixture();
     const noUi = { ...value.context, hasUI: false } as ExtensionContext;

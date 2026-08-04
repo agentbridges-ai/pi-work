@@ -377,12 +377,21 @@ describe("Apps Cloudflare account routes", () => {
     await expect((await api.request("/apps/cloudflare/connections")).json()).resolves.toEqual({
       connections: [],
     });
-    await expect((await api.request("/cloudflare/connections/connection-1")).json()).resolves.toEqual({
+    await expect(
+      (await api.request("/cloudflare/connections/connection-1")).json(),
+    ).resolves.toEqual({
       connection: { id: "connection-1" },
     });
-    expect((await api.request("/apps/cloudflare/connections/connection-1/refresh", { method: "POST" })).status).toBe(200);
-    expect((await api.request("/apps/cloudflare/connections/connection-1", { method: "DELETE" })).status).toBe(204);
-    await expect((await api.request("/apps/cloudflare/temporary")).json()).resolves.toEqual({ previews: [] });
+    expect(
+      (await api.request("/apps/cloudflare/connections/connection-1/refresh", { method: "POST" }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await api.request("/apps/cloudflare/connections/connection-1", { method: "DELETE" })).status,
+    ).toBe(204);
+    await expect((await api.request("/apps/cloudflare/temporary")).json()).resolves.toEqual({
+      previews: [],
+    });
     expect((await api.request("/apps/cloudflare/temporary/preview-1/claim")).status).toBe(302);
     await expect((await api.request("/apps/cloudflare/targets/app-1")).json()).resolves.toEqual({
       target: { appId: "app-1", target: "unassigned" },

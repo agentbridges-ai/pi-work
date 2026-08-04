@@ -144,6 +144,29 @@ describe("PiSessionPreparer", () => {
     ).toBe("Read-only policy");
   });
 
+  it("rejects a migrated Skill tree whose aggregate size exceeds the limit", () => {
+    const paths = fixture();
+    const migrated = join(paths.root, "migrated");
+    const skill = join(migrated, "large-skill");
+    mkdirSync(skill, { recursive: true });
+    const content = "x".repeat(2 * 1024 * 1024 - 1);
+    for (let index = 0; index < 9; index += 1) {
+      writeFileSync(join(skill, index === 0 ? "SKILL.md" : `reference-${index}.txt`), content);
+    }
+
+    expect(() =>
+      new PiSessionPreparer(() => process.execPath).prepare({
+        ...paths,
+        sessionId: SESSION_ID,
+        knowledgeDirs: [],
+        domainLayers: [],
+        runtimeReadPaths: [process.execPath],
+        issueUserSpaceCapability: () => "capability",
+        migratedUserSkillsRoot: migrated,
+      }),
+    ).toThrow("Migrated Skills exceed the size limit");
+  });
+
   it("purges stale private checkout bytes before each generation", () => {
     const paths = fixture();
     const options = {

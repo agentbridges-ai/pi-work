@@ -6,6 +6,7 @@ import {
   registerRequestContext,
   resolveRequestId,
 } from "./request-context.js";
+import { getRuntimeDbContext } from "./runtime-db-context.js";
 
 describe("request context", () => {
   it("accepts safe request ids and replaces malformed values", () => {
@@ -56,5 +57,20 @@ describe("request context", () => {
       requestId: "request_legacy",
       message: "The request was invalid.",
     });
+  });
+
+  it("keeps the authenticated database scope inside the request async context", async () => {
+    const scope = {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
+    } as const;
+    const app = new Hono();
+    registerRequestContext(app, { getDatabaseScope: () => scope });
+    app.get("/scoped", (c) => c.json(getRuntimeDbContext()));
+
+    const response = await app.request("/scoped");
+    expect(await response.json()).toEqual(scope);
   });
 });

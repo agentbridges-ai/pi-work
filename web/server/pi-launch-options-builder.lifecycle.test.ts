@@ -472,13 +472,11 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
 
     await mkdir(join(value.sessionRoot, "workspace"), { recursive: true });
     await writeFile(join(value.sessionRoot, "workspace", "report.txt"), "report");
-    const createFileAction = vi
-      .spyOn(nativeHelperService, "createFileAction")
-      .mockResolvedValue({
-        id: "11111111-1111-4111-8111-111111111111",
-        action: "file.quickLook",
-        state: "staged",
-      } as never);
+    const createFileAction = vi.spyOn(nativeHelperService, "createFileAction").mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      action: "file.quickLook",
+      state: "staged",
+    } as never);
     const launch = await value.builder.build(SESSION_ID, 2, {
       request: { resolvedSandbox: sandbox() },
     });

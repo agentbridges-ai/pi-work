@@ -1036,7 +1036,9 @@ describe("AppsRuntimeCoordinator", () => {
     } as AppRecord;
     const listApps = vi.fn().mockResolvedValue({ apps: [ready], nextCursor: null });
     const listVersions = vi.fn().mockResolvedValue({ versions: [], nextCursor: null });
-    const getDeployment = vi.fn().mockResolvedValue(deployment({ artifactKey: "creator-artifact:a" }));
+    const getDeployment = vi
+      .fn()
+      .mockResolvedValue(deployment({ artifactKey: "creator-artifact:a" }));
     const rollback = vi.fn().mockResolvedValue({ app: ready, deployment: deployment() });
     const getApp = vi.fn().mockResolvedValue(ready);
     const { coordinator } = harness(
@@ -1045,7 +1047,11 @@ describe("AppsRuntimeCoordinator", () => {
     );
 
     await expect(
-      coordinator.handleBroker(brokerRequest("app.list", { scope: "tenant" }), brokerContext, brokerScope),
+      coordinator.handleBroker(
+        brokerRequest("app.list", { scope: "tenant" }),
+        brokerContext,
+        brokerScope,
+      ),
     ).resolves.toEqual({ apps: [ready], nextCursor: null });
     await expect(
       coordinator.handleBroker(
@@ -1062,7 +1068,11 @@ describe("AppsRuntimeCoordinator", () => {
       ),
     ).resolves.toEqual({ app: ready, deployment: deployment() });
     await expect(
-      coordinator.handleBroker(brokerRequest("app.preview", { appId: "app-1" }), brokerContext, brokerScope),
+      coordinator.handleBroker(
+        brokerRequest("app.preview", { appId: "app-1" }),
+        brokerContext,
+        brokerScope,
+      ),
     ).resolves.toMatchObject({ appId: "app-1", ready: true, url: ready.stableUrl });
     expect(listApps).toHaveBeenCalledOnce();
     expect(listVersions).toHaveBeenCalledOnce();

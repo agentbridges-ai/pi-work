@@ -350,9 +350,9 @@ describe("AppsControlPlane persistence paths", () => {
     await expect(
       service.listVersions(context, "app-1", Buffer.from("0", "utf8").toString("base64url")),
     ).rejects.toThrow("Invalid pagination cursor");
-    await expect(
-      service.listApps(context, { scope: "tenant", limit: 1 }),
-    ).resolves.toMatchObject({ apps: [expect.objectContaining({ createdAt: "1970-01-01T00:00:00.000Z" })] });
+    await expect(service.listApps(context, { scope: "tenant", limit: 1 })).resolves.toMatchObject({
+      apps: [expect.objectContaining({ createdAt: "1970-01-01T00:00:00.000Z" })],
+    });
 
     const deploymentInput = {
       slug: "demo",
@@ -381,5 +381,85 @@ describe("AppsControlPlane persistence paths", () => {
     expect(redactAppLogValue("Bearer secret_123456789012 and token_123456789012")).toBe(
       "[REDACTED] and [REDACTED]",
     );
+  });
+
+  it("fails closed for stale outbox work, invalid domains, memberships, permissions, and leases", async () => {
+    const { pool } = makePool();
+    const service = new AppsControlPlane(pool as unknown as Pool);
+    await expect(
+      service.setCustomDomain(context, "app-1", {
+        hostname: "localhost",
+        connectionId: "connection-1",
+        zoneId: "zone-1",
+        leaseToken: "lease-1",
+      }),
+    ).rejects.toThrow("valid public custom-domain");
+
+    const staleOutboxQuery = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const staleOutbox = new AppsControlPlane({ query: staleOutboxQuery } as unknown as Pool);
+    await expect(staleOutbox.completeOutbox("outbox-1", "worker-1")).resolves.toBe(false);
+    expect(staleOutboxQuery).toHaveBeenCalledTimes(2);
+
+    const mismatchedMembership = new AppsControlPlane({
+      query: vi.fn(async (sql: string) =>
+        sql.includes("from tenant_memberships")
+          ? { rows: [{ id: "other-membership" }], rowCount: 1 }
+          : { rows: [], rowCount: 0 },
+      ),
+    } as unknown as Pool);
+    await expect(mismatchedMembership.listApps(context, { scope: "tenant" })).rejects.toThrow(
+      "Tenant membership not found",
+    );
+
+    const forbiddenClient = {
+      query: vi.fn(async (sql: string) => {
+        const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized === "begin" || normalized === "rollback") return { rows: [], rowCount: 0 };
+        if (normalized.includes("select * from apps where"))
+          return { rows: [appRow()], rowCount: 1 };
+        if (normalized.includes("from tenant_memberships")) {
+          return {
+            rows: [{ id: "member-1", tenant_id: "tenant-1", user_id: "user-1" }],
+            rowCount: 1,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+    const forbidden = new AppsControlPlane({
+      connect: vi.fn(async () => forbiddenClient),
+    } as unknown as Pool);
+    await expect(forbidden.archive(context, "app-1")).rejects.toThrow(
+      "Forbidden by scoped authorization",
+    );
+
+    const staleLeaseClient = {
+      query: vi.fn(async (sql: string) => {
+        const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized === "begin" || normalized === "rollback") return { rows: [], rowCount: 0 };
+        if (normalized.includes("select * from apps where"))
+          return { rows: [appRow()], rowCount: 1 };
+        if (normalized.includes("from tenant_memberships")) {
+          return {
+            rows: [{ id: "member-1", tenant_id: "tenant-1", user_id: "user-1" }],
+            rowCount: 1,
+          };
+        }
+        if (normalized.includes("from scoped_role_assignments"))
+          return { rows: [{ permission_key: "app:manage-own" }], rowCount: 1 };
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+    const staleLease = new AppsControlPlane({
+      connect: vi.fn(async () => staleLeaseClient),
+    } as unknown as Pool);
+    await expect(
+      staleLease.markDeploymentDeploying(context, "app-1", "deployment-1", 4, "expired"),
+    ).rejects.toThrow("lease is stale or expired");
   });
 });

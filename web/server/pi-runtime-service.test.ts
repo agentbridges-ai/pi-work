@@ -316,9 +316,77 @@ describe("Pi Runtime service", () => {
         peer,
       ),
     ).resolves.toEqual({ accepted: true });
-    await expect(handle({ version: 1, kind: "request", id: "interrupt", operation: "interrupt", scope, payload: {}, mac: "test" }, peer)).resolves.toEqual({ interrupted: true });
-    await expect(handle({ version: 1, kind: "request", id: "status", operation: "status", scope, payload: {}, mac: "test" }, peer)).resolves.toMatchObject({ alive: true });
-    await expect(handle({ version: 1, kind: "request", id: "kill", operation: "kill", scope, payload: {}, mac: "test" }, peer)).resolves.toEqual({ killed: true });
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "stale-request",
+          operation: "request",
+          scope: { ...scope, generation: 2 },
+          payload: { input: { type: "get_state" }, awaitResponse: true },
+          mac: "test",
+        },
+        peer,
+      ),
+    ).rejects.toThrow("scope is stale");
+    launcher.validateLaunchGeneration.mockReturnValueOnce(false);
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "unavailable-request",
+          operation: "request",
+          scope,
+          payload: { input: { type: "get_state" }, awaitResponse: true },
+          mac: "test",
+        },
+        peer,
+      ),
+    ).rejects.toThrow("transport is unavailable");
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "interrupt",
+          operation: "interrupt",
+          scope,
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toEqual({ interrupted: true });
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "status",
+          operation: "status",
+          scope,
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toMatchObject({ alive: true });
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "kill",
+          operation: "kill",
+          scope,
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toEqual({ killed: true });
     expect(transport.abort).toHaveBeenCalledOnce();
     expect(transport.sendInput).toHaveBeenCalledOnce();
     await expect(
@@ -377,7 +445,15 @@ describe("Pi Runtime service", () => {
     ]) {
       await expect(
         handle(
-          { version: 1, kind: "request", id: "invalid", operation: "launch.prepare", scope, payload, mac: "test" },
+          {
+            version: 1,
+            kind: "request",
+            id: "invalid",
+            operation: "launch.prepare",
+            scope,
+            payload,
+            mac: "test",
+          },
           peer,
         ),
       ).rejects.toThrow();

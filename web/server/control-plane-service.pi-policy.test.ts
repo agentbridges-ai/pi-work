@@ -688,4 +688,49 @@ describe("ControlPlaneService scoped helpers", () => {
     expect(activator).not.toHaveBeenCalled();
     expect(revoker).not.toHaveBeenCalled();
   });
+
+  it("scopes personal tenant initialization and tenant switching through the user authority", async () => {
+    const membershipRow = {
+      id: "membership-personal-user-1",
+      tenant_id: "personal-user-1",
+      tenant_name: "Alice Workspace",
+      tenant_type: "personal",
+      user_id: "user-1",
+      status: "active",
+      is_default: true,
+      org_node_id: "personal-user-1-root",
+    };
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized.includes("select current_version_id, draft")) {
+          return queryResult([{ current_version_id: "version-1", draft: {} }]);
+        }
+        if (normalized.includes("from tenant_memberships m join tenants")) {
+          return queryResult([membershipRow]);
+        }
+        return queryResult();
+      }),
+      release: vi.fn(),
+    };
+    const pool = {
+      query: client.query,
+      connect: vi.fn(async () => client),
+    } as unknown as Pool;
+    const service = new ControlPlaneService(pool);
+
+    await expect(service.ensurePersonalTenant("user-1", "Alice")).resolves.toMatchObject({
+      tenantId: "personal-user-1",
+      primaryOrgNodeId: "personal-user-1-root",
+    });
+    await expect(service.switchTenant("user-1", "personal-user-1")).resolves.toMatchObject({
+      tenantId: "personal-user-1",
+      primaryOrgNodeId: "personal-user-1-root",
+    });
+    expect(
+      client.query.mock.calls.some(([sql]) =>
+        String(sql).includes("set_config('piwork.org_node_id'"),
+      ),
+    ).toBe(true);
+  });
 });

@@ -652,6 +652,129 @@ describe("App runtime drivers", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("adapts the Cloudflare SDK resource, asset, Worker, and domain methods", async () => {
+    const asset: AppStaticAsset = {
+      path: "/index.html",
+      contentType: "text/html",
+      sha256: "d".repeat(64),
+      bytes: new Uint8Array([60, 47, 62]),
+    };
+    let versionListCalls = 0;
+    const client = {
+      workers: {
+        scripts: {
+          versions: {
+            list: vi.fn(async () => {
+              versionListCalls += 1;
+              return versionListCalls === 1
+                ? []
+                : [{ id: "version-uploaded", metadata: { annotations: {} } }];
+            }),
+          },
+          update: vi.fn(async () => ({ migration_tag: "migration-2" })),
+          deployments: { create: vi.fn(async () => ({})) },
+          assets: {
+            upload: {
+              create: vi.fn(async () => ({
+                jwt: "asset-upload",
+                buckets: [[asset.sha256.slice(0, 32)]],
+              })),
+            },
+          },
+          subdomain: {
+            create: vi.fn(async () => ({})),
+            delete: vi.fn(async () => ({})),
+          },
+        },
+        assets: {
+          upload: {
+            create: vi.fn(async () => ({ jwt: "asset-complete" })),
+          },
+        },
+        subdomains: { get: vi.fn(async () => ({ subdomain: "account-subdomain" })) },
+        domains: {
+          update: vi.fn(async () => ({
+            id: "domain-1",
+            hostname: "app.example.com",
+            zone_id: "zone-1",
+            cert_id: "certificate-1",
+          })),
+          get: vi.fn(async () => ({
+            id: "domain-1",
+            hostname: "app.example.com",
+            zone_id: "zone-1",
+            cert_id: "certificate-1",
+          })),
+          delete: vi.fn(async () => ({})),
+        },
+      },
+      kv: {
+        namespaces: {
+          create: vi.fn(async () => ({ id: "kv-1", title: "cache", jurisdiction: "eu" })),
+          get: vi.fn(async () => ({ id: "kv-1", title: "cache" })),
+          list: vi.fn(async () => [{ id: "kv-1", title: "cache", jurisdiction: "eu" }]),
+        },
+      },
+      d1: {
+        database: {
+          create: vi.fn(async () => ({ uuid: "d1-1", name: "database" })),
+          get: vi.fn(async () => ({ uuid: "d1-1", name: "database" })),
+          list: vi.fn(async () => ({ result: [{ uuid: "d1-1", name: "database" }] })),
+        },
+      },
+      r2: {
+        buckets: {
+          create: vi.fn(async () => ({ name: "bucket" })),
+          get: vi.fn(async () => ({ name: "bucket", jurisdiction: "eu" })),
+        },
+      },
+      zones: { get: vi.fn(async () => ({ id: "zone-1", name: "example.com", status: "active" })) },
+    } as never;
+    const api = new CloudflareSdkAppRuntimeApi("account-1", "server-secret-token", client);
+
+    await expect(api.createKv("cache")).resolves.toMatchObject({ id: "kv-1", name: "cache" });
+    await expect(api.getKv("kv-1")).resolves.toMatchObject({ id: "kv-1" });
+    await expect(api.findKvByName("cache")).resolves.toMatchObject({ id: "kv-1" });
+    await expect(api.findKvByName("missing")).resolves.toBeNull();
+    await expect(api.createD1("database")).resolves.toMatchObject({ id: "d1-1" });
+    await expect(api.getD1("d1-1")).resolves.toMatchObject({ name: "database" });
+    await expect(api.findD1ByName("database")).resolves.toMatchObject({ id: "d1-1" });
+    await expect(api.createR2("bucket", "eu")).resolves.toMatchObject({ jurisdiction: "eu" });
+    await expect(api.getR2("bucket", "eu")).resolves.toMatchObject({ name: "bucket" });
+
+    await expect(api.uploadAssets("worker", [])).resolves.toBeUndefined();
+    await expect(api.uploadAssets("worker", [asset])).resolves.toBe("asset-complete");
+    await expect(
+      api.uploadWorker({
+        appId: target().appId,
+        workerName: target().workerName,
+        deploymentId: "deployment-sdk",
+        artifact: artifact(),
+        bindings: [],
+        assetsJwt: "asset-complete",
+        migration: { new_tag: "migration-2" },
+      }),
+    ).resolves.toEqual({ versionId: "version-uploaded", migrationTag: "migration-2" });
+    await api.rollbackWorker(target().workerName, "version-uploaded");
+    await api.enableWorkersDev(target().workerName);
+    await api.disableWorkersDev(target().workerName);
+    await expect(api.getWorkersSubdomain()).resolves.toBe("account-subdomain");
+    await expect(api.getZone("zone-1")).resolves.toEqual({
+      id: "zone-1",
+      name: "example.com",
+      status: "active",
+    });
+    await expect(
+      api.attachDomain({
+        workerName: target().workerName,
+        hostname: "app.example.com",
+        zoneId: "zone-1",
+      }),
+    ).resolves.toMatchObject({ id: "domain-1", certificateId: "certificate-1" });
+    await expect(api.getDomain("domain-1")).resolves.toMatchObject({ hostname: "app.example.com" });
+    await api.detachDomain("domain-1");
+  });
+
   it("makes the Piwork security wrapper the real Worker entrypoint", () => {
     const wrapped = prepareWrappedWorkerUpload({
       appId: target().appId,

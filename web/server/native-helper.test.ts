@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NATIVE_FILE_ACTIONS,
   NATIVE_HELPER_PROTOCOL_VERSION,
@@ -14,6 +14,7 @@ import {
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -186,12 +187,13 @@ describe("NativeHelperService", () => {
 
   it("validates native presentation anchors and exposes only owner-scoped edits", async () => {
     expect(validateNativeHelperAnchor(undefined)).toBeUndefined();
-    expect(
-      validateNativeHelperAnchor({ x: 10, y: 20, width: 300, height: 200 }),
-    ).toEqual({ x: 10, y: 20, width: 300, height: 200 });
-    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 1 })).toThrow(
-      /anchor/,
-    );
+    expect(validateNativeHelperAnchor({ x: 10, y: 20, width: 300, height: 200 })).toEqual({
+      x: 10,
+      y: 20,
+      width: 300,
+      height: 200,
+    });
+    expect(() => validateNativeHelperAnchor({ x: 0, y: 0, width: 0, height: 1 })).toThrow(/anchor/);
     expect(() => validateNativeHelperAnchor({ x: Infinity, y: 0, width: 1, height: 1 })).toThrow(
       /anchor/,
     );
@@ -263,5 +265,54 @@ describe("nativeHelperVersionIsNewer", () => {
     expect(nativeHelperVersionIsNewer("0.2.0", "0.1.9")).toBe(true);
     expect(nativeHelperVersionIsNewer("0.1.0", "0.1.0")).toBe(false);
     expect(nativeHelperVersionIsNewer("bad", "0.1.0")).toBe(false);
+  });
+
+  it("parses the default GitHub release manifest and tolerates a missing release", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tag_name: "v0.2.0",
+            assets: [
+              {
+                name: "piwork-helper-0.2.0-manifest.json",
+                browser_download_url: "https://example.test/manifest.json",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ version: "v0.2.0", protocol: { minimum: 1, maximum: 1 } }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const service = new NativeHelperService({
+      platform: "darwin",
+      socketPath: join(tmpdir(), "piwork-default-helper.sock"),
+      stagingRoot: join(tmpdir(), "piwork-default-helper-staging"),
+      fetchLatestVersion: undefined,
+    });
+    await expect(service.status({ refreshLatest: true })).resolves.toMatchObject({
+      latestVersion: "0.2.0",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    const missing = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", missing);
+    const missingService = new NativeHelperService({
+      platform: "darwin",
+      socketPath: join(tmpdir(), "piwork-missing-helper.sock"),
+      stagingRoot: join(tmpdir(), "piwork-missing-helper-staging"),
+      fetchLatestVersion: undefined,
+    });
+    await expect(missingService.status({ refreshLatest: true })).resolves.toMatchObject({
+      latestVersion: null,
+    });
   });
 });

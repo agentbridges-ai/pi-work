@@ -510,9 +510,9 @@ describe("PiRuntimeBrokers", () => {
       generation: 1,
       mode: "agent",
     });
-    await expect(mocks.handle!(request("app.list", undefined, "session-2", 1), context)).rejects.toThrow(
-      /App runtime is unavailable/,
-    );
+    await expect(
+      mocks.handle!(request("app.list", undefined, "session-2", 1), context),
+    ).rejects.toThrow(/App runtime is unavailable/);
     expect(unavailable.mode).toBe("agent");
   });
 });

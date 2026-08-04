@@ -73,9 +73,9 @@ describe("Runtime isolation support contracts", () => {
     const store = new RuntimeSessionIndexStore({ database: database as never });
     await store.markStopped(scope, "failed");
     await store.rebuild(scope, [{ scope, lifecycle: "running" }]);
-    expect(query.mock.calls.some(([sql]) => String(sql).includes("delete from runtime_session_index"))).toBe(
-      true,
-    );
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).includes("delete from runtime_session_index")),
+    ).toBe(true);
     await expect(
       store.rebuild(scope, [{ scope: { ...scope, tenantId: "other-tenant" }, lifecycle: "ready" }]),
     ).rejects.toThrow("crossed tenant scope");
@@ -85,7 +85,10 @@ describe("Runtime isolation support contracts", () => {
 
   it("uses raw queries without context and user-scoped transactions for partial context", async () => {
     const poolQuery = vi.fn(async (..._args: unknown[]) => ({ rows: [{ value: 1 }], rowCount: 1 }));
-    const clientQuery = vi.fn(async (..._args: unknown[]) => ({ rows: [{ value: 2 }], rowCount: 1 }));
+    const clientQuery = vi.fn(async (..._args: unknown[]) => ({
+      rows: [{ value: 2 }],
+      rowCount: 1,
+    }));
     const release = vi.fn();
     const pool = {
       query: poolQuery,

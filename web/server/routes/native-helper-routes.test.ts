@@ -30,6 +30,7 @@ function fixture() {
       state: "editing",
       createdAt: "2026-07-30T00:00:00.000Z",
     })),
+    listFileActions: vi.fn(async () => []),
     reclaimFileAction: vi.fn(async () => ({
       operation: {
         id: "00000000-0000-4000-8000-000000000001",
@@ -96,6 +97,73 @@ describe("native helper routes", () => {
         source: expect.objectContaining({ space: "agent", path: "AGENTS.md" }),
       }),
     );
+  });
+
+  it("parses User Space metadata and complete anchor rectangles", async () => {
+    const { api, service } = fixture();
+    const query = new URLSearchParams({
+      action: "file.open",
+      filename: "report.pdf",
+      space: "user",
+      path: "documents/report.pdf",
+      mountId: "mount-1",
+      baselineSha256: "A".repeat(64),
+      baselineMtime: "12.5",
+      x: "1",
+      y: "2",
+      width: "640",
+      height: "480",
+    });
+    const response = await api.request(`/sessions/session-a/native-file-actions?${query}`, {
+      method: "POST",
+      body: "pdf",
+    });
+    expect(response.status).toBe(202);
+    expect(service.createFileAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          space: "user",
+          path: "documents/report.pdf",
+          mountId: "mount-1",
+          baselineSha256: "a".repeat(64),
+          baselineMtime: 12.5,
+        },
+        anchor: { x: 1, y: 2, width: 640, height: 480 },
+      }),
+    );
+    await expect(api.request("/sessions/session-a/native-file-actions")).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(service.listFileActions).toHaveBeenCalledWith("local-user", "session-a");
+  });
+
+  it("rejects malformed native action metadata and maps service outages", async () => {
+    const { api, service } = fixture();
+    const base = "filename=x&space=agent&path=x";
+    for (const suffix of [
+      "action=not-supported",
+      "action=file.open&baselineSha256=bad",
+      "action=file.open&x=1",
+      "action=file.open&x=bad&y=2&width=3&height=4",
+    ]) {
+      const response = await api.request(
+        `/sessions/session-a/native-file-actions?${base}&${suffix}`,
+        {
+          method: "POST",
+          body: "x",
+        },
+      );
+      expect(response.status).toBe(400);
+    }
+    service.listFileActions.mockRejectedValueOnce(new Error("helper unavailable"));
+    const unavailable = await api.request("/sessions/session-a/native-file-actions");
+    expect(unavailable.status).toBe(503);
+    service.reclaimFileAction.mockRejectedValueOnce(new Error("operation timed out"));
+    const timedOut = await api.request(
+      "/sessions/session-a/native-file-actions/operation/reclaim",
+      { method: "POST" },
+    );
+    expect(timedOut.status).toBe(503);
   });
 
   it("streams reclaimed bytes and deletes only the bound session operation", async () => {

@@ -54,10 +54,7 @@ function bootstrapPayload(currentScope: RuntimeScope, workspace: string): PiBoot
   };
 }
 
-function makeLaunchOptions(
-  dataRoot: string,
-  currentScope: RuntimeScope = scope,
-): PiLaunchOptions {
+function makeLaunchOptions(dataRoot: string, currentScope: RuntimeScope = scope): PiLaunchOptions {
   const sessionRoot = join(
     dataRoot,
     "tenants",
@@ -150,9 +147,9 @@ describe("Remote Pi Runtime backend", () => {
       dataRoot: root,
     });
 
-    await expect(
-      backend.launch({ ...options, runtimeScope: undefined } as never),
-    ).rejects.toThrow("immutable Runtime scope");
+    await expect(backend.launch({ ...options, runtimeScope: undefined } as never)).rejects.toThrow(
+      "immutable Runtime scope",
+    );
     await expect(
       backend.launch({ ...options, sessionId: "22222222-2222-4222-8222-222222222222" }),
     ).rejects.toThrow("does not match options");
