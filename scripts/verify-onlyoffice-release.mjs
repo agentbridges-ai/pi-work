@@ -13,7 +13,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = join(root, "release", "onlyoffice-release-manifest.json");
 const commitPattern = /^[0-9a-f]{40}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const legacySchema4ReleaseIds = new Set(["v0.5.12-40948d549d546d2c"]);
+const legacySchema4ReleaseIds = new Set(["v0.5.12-fd3fbc60abd50785"]);
 
 function fail(message) {
   throw new Error(`[onlyoffice-release] ${message}`);
