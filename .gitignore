@@ -14,6 +14,9 @@ web/dist/
 .env
 web/.env.local
 .runtime/
+.terraform/
+*.tfplan
+packages/apps-platform/.wrangler/
 .postgres*/
 data/
 /backups/

@@ -18,6 +18,7 @@ import { PiBootstrapServer, type PiBootstrapPayload } from "./pi-bootstrap-chann
 import { PiRpcTransport } from "./pi-rpc-transport.js";
 import type { PiRpcNotification } from "./pi-rpc-contract.js";
 import { observePiRuntimeLifecycle, type PiRuntimeObserver } from "./pi-runtime-observer.js";
+import type { RuntimeScope } from "./runtime-control-protocol.js";
 import {
   assertPiSessionFileFromState,
   ensurePiSessionFile,
@@ -38,6 +39,7 @@ import {
   type PiReadinessMcpStatus,
   type PiReadinessResult,
 } from "./pi-readiness.js";
+import type { PiRuntimeBackend } from "./pi-runtime-backend.js";
 
 const SRT_PROXY_PRELOAD_PATH = fileURLToPath(
   new URL("./pi-srt-proxy-preload.mjs", import.meta.url),
@@ -77,6 +79,9 @@ export interface PiLaunchSandbox {
 
 export interface PiLaunchOptions {
   sessionId?: string;
+  /** Required by the remote Runtime backend; absent only for native probes/tests. */
+  runtimeScope?: RuntimeScope;
+  runtimeMode?: "native" | "compose-nested";
   sessionRoot: string;
   /** Canonical Agent Space cwd. Defaults to this Pi session's own workspace. */
   workingDirectory?: string;
@@ -113,12 +118,15 @@ interface ExtensionReadyStatus {
 
 interface ActivePiRuntime {
   child: ChildProcessWithoutNullStreams;
-  transport: PiRpcTransport;
+  transport?: PiRpcTransport;
   bootstrap: PiBootstrapServer;
   tempDir: string;
   layout: PiSessionLayout;
   generation: number;
-  readiness: PiReadinessResult;
+  readiness?: PiReadinessResult;
+  terminating?: boolean;
+  terminationPromise?: Promise<boolean>;
+  cleanupPromise?: Promise<void>;
 }
 
 const SAFE_ENV_KEY = /^[A-Z_][A-Z0-9_]*$/;
@@ -528,7 +536,7 @@ function waitForChildExit(
   });
 }
 
-export class PiLauncher {
+export class PiLauncher implements PiRuntimeBackend {
   private readonly sessions = new Map<string, PiSessionInfo>();
   private readonly runtimes = new Map<string, ActivePiRuntime>();
   private readonly launchOptions = new Map<string, PiLaunchOptions>();
@@ -558,13 +566,32 @@ export class PiLauncher {
     return (this.generations.get(uuid(sessionId)) || 0) + 1;
   }
 
-  private async terminateAfterTransportFailure(
-    child: ChildProcessWithoutNullStreams,
+  private async terminateAfterTransportFailure(sessionId: string): Promise<void> {
+    if (!(await this.kill(sessionId))) {
+      throw new Error("Pi process remained active after its RPC transport failed");
+    }
+  }
+
+  private finalizeRuntime(
+    sessionId: string,
+    runtime: ActivePiRuntime,
+    info = this.sessions.get(sessionId),
   ): Promise<void> {
-    signalProcessTree(child, "SIGTERM");
-    if (await waitForChildExit(child, PROCESS_EXIT_GRACE_MS)) return;
-    signalProcessTree(child, "SIGKILL");
-    await waitForChildExit(child, PROCESS_EXIT_FORCE_MS);
+    if (this.runtimes.get(sessionId) === runtime) {
+      this.runtimes.delete(sessionId);
+    }
+    if (info) {
+      info.state = "exited";
+      info.exitCode = runtime.child.exitCode ?? -1;
+      delete info.pid;
+    }
+    if (!runtime.cleanupPromise) {
+      runtime.cleanupPromise = runtime.bootstrap
+        .dispose()
+        .catch(() => undefined)
+        .then(() => this.cleanTemp(runtime.tempDir));
+    }
+    return runtime.cleanupPromise;
   }
 
   async launch(options: PiLaunchOptions): Promise<PiSessionInfo> {
@@ -629,67 +656,82 @@ export class PiLauncher {
       ttlMs: options.readyTimeoutMs,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    await bootstrap.start();
+    let caCertPath: string | undefined;
+    let command!: string[];
+    let info!: PiSessionInfo;
+    try {
+      await bootstrap.start();
+      const brokerSockets = [
+        socketPath,
+        payload.mcpBroker?.socketPath,
+        payload.taskPolicy.brokerSocket,
+      ].filter((path): path is string => Boolean(path));
+      const settingsPath = writeSrtSettings(
+        tempDir,
+        augmentSrtSettings(
+          options.sandbox.settings,
+          layout,
+          pi,
+          srt,
+          options.trustedExtensionPath,
+          brokerSockets,
+        ),
+      );
+      const rpcArgs = buildPiRpcArgs({
+        sessionId,
+        generation,
+        sessionDir: layout.piSessionsDir,
+        trustedExtensionPath: options.trustedExtensionPath,
+        managedSkillPaths: options.managedSkillPaths,
+        bootstrapSocketPath: socketPath,
+        resumeSessionFile: sessionFile,
+        model: options.model,
+        thinkingLevel,
+      });
+      caCertPath = systemCaCertPath();
+      command = [
+        "--settings",
+        settingsPath,
+        pi.nodePath,
+        ...(caCertPath ? ["--use-openssl-ca"] : []),
+        "--import",
+        SRT_PROXY_PRELOAD_PATH,
+        pi.entryPath,
+        ...rpcArgs,
+      ];
 
-    const brokerSockets = [
-      socketPath,
-      payload.mcpBroker?.socketPath,
-      payload.taskPolicy.brokerSocket,
-    ].filter((path): path is string => Boolean(path));
-    const settingsPath = writeSrtSettings(
-      tempDir,
-      augmentSrtSettings(
-        options.sandbox.settings,
-        layout,
-        pi,
-        srt,
-        options.trustedExtensionPath,
-        brokerSockets,
-      ),
-    );
-    const rpcArgs = buildPiRpcArgs({
-      sessionId,
-      generation,
-      sessionDir: layout.piSessionsDir,
-      trustedExtensionPath: options.trustedExtensionPath,
-      managedSkillPaths: options.managedSkillPaths,
-      bootstrapSocketPath: socketPath,
-      resumeSessionFile: sessionFile,
-      model: options.model,
-      thinkingLevel,
-    });
-    const caCertPath = systemCaCertPath();
-    const command = [
-      "--settings",
-      settingsPath,
-      pi.nodePath,
-      ...(caCertPath ? ["--use-openssl-ca"] : []),
-      "--import",
-      SRT_PROXY_PRELOAD_PATH,
-      pi.entryPath,
-      ...rpcArgs,
-    ];
-
-    const info: PiSessionInfo = {
-      sessionId,
-      state: "starting",
-      lifecycleState: "enabled",
-      model: options.model,
-      thinkingLevel,
-      mode,
-      cwd: workingDirectory,
-      createdAt: Date.now(),
-      backendType: "pi",
-      transport: "pi-rpc",
-      generation,
-      piVersion: "0.82.1",
-    };
-    this.sessions.set(sessionId, info);
+      info = {
+        sessionId,
+        state: "starting",
+        lifecycleState: "enabled",
+        model: options.model,
+        thinkingLevel,
+        mode,
+        cwd: workingDirectory,
+        createdAt: Date.now(),
+        backendType: "pi",
+        transport: "pi-rpc",
+        generation,
+        piVersion: "0.82.1",
+      };
+      this.sessions.set(sessionId, info);
+    } catch (cause) {
+      await bootstrap.dispose().catch(() => undefined);
+      this.cleanTemp(tempDir);
+      throw cause;
+    }
 
     let child: ChildProcessWithoutNullStreams | undefined;
     let transport: PiRpcTransport | undefined;
     let runtimePublished = false;
+    let activeRuntime: ActivePiRuntime | undefined;
     let transportFailureTermination: Promise<void> | undefined;
+    const terminateForTransportFailure = () => {
+      if (transportFailureTermination) return;
+      const pending = this.terminateAfterTransportFailure(sessionId);
+      transportFailureTermination = pending;
+      void pending.catch(() => undefined);
+    };
     try {
       child = this.dependencies.spawnProcess(pi.nodePath, [srt.entryPath, ...command], {
         cwd: workingDirectory,
@@ -763,7 +805,7 @@ export class PiLauncher {
               observationContext,
             );
             if (runtimePublished && child && !transportFailureTermination) {
-              transportFailureTermination = this.terminateAfterTransportFailure(child);
+              terminateForTransportFailure();
             }
           }
         },
@@ -815,6 +857,7 @@ export class PiLauncher {
         generation,
         readiness,
       };
+      activeRuntime = runtime;
       this.runtimes.set(sessionId, runtime);
       this.launchOptions.set(sessionId, {
         ...options,
@@ -828,21 +871,21 @@ export class PiLauncher {
       });
 
       child.once("exit", (code) => {
-        if (this.generations.get(sessionId) !== generation) return;
-        const current = this.runtimes.get(sessionId);
-        if (current?.generation === generation) this.runtimes.delete(sessionId);
         info.state = "exited";
         info.exitCode = code;
         delete info.pid;
-        void bootstrap.dispose().catch(() => undefined);
-        this.cleanTemp(tempDir);
+        void this.finalizeRuntime(sessionId, runtime, info).catch(() => undefined);
         options.onExit?.(info);
       });
       runtimePublished = true;
       if (transport.isClosed && !transportFailureTermination) {
-        transportFailureTermination = this.terminateAfterTransportFailure(child);
+        terminateForTransportFailure();
       }
       await bootstrap.waitForConsumption();
+      if (transportFailureTermination) {
+        await transportFailureTermination;
+        throw new Error("Pi RPC transport closed after readiness");
+      }
       info.state = "running";
       return { ...info };
     } catch (cause) {
@@ -860,13 +903,58 @@ export class PiLauncher {
         );
       }
       transport?.dispose();
+      if (activeRuntime) {
+        activeRuntime.terminating = true;
+        this.generations.set(
+          sessionId,
+          Math.max(this.generations.get(sessionId) || 0, generation + 1),
+        );
+      }
+      let runtimeOwnsCleanup = activeRuntime !== undefined;
       if (child) {
         signalProcessTree(child, "SIGKILL");
-        await waitForChildExit(child, PROCESS_EXIT_FORCE_MS);
+        const exited = await waitForChildExit(child, PROCESS_EXIT_FORCE_MS);
+        if (activeRuntime) {
+          if (exited) await this.finalizeRuntime(sessionId, activeRuntime, info);
+        } else if (!exited) {
+          const retainedRuntime: ActivePiRuntime = {
+            child,
+            transport,
+            bootstrap,
+            tempDir,
+            layout,
+            generation,
+            terminating: true,
+          };
+          activeRuntime = retainedRuntime;
+          runtimeOwnsCleanup = true;
+          this.generations.set(
+            sessionId,
+            Math.max(this.generations.get(sessionId) || 0, generation + 1),
+          );
+          this.runtimes.set(sessionId, retainedRuntime);
+          let exitReported = false;
+          const onRetainedExit = (code: number | null) => {
+            if (exitReported) return;
+            exitReported = true;
+            info.state = "exited";
+            info.exitCode = code;
+            delete info.pid;
+            void this.finalizeRuntime(sessionId, retainedRuntime, info).catch(() => undefined);
+            options.onExit?.(info);
+          };
+          child.once("exit", onRetainedExit);
+          if (child.exitCode !== null || child.signalCode !== null) {
+            child.off("exit", onRetainedExit);
+            onRetainedExit(child.exitCode);
+          }
+        }
       }
-      await bootstrap.dispose().catch(() => undefined);
-      this.cleanTemp(tempDir);
-      if (this.generations.get(sessionId) === generation) {
+      if (!runtimeOwnsCleanup) {
+        await bootstrap.dispose().catch(() => undefined);
+        this.cleanTemp(tempDir);
+      }
+      if (!runtimeOwnsCleanup && this.generations.get(sessionId) === generation) {
         info.state = "exited";
         info.exitCode = child?.exitCode ?? 1;
         delete info.pid;
@@ -905,22 +993,27 @@ export class PiLauncher {
   }
 
   getTransport(sessionId: string): PiRpcTransport | undefined {
-    return this.runtimes.get(sessionId)?.transport;
+    const runtime = this.runtimes.get(sessionId);
+    return runtime?.terminating ? undefined : runtime?.transport;
   }
 
   getReadiness(sessionId: string): PiReadinessResult | undefined {
-    return this.runtimes.get(sessionId)?.readiness;
+    const runtime = this.runtimes.get(sessionId);
+    return runtime?.terminating ? undefined : runtime?.readiness;
   }
 
   getSandboxedGeneration(sessionId: string): number | undefined {
-    return this.runtimes.get(sessionId)?.generation;
+    const runtime = this.runtimes.get(sessionId);
+    return runtime?.terminating ? undefined : runtime?.generation;
   }
 
   validateLaunchGeneration(sessionId: string, generation: number): boolean {
+    const runtime = this.runtimes.get(sessionId);
     return (
       Number.isSafeInteger(generation) &&
       generation > 0 &&
-      this.runtimes.get(sessionId)?.generation === generation
+      runtime?.terminating !== true &&
+      runtime?.generation === generation
     );
   }
 
@@ -952,31 +1045,42 @@ export class PiLauncher {
     return join(resolve(options.sessionRoot), info.piSessionRelativePath);
   }
 
-  async kill(sessionId: string): Promise<boolean> {
-    const runtime = this.runtimes.get(sessionId);
-    if (!runtime) {
-      const info = this.sessions.get(sessionId);
-      return !info || info.state === "exited";
+  private async terminateRuntime(sessionId: string, runtime: ActivePiRuntime): Promise<boolean> {
+    if (!runtime.terminating) {
+      runtime.terminating = true;
+      await runtime.transport?.abort({ timeoutMs: 750 }).catch(() => undefined);
+      this.generations.set(
+        sessionId,
+        Math.max(this.generations.get(sessionId) || 0, runtime.generation + 1),
+      );
+      runtime.transport?.dispose();
     }
-    await runtime.transport.abort({ timeoutMs: 750 }).catch(() => undefined);
-    this.generations.set(sessionId, runtime.generation + 1);
-    this.runtimes.delete(sessionId);
-    runtime.transport.dispose();
     signalProcessTree(runtime.child, "SIGTERM");
     let exited = await waitForChildExit(runtime.child, PROCESS_EXIT_GRACE_MS);
     if (!exited) {
       signalProcessTree(runtime.child, "SIGKILL");
       exited = await waitForChildExit(runtime.child, PROCESS_EXIT_FORCE_MS);
     }
-    await runtime.bootstrap.dispose().catch(() => undefined);
-    this.cleanTemp(runtime.tempDir);
-    const info = this.sessions.get(sessionId);
-    if (info) {
-      info.state = "exited";
-      info.exitCode = runtime.child.exitCode ?? -1;
-      delete info.pid;
-    }
+    if (exited) await this.finalizeRuntime(sessionId, runtime);
     return exited;
+  }
+
+  async kill(sessionId: string): Promise<boolean> {
+    const runtime = this.runtimes.get(sessionId);
+    if (!runtime) {
+      const info = this.sessions.get(sessionId);
+      return !info || info.state === "exited";
+    }
+    if (runtime.terminationPromise) return runtime.terminationPromise;
+    const pending = this.terminateRuntime(sessionId, runtime);
+    runtime.terminationPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (runtime.terminationPromise === pending) {
+        runtime.terminationPromise = undefined;
+      }
+    }
   }
 
   async killAll(options: { shutdown?: boolean } = {}): Promise<void> {

@@ -231,7 +231,11 @@ function isOutgoingMessage(value: unknown): value is BrowserOutgoingMessage {
   }
   switch (value.type as BrowserOutgoingMessage["type"]) {
     case "agent_message":
-      return validGeneration(value.generation) && validAgentMessage(value.message);
+      return (
+        validGeneration(value.generation) &&
+        validAgentMessage(value.message) &&
+        (value.clientMsgId === undefined || value.clientMsgId === value.message.id)
+      );
     case "interaction_response":
       return validInteractionResponse(value);
     case "session_subscribe":

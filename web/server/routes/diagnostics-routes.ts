@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import type { PiLauncher } from "../pi-launcher.js";
+import type { PiRuntimeBackend } from "../pi-runtime-backend.js";
 import { metricsCollector, type GaugeDataProvider } from "../metrics-collector.js";
 import type { RecorderManager } from "../recorder.js";
 import type { SessionRuntimeSnapshot } from "../session-runtime-state.js";
@@ -17,7 +17,7 @@ function countOpenFileDescriptors(): number | null {
 export function registerDiagnosticsRoutes(
   api: Hono,
   deps: {
-    launcher: PiLauncher;
+    launcher: PiRuntimeBackend;
     gaugeProvider: GaugeDataProvider;
     recorder?: RecorderManager;
     runtimeStateProvider: { listRuntimeStates(): SessionRuntimeSnapshot[] };

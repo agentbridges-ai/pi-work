@@ -9,6 +9,9 @@ import {
 } from "./pi-broker-server.js";
 
 const CAPABILITY_BYTES = 32;
+// Long foreground Pi tasks may run for 30 minutes. Keep the broker envelope
+// slightly wider so the task manager, not the socket timer, owns termination.
+const BROKER_REQUEST_TIMEOUT_MS = 31 * 60_000;
 
 export interface PiTaskBrokerHandler {
   (request: PiBrokerRequest, context: PiBrokerRequestContext): Promise<unknown>;
@@ -25,6 +28,8 @@ export interface PiRuntimeBrokersOptions {
     config: Readonly<Extract<ManagedMcpServerConfig, { transport: "stdio" }>>,
   ) => void | Promise<void>;
   handleTask?: PiTaskBrokerHandler;
+  handleApp?: PiTaskBrokerHandler;
+  handleNativeFile?: PiTaskBrokerHandler;
   onModeChange?: (mode: PiAgentMode) => void | Promise<void>;
 }
 
@@ -78,6 +83,8 @@ export class PiRuntimeBrokers {
   private readonly mcp: ManagedMcpManager;
   private readonly broker: PiBrokerServer;
   private readonly handleTask?: PiTaskBrokerHandler;
+  private readonly handleApp?: PiTaskBrokerHandler;
+  private readonly handleNativeFile?: PiTaskBrokerHandler;
   private readonly onModeChange?: PiRuntimeBrokersOptions["onModeChange"];
   private readonly authorities = new Map<string, PiBrokerAuthority>();
   private started = false;
@@ -100,6 +107,8 @@ export class PiRuntimeBrokers {
       root: true,
     });
     this.handleTask = options.handleTask;
+    this.handleApp = options.handleApp;
+    this.handleNativeFile = options.handleNativeFile;
     this.onModeChange = options.onModeChange;
     this.mcp = new ManagedMcpManager({
       servers: options.managedMcpServers ?? [],
@@ -109,6 +118,7 @@ export class PiRuntimeBrokers {
     this.broker = new PiBrokerServer({
       socketPath: this.socketPath,
       maxConcurrent: 16,
+      requestTimeoutMs: BROKER_REQUEST_TIMEOUT_MS,
       resolveCapability: (sessionId, generation) =>
         this.authorities.get(`${sessionId}:${generation}`)?.capability,
       handle: (request, context) => this.handle(request, context),
@@ -210,6 +220,16 @@ export class PiRuntimeBrokers {
         onProgress: context.onProgress,
       });
     }
+    if (request.operation === "native-file.action") {
+      if (
+        (authority.root ? this.activeMode : authority.mode) === "plan" ||
+        authority.readOnlyLocked
+      ) {
+        throw new Error("Native file actions are unavailable in Plan mode");
+      }
+      if (!this.handleNativeFile) throw new Error("Native file helper is unavailable");
+      return this.handleNativeFile(request, context);
+    }
     if (request.operation === "mode.set") {
       const payload = record(request.payload);
       if (payload.mode !== "agent" && payload.mode !== "plan") {
@@ -250,9 +270,29 @@ export class PiRuntimeBrokers {
       await this.mcp.reconnect(payload.server);
       return { servers: mcpBootstrap(this.mcp) };
     }
-    if (request.operation === "task.start" || request.operation === "task.stop") {
+    if (
+      request.operation === "task.start" ||
+      request.operation === "task.stop" ||
+      request.operation === "task.list" ||
+      request.operation === "task.status" ||
+      request.operation === "task.wait" ||
+      request.operation === "task.steer"
+    ) {
       if (!this.handleTask) throw new Error("Managed task broker is unavailable");
       return this.handleTask(request, context);
+    }
+    if (request.operation.startsWith("app.")) {
+      const readOnlyOperations = new Set(["app.list", "app.versions"]);
+      if (!readOnlyOperations.has(request.operation)) {
+        if (!authority.root) {
+          throw new Error("App mutations are available only to the root managed task");
+        }
+        if (this.activeMode === "plan" || authority.readOnlyLocked) {
+          throw new Error("App mutations are unavailable in Plan mode");
+        }
+      }
+      if (!this.handleApp) throw new Error("Managed App runtime is unavailable");
+      return this.handleApp(request, context);
     }
     throw new Error("Unsupported managed Pi broker operation");
   }

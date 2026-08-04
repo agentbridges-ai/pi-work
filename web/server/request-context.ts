@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { apiErrorResponse, type ApiErrorCategory } from "../shared/api-contracts.js";
+import type { RuntimeDbContext } from "./runtime-db-context.js";
+import { runWithRuntimeDbContext } from "./runtime-db-context.js";
 
 export interface RequestContextValue {
   requestId: string;
@@ -12,6 +14,7 @@ export interface RequestContextValue {
 
 export interface RequestContextOptions {
   getUserId?: () => string | null | undefined;
+  getDatabaseScope?: () => RuntimeDbContext | undefined;
 }
 
 const storage = new AsyncLocalStorage<RequestContextValue>();
@@ -171,6 +174,13 @@ export function registerRequestContext(api: Hono, options: RequestContextOptions
       ...(contextEpoch !== undefined ? { contextEpoch } : {}),
     };
     return storage.run(value, async () => {
+      const databaseScope = options.getDatabaseScope?.();
+      if (databaseScope) {
+        return runWithRuntimeDbContext(databaseScope, async () => {
+          await next();
+          await normalizeErrorResponse(c, requestId);
+        });
+      }
       await next();
       await normalizeErrorResponse(c, requestId);
     });

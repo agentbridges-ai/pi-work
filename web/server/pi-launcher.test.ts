@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PiLauncher, type PiSessionInfo } from "./pi-launcher.js";
 import type { PiBootstrapPayload } from "./pi-bootstrap-channel.js";
@@ -281,9 +281,11 @@ describe("PiLauncher security boundary", () => {
     expect(options.env.SSL_CERT_FILE).toMatch(/cert/);
     expect(info.cwd).toBe(workingDirectory);
     transportLifecycle?.({ type: "closed", code: "protocol_error" });
-    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(launcher.isAlive(SESSION_ID)).toBe(false);
-    expect(onExit).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(launcher.isAlive(SESSION_ID)).toBe(false);
+      expect(onExit).toHaveBeenCalledOnce();
+    });
     expect(onLifecycle.mock.calls.map(([event]) => event.type)).toEqual([
       "generation_change",
       "process_spawn",
@@ -388,6 +390,250 @@ describe("PiLauncher security boundary", () => {
     await expect(launcher.kill(SESSION_ID)).resolves.toBe(true);
     expect(abort).toHaveBeenCalledOnce();
     expect(internals.generations.get(SESSION_ID)).toBe(2);
+  });
+
+  it("retains authority-disabled process handles after transport-failure termination fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const tempDir = mkdtempSync(join(tmpdir(), "piwork-pi-"));
+      roots.push(tempDir);
+      const child = childFixture();
+      child.pid = 99_999_999;
+      child.kill = vi.fn(() => true);
+      const transport = {
+        abort: vi.fn(async () => undefined),
+        dispose: vi.fn(),
+      };
+      const bootstrap = { dispose: vi.fn(async () => undefined) };
+      const launcher = new PiLauncher();
+      const internals = launcher as unknown as {
+        generations: Map<string, number>;
+        runtimes: Map<string, any>;
+        sessions: Map<string, PiSessionInfo>;
+      };
+      internals.generations.set(SESSION_ID, 1);
+      internals.runtimes.set(SESSION_ID, {
+        generation: 1,
+        child,
+        transport,
+        bootstrap,
+        tempDir,
+      });
+      internals.sessions.set(SESSION_ID, sessionInfo({ generation: 1, pid: child.pid }));
+
+      const transportFailure = (
+        launcher as unknown as {
+          terminateAfterTransportFailure(sessionId: string): Promise<void>;
+        }
+      ).terminateAfterTransportFailure(SESSION_ID);
+      const transportFailureOutcome = transportFailure.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(7_000);
+      await expect(transportFailureOutcome).resolves.toMatchObject({
+        message: expect.stringMatching(/remained active/u),
+      });
+      expect(launcher.isAlive(SESSION_ID)).toBe(true);
+      expect(launcher.getTransport(SESSION_ID)).toBeUndefined();
+      expect(launcher.validateLaunchGeneration(SESSION_ID, 1)).toBe(false);
+      expect(internals.runtimes.has(SESSION_ID)).toBe(true);
+      expect(bootstrap.dispose).not.toHaveBeenCalled();
+      expect(existsSync(tempDir)).toBe(true);
+
+      child.kill.mockImplementationOnce(() => {
+        child.exitCode = 0;
+        child.emit("exit", 0, null);
+        return true;
+      });
+      await expect(launcher.kill(SESSION_ID)).resolves.toBe(true);
+      expect(launcher.isAlive(SESSION_ID)).toBe(false);
+      expect(internals.runtimes.has(SESSION_ID)).toBe(false);
+      expect(bootstrap.dispose).toHaveBeenCalledOnce();
+      expect(existsSync(tempDir)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retains a pre-readiness child when launch cleanup cannot confirm exit", async () => {
+    const root = temporaryRoot("piwork-launcher-readiness-failure-");
+    const sessionRoot = join(root, "session");
+    const workingDirectory = join(root, "workspace");
+    const trustedExtensionPath = join(root, "extension.ts");
+    const piPackage = join(root, "node_modules", "@earendil-works", "pi-coding-agent");
+    const piEntry = join(piPackage, "rpc-entry.js");
+    const nodePath = join(root, "node");
+    const srtPackage = join(root, "node_modules", "@anthropic-ai", "sandbox-runtime");
+    const srtPath = join(srtPackage, "srt.js");
+    mkdirSync(workingDirectory, { recursive: true });
+    mkdirSync(piPackage, { recursive: true });
+    mkdirSync(srtPackage, { recursive: true });
+    for (const path of [trustedExtensionPath, piEntry, nodePath, srtPath]) {
+      writeFileSync(path, "fixture");
+    }
+
+    const child = childFixture();
+    child.pid = 99_999_998;
+    child.kill = vi.fn(() => true);
+    const transport = {
+      sessionId: SESSION_ID,
+      isClosed: false,
+      dispose: vi.fn(),
+      getState: vi.fn(async () => {
+        throw new Error("readiness failed");
+      }),
+      getAvailableModels: vi.fn(async () => [{ provider: "test", id: "model" }]),
+      replayHistory: vi.fn(async () => ({ entries: [], leafId: null })),
+      getCommands: vi.fn(async () => [{ name: "piwork-plan" }]),
+      waitForClose: vi.fn(async () => new Error("closed")),
+    };
+    const bootstrap = {
+      start: vi.fn(async () => undefined),
+      waitForConsumption: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    };
+    const launcher = new PiLauncher({
+      resolvePiRuntime: () => ({
+        entryPath: piEntry,
+        packageRoot: piPackage,
+        packageName: "@earendil-works/pi-coding-agent",
+        version: "0.82.1",
+        nodePath,
+      }),
+      resolveSrtRuntime: () => ({
+        entryPath: srtPath,
+        packageRoot: srtPackage,
+        packageName: "@anthropic-ai/sandbox-runtime",
+        version: "0.0.65",
+      }),
+      spawnProcess: vi.fn(() => child as never) as never,
+      createTransport: vi.fn(() => transport as never),
+      createBootstrapServer: vi.fn(() => bootstrap as never),
+    });
+    const onExit = vi.fn();
+
+    await expect(
+      launcher.launch({
+        sessionId: SESSION_ID,
+        sessionRoot,
+        workingDirectory,
+        trustedExtensionPath,
+        managedSkillPaths: [],
+        bootstrapPayload: payload(1, workingDirectory),
+        sandbox: {
+          settings: {
+            filesystem: {
+              denyRead: [],
+              allowRead: [workingDirectory],
+              allowWrite: [workingDirectory],
+              denyWrite: [],
+              allowGitConfig: false,
+            },
+            network: {
+              allowedDomains: [],
+              deniedDomains: [],
+              allowUnixSockets: [],
+              allowAllUnixSockets: false,
+              allowLocalBinding: false,
+            },
+            enableWeakerNestedSandbox: false,
+            enableWeakerNetworkIsolation: false,
+          },
+        },
+        readyTimeoutMs: 100,
+        onExit,
+      }),
+    ).rejects.toThrow("readiness failed");
+
+    const internals = launcher as unknown as {
+      runtimes: Map<string, { tempDir: string }>;
+    };
+    const retainedTempDir = internals.runtimes.get(SESSION_ID)?.tempDir;
+    expect(retainedTempDir).toBeDefined();
+    expect(launcher.isAlive(SESSION_ID)).toBe(true);
+    expect(launcher.getTransport(SESSION_ID)).toBeUndefined();
+    expect(bootstrap.dispose).not.toHaveBeenCalled();
+    expect(existsSync(retainedTempDir!)).toBe(true);
+
+    child.kill.mockImplementationOnce(() => {
+      child.exitCode = 0;
+      child.emit("exit", 0, null);
+      return true;
+    });
+    await expect(launcher.killAll({ shutdown: false })).resolves.toBeUndefined();
+    expect(launcher.isAlive(SESSION_ID)).toBe(false);
+    expect(bootstrap.dispose).toHaveBeenCalledOnce();
+    expect(existsSync(retainedTempDir!)).toBe(false);
+    expect(onExit).toHaveBeenCalledOnce();
+  });
+
+  it("disposes bootstrap authority and temp state when pre-spawn materialization fails", async () => {
+    const root = temporaryRoot("piwork-launcher-preflight-failure-");
+    const sessionRoot = join(root, "session");
+    const workingDirectory = join(root, "workspace");
+    mkdirSync(workingDirectory, { recursive: true });
+    const bootstrap = {
+      start: vi.fn(async () => undefined),
+      waitForConsumption: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    };
+    let runtimeTempDir: string | undefined;
+    const spawnProcess = vi.fn();
+    const launcher = new PiLauncher({
+      resolvePiRuntime: () => ({
+        entryPath: join(root, "rpc-entry.js"),
+        packageRoot: join(root, "node_modules", "@earendil-works", "pi-coding-agent"),
+        packageName: "@earendil-works/pi-coding-agent",
+        version: "0.82.1",
+        nodePath: join(root, "node"),
+      }),
+      resolveSrtRuntime: () => ({
+        entryPath: join(root, "srt.js"),
+        packageRoot: root,
+        packageName: "@anthropic-ai/sandbox-runtime",
+        version: "0.0.65",
+      }),
+      spawnProcess: spawnProcess as never,
+      createBootstrapServer: vi.fn((options: { socketPath: string }) => {
+        runtimeTempDir = dirname(options.socketPath);
+        return bootstrap as never;
+      }) as never,
+    });
+
+    await expect(
+      launcher.launch({
+        sessionId: SESSION_ID,
+        sessionRoot,
+        workingDirectory,
+        trustedExtensionPath: join(root, "missing-extension.ts"),
+        managedSkillPaths: [],
+        bootstrapPayload: payload(1, workingDirectory),
+        sandbox: {
+          settings: {
+            filesystem: {
+              allowRead: [workingDirectory],
+              allowWrite: [workingDirectory],
+              denyRead: [],
+              denyWrite: [],
+              allowGitConfig: false,
+            },
+            network: {
+              allowedDomains: [],
+              deniedDomains: [],
+              allowUnixSockets: [],
+              allowAllUnixSockets: false,
+              allowLocalBinding: false,
+            },
+            enableWeakerNestedSandbox: false,
+            enableWeakerNetworkIsolation: false,
+          },
+        },
+      }),
+    ).rejects.toThrow();
+
+    expect(bootstrap.start).toHaveBeenCalledOnce();
+    expect(bootstrap.dispose).toHaveBeenCalledOnce();
+    expect(spawnProcess).not.toHaveBeenCalled();
+    expect(runtimeTempDir).toBeDefined();
+    expect(existsSync(runtimeTempDir!)).toBe(false);
   });
 
   it("rejects a PATH directory outside the exact sealed managed resource root", async () => {

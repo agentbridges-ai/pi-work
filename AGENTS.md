@@ -26,22 +26,34 @@ it is not a user-facing product goal. The browser-backed User Space `just-bash`
 shell and Wterm surface remain supported document/file operations and are not a
 host terminal.
 
+Piwork Apps has one deliberately narrow product capability: publish an Agent
+result to the user's own Cloudflare account. Piwork is not a Cloudflare host,
+runtime operator, or platform gateway. Permanent deployments use OAuth BYOC;
+an unconnected user may request one real Cloudflare Temporary Account preview
+for the stateless Worker + Static Assets subset, then must claim it and OAuth
+the same account before continuing. Do not add Workers for Platforms dispatch,
+platform-owned artifacts or resources, `apps.localhost` deployment success, or
+local Cloudflare runtime simulation. Provider tests use injected fake HTTP
+adapters and the development Deployment Lab only replays sanitised events.
+
 ```text
-Browser
-  -> Vite frontend
-  -> local Bun/Hono API + WebSocket server
-  -> Better Auth user.id
-  -> data/<betterAuthUserId>/<sessionId>/...
-  -> PiAdapter + strict LF JSONL RPC
-  -> one Node + native Pi rpc-entry inside a per-session SRT
-  -> explicit trusted Piwork extension
+Host browser/IDE
+  -> Caddy (the only published Compose port)
+  -> Bun/Hono Web + WebSocket server
+  -> Better Auth user.id + tenant/membership/org-node scope
+  -> private Unix JSONL/HMAC Runtime socket
+  -> one Runtime-owned Node + native Pi rpc-entry per session
+  -> per-session SRT policy and explicit trusted Piwork extension
 ```
 
-The development-stage isolation boundary is Better Auth session auth plus
-filesystem scope: one user maps to `data/<betterAuthUserId>/`, and one session
-maps to `data/<betterAuthUserId>/<sessionId>/`. Do not reintroduce Kubernetes,
-Docker image-build, model-service, LDAP, token-only local auth, or user-pod
-paths.
+The development-stage isolation boundary is Better Auth session auth plus the
+tenant-scoped filesystem path
+`data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/`. A pinned
+session authority includes `membershipId` and `orgNodeId`; the Runtime rejects
+scope or generation mismatches before resolving any path. Do not reintroduce
+Kubernetes, user pods, model services, LDAP, token-only local auth, dynamic
+Docker orchestration, or Docker Socket access. The only container deployment
+surface is the fixed Compose stack under `compose/`.
 
 ## Development Commands
 
@@ -58,9 +70,23 @@ make test-pi-rpc-contract
 make test-srt-pi
 ```
 
-`make dev` requires `DATABASE_URL`, checks Postgres connectivity, starts local
-Bun API on `PORT` (default `3457`) and Vite on `VITE_PORT` (default `3458` or
-the next free port). `data/` is created automatically and is ignored by Git.
+`make dev` starts the verified Compose source stack. It requires a Linux
+engine: use OrbStack Linux on macOS, WSL2 on Windows, or native Linux. Caddy
+publishes `PIWORK_HTTP_PORT` (default `3457`); Web and Runtime communicate over
+`/run/piwork-runtime/runtime.sock`, and Postgres is backend-only. `make
+dev-native` remains the in-process native Pi debug path and also requires
+Linux. Native host entrypoints fail closed before Pi execution. `data/` and
+Compose volumes are ignored by Git.
+
+Compose operational commands are `make selfhost-init`, `make selfhost-doctor`,
+`make selfhost-release-validate`,
+`make selfhost-up`, `make selfhost-down`, `make selfhost-status`, `make
+selfhost-backup`, `make selfhost-restore BACKUP=...`, and `make
+selfhost-upgrade`. `doctor --require-verified` must pass the container
+security gate, nested-SRT canary, and the non-BYPASSRLS PostgreSQL canary
+before Compose is considered ready. Release mode reads the checked-in digest
+manifest as its sole image source; a populated release manifest is required
+before release validation or startup.
 
 Use `make pi-reset-legacy-sessions` to review the mandatory native-Pi migration.
 Applying it requires `CONFIRM_PI_SESSION_RESET=1`; an external data root also
@@ -72,32 +98,47 @@ plane configuration.
 ## Current Architecture
 
 ```text
-Local server
+Compose services
+  - caddy (only published port)
+  - web (Bun/Hono API + Vite/frontend in source mode)
+  - runtime (Node >=22.19 + native Pi + SRT)
+  - postgres (backend network only)
+  - migrate (one-shot platform migration job)
+
+Web server
   - Better Auth native routes at /api/auth/*
   - /api/auth/mode and /api/me app compatibility routes
   - per-user runtime registry keyed by Better Auth user.id
   - per-session API and Pi-shaped browser WS routing
-  - one native Pi JSONL RPC child generation per session
+  - Runtime backend selected by the verified Compose deployment mode
   - one-use credential bootstrap and Piwork-managed MCP
 
+Runtime service
+  - no Postgres, TCP listener, or Docker Socket
+  - strict LF JSONL, 8 MiB frame limit, request IDs, backpressure, HMAC
+  - one-use generation/nonce-bound bootstrap per launch
+  - one Node + native Pi rpc-entry generation per session inside SRT
+
 Postgres
-  - Better Auth users/accounts/sessions only
+  - Better Auth users/accounts/sessions plus tenant control-plane state
+  - tenant business tables protected by RLS; `runtime_session_index` is only a
+    rebuildable projection
 
 User data
-  - data/<betterAuthUserId>/profile.json
-  - data/<betterAuthUserId>/workspace-state.json
-  - data/<betterAuthUserId>/preferences.json
-  - data/<betterAuthUserId>/pi-resources/skills
+  - data/tenants/<tenantId>/users/<userId>/profile.json
+  - data/tenants/<tenantId>/users/<userId>/workspace-state.json
+  - data/tenants/<tenantId>/users/<userId>/preferences.json
+  - data/tenants/<tenantId>/users/<userId>/pi-resources/skills
 
 Session data
-  - data/<betterAuthUserId>/<sessionId>/workspace
-  - data/<betterAuthUserId>/<sessionId>/home
-  - data/<betterAuthUserId>/<sessionId>/tmp
-  - data/<betterAuthUserId>/<sessionId>/pi-config
-  - data/<betterAuthUserId>/<sessionId>/pi-sessions
-  - data/<betterAuthUserId>/<sessionId>/recordings
-  - data/<betterAuthUserId>/<sessionId>/user-space-checkouts
-  - data/<betterAuthUserId>/<sessionId>/session.json
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/workspace
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/home
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/tmp
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/pi-config
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/pi-sessions
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/recordings
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/user-space-checkouts
+  - data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/session.json
 ```
 
 ## Main Code Areas
@@ -106,7 +147,14 @@ Session data
 - `web/server/better-auth.ts` - Better Auth + Postgres configuration.
 - `web/server/local-auth.ts` - Better Auth session to Piwork user adapter.
 - `web/server/local-user-profile-store.ts` - derived `profile.json` snapshots.
-- `web/server/local-runtime-registry.ts` - per-user runtime and session router.
+- `web/server/local-runtime-registry.ts` - per-user runtime and session router,
+  selecting native or remote Runtime backend.
+- `web/server/runtime-control-protocol.ts` and
+  `web/server/runtime-control-server.ts` - authenticated Unix JSONL Runtime
+  control channel.
+- `web/server/pi-runtime-service.ts` and `web/server/runtime-entry.ts` - the
+  isolated Runtime service and its verified Compose entrypoint.
+- `web/server/remote-pi-runtime.ts` - Web-side Runtime backend adapter.
 - `web/server/local-paths.ts` - canonical `data/<betterAuthUserId>/<sessionId>` paths.
 - `web/server/session-store.ts` - session directory enumeration and persistence.
 - `web/server/pi-session-preparer.ts` - governed Pi session resources and SRT policy.
@@ -116,6 +164,8 @@ Session data
 - `web/server/pi-bootstrap-channel.ts` - one-use in-memory provider bootstrap.
 - `web/server/pi-trusted-extension.ts` - trusted tools, modes, and product interactions.
 - `web/server/managed-mcp.ts` - managed stdio/SSE/Streamable HTTP MCP.
+- `web/server/migrations/runtime-isolation.sql` - runtime projection, org
+  scope backfill, and tenant RLS policies.
 - `web/server/ws-bridge.ts` - Pi-only browser protocol, replay, and interaction state.
 - `web/src/components/LoginPage.tsx` - Better Auth email/password login and registration.
 - `web/src/api.ts` - cookie-authenticated browser API client.
@@ -252,6 +302,21 @@ make test
   the trusted extension through a one-use Unix socket; consume and destroy the
   capability, then register the provider in memory. Never place credentials in
   argv, logs, recordings, Pi JSONL, or a child Agent's inherited environment.
+- Compose is limited to the fixed `caddy`, `web`, `runtime`, `postgres`, and
+  one-shot `migrate` services. Release images must use the checked-in digest
+  manifest; source mode may build only the fixed Web/Runtime images. Never add
+  `privileged`, `SYS_ADMIN`, `seccomp=unconfined`, host networking, or a Docker
+  Socket mount. Runtime readiness is refused until the deployment security gate
+  and nested-SRT canary are verified. The Runtime service has no Postgres or
+  TCP dependency and is reachable from Web only through the private HMAC Unix
+  JSONL socket.
+- Tenant is the filesystem isolation boundary. `org_nodes` supplies an
+  authorized RBAC scope, not another filesystem tenant. A session's immutable
+  authority must include `tenantId`, `userId`, `membershipId`, and `orgNodeId`;
+  the owner alone may read session contents, while an organization admin may
+  inspect metadata and terminate with `session:terminate` but may not read
+  workspace, history, or recordings. PostgreSQL tenant tables use RLS with a
+  non-owner Web role and transaction-local tenant/user/membership settings.
 - `agentbridges-ai/onlyoffice-browser` is maintained by the same organization
   and is part of this product surface. For OnlyOffice behavior changes, use the
   separate `onlyoffice-browser` repository instead of adding workaround patches
@@ -316,7 +381,7 @@ Use the Codex Chrome plugin for browser exploration and verification.
   style preferences, pre-existing issues, or speculative risks without a
   concrete failing path.
 - Treat any cross-user data exposure, authentication bypass, credential leak,
-  path traversal outside `data/<betterAuthUserId>/<sessionId>/`, or unauthenticated
+  path traversal outside `data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/`, or unauthenticated
   editor endpoint as P1 or higher.
 - Verify that account, agent, and session switches cannot commit stale async
   results and that browser state does not become an authority for user or session
@@ -345,7 +410,7 @@ transitions, and trusted-extension events for debugging and replay-oriented
 tests. Credentials, bootstrap payloads, capabilities, and protected file
 contents must never be recorded.
 
-- Default location: `data/<betterAuthUserId>/<sessionId>/recordings/`.
+- Default location: `data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/recordings/`.
 - Disable with `PIWORK_RECORD=0` or `PIWORK_RECORD=false`.
 - APIs:
   - `GET /api/recordings`
@@ -356,7 +421,9 @@ contents must never be recorded.
 ## Native Pi
 
 The only Agent runtime is `@earendil-works/pi-coding-agent@0.82.1` through its
-exported `rpc-entry` under Node.js >= 22.19.0.
+exported `rpc-entry` under Node.js >= 22.19.0. Bun remains the Web/package
+manager and development server runtime; Pi and its native Runtime child stay
+on the pinned Node ABI and are not converted to a second Bun implementation.
 `@modelcontextprotocol/sdk` is exactly 1.29.0. Do not add a Pi fork, a
 `@mariozechner` Pi package, alternate Agent transport, SDK proxy, CLI
 WebSocket, or model-provider fallback. Pi's sole upstream optional

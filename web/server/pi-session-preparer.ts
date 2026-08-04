@@ -254,7 +254,9 @@ function copySafeSkillTree(sourceRoot: string, destinationRoot: string): string[
       throw new Error("Migrated Skill file is unsafe");
     }
     totalBytes += info.size;
-    if (totalBytes > MAX_SKILL_TREE_BYTES) throw new Error("Migrated Skills exceed the size limit");
+    if (totalBytes > MAX_SKILL_TREE_BYTES) {
+      throw new Error("Migrated Skills exceed the size limit");
+    }
     mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
     copyFileSync(source, target);
     chmodSync(target, 0o400);

@@ -60,11 +60,15 @@ import { AgentBrowserBridgeService } from "./agent-browser-bridge-service.js";
 import { reapStaleAgentBrowserSocketDirs } from "./agent-browser-runtime.js";
 import {
   assertSupportedNodeVersion,
+  assertSupportedPiExecutionPlatform,
   resolvePinnedPiRuntime,
   resolvePinnedSrtRuntime,
 } from "./pi-runtime-resolver.js";
 import { loadPiProviderBootstrapFromInheritedFd, PiProviderVault } from "./pi-provider-vault.js";
 import { ensurePiRuntimeLayout } from "./pi-runtime-layout.js";
+import { nativeHelperService } from "./native-helper.js";
+import { createAppRuntimeDriver } from "./app-runtime-driver.js";
+import { runWithRuntimeDbContext } from "./runtime-db-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = environment.packageRoot || resolve(__dirname, "..");
@@ -79,8 +83,9 @@ const servesBundledFrontend = environment.value(ENV.PIWORK_SERVE_FRONTEND) !== "
 const dataRoot = getLocalDataRoot();
 // This initializes only an empty/new root. A non-empty pre-Pi root fails
 // closed and requires the explicit, confirmed reset command.
-ensurePiRuntimeLayout(dataRoot);
 assertSupportedNodeVersion();
+assertSupportedPiExecutionPlatform();
+ensurePiRuntimeLayout(dataRoot);
 const piRuntimeAvailable = (() => {
   try {
     resolvePinnedPiRuntime();
@@ -108,11 +113,23 @@ if (!isLoopbackHost(host)) {
     registrationEnabled,
     sessionSandbox: environment.value(ENV.PIWORK_SESSION_SANDBOX),
     requireSessionSandbox: environment.flag(ENV.PIWORK_REQUIRE_SESSION_SANDBOX),
+    internalProxyOnly: environment.flag(ENV.PIWORK_INTERNAL_PROXY_ONLY),
   });
 }
 const controlPlaneService = new ControlPlaneService();
+const appRuntimeDriver = createAppRuntimeDriver();
+const appCloudflareCleanupTimer = setInterval(
+  () => void controlPlaneService.appCloudflareAccounts.cleanupExpired().catch(() => undefined),
+  30_000,
+);
+appCloudflareCleanupTimer.unref?.();
+void controlPlaneService.appCloudflareAccounts.cleanupExpired().catch(() => undefined);
 const runtimeDriver = new EmbeddedTenantRuntimeDriver(new URL(`http://127.0.0.1:${port}`));
-const localAuth = new LocalAuth(rbacService, withActiveTenant, host);
+const localAuth = new LocalAuth(
+  rbacService,
+  (user) => runWithRuntimeDbContext({ userId: user.userId }, () => withActiveTenant(user)),
+  host,
+);
 const reapedAgentBrowserSocketDirs = reapStaleAgentBrowserSocketDirs();
 if (reapedAgentBrowserSocketDirs > 0) {
   console.log(`[agent-browser] Reaped ${reapedAgentBrowserSocketDirs} stale socket directories`);
@@ -137,6 +154,7 @@ const runtimeRegistry = new LocalRuntimeRegistry(
     providerVault,
     internalTransport: protectedTransport,
     dataRoot,
+    appRuntimeDriver,
   },
 );
 agentBrowserBridge.setControlEventHandler((event) =>
@@ -194,6 +212,7 @@ async function withActiveTenant(user: import("./auth-types.js").AuthenticatedUse
     tenantName: active.tenantName,
     tenantType: active.tenantType,
     membershipId: active.id,
+    ...(active.primaryOrgNodeId ? { orgNodeId: active.primaryOrgNodeId } : {}),
     // Compatibility fields for existing UI while tenant-aware APIs replace them.
     orgId: active.tenantId,
     orgName: active.tenantName,
@@ -236,7 +255,9 @@ async function validateAuthenticatedSocket(ws: ServerWebSocket<SocketData>): Pro
     if (data.authAuthorization) headers.set("authorization", data.authAuthorization);
     const identity = await localAuth.getSessionUser(headers);
     if (!identity) return false;
-    const activeMembership = await controlPlaneService.getActiveMembership(identity.userId);
+    const activeMembership = await runWithRuntimeDbContext({ userId: identity.userId }, () =>
+      controlPlaneService.getActiveMembership(identity.userId),
+    );
 
     const runtimeLease = runtimeRegistry.acquireSession(data.sessionId);
     if (!runtimeLease) return false;
@@ -251,7 +272,15 @@ async function validateAuthenticatedSocket(ws: ServerWebSocket<SocketData>): Pro
         return false;
       }
       authorityActive = authority
-        ? await controlPlaneService.isSessionAuthorityActive(authority)
+        ? await runWithRuntimeDbContext(
+            {
+              userId: authority.userId,
+              tenantId: authority.tenantId,
+              membershipId: authority.membershipId,
+              orgNodeId: authority.orgNodeId,
+            },
+            () => controlPlaneService.isSessionAuthorityActive(authority),
+          )
         : true;
       if (
         !socketAuthorizationMatches(
@@ -441,6 +470,27 @@ const server = Bun.serve<SocketData>({
         databaseReady: checkBetterAuthDatabaseReady,
         piRuntimeAvailable,
         internalFileTransportAvailable,
+        runtimeCapabilities: {
+          version: 1,
+          mode: environment.runtimeMode === "compose" ? "compose-nested" : "native",
+          configured:
+            piRuntimeAvailable &&
+            (environment.runtimeMode !== "compose" ||
+              Boolean(
+                environment.optionalString(ENV.PIWORK_RUNTIME_SOCKET, false) &&
+                environment.optionalString(ENV.PIWORK_RUNTIME_CONTROL_KEY_FILE, false),
+              )),
+          verified:
+            environment.runtimeMode !== "compose" ||
+            (environment.value(ENV.PIWORK_RUNTIME_SECURITY_GATE) === "verified" &&
+              existsSync(
+                environment.string(
+                  ENV.PIWORK_RUNTIME_SOCKET,
+                  "/run/piwork-runtime/runtime.sock",
+                  false,
+                ),
+              )),
+        },
       });
       return Response.json(readiness, {
         status: readiness.ok ? 200 : 503,
@@ -467,11 +517,10 @@ const server = Bun.serve<SocketData>({
     if (url.pathname.startsWith("/api/")) {
       const auth = await localAuth.authenticate(requestForDispatch);
       if (!auth.ok) return auth.response;
-      const principal = await resolveTenantBoundRuntimePrincipal(
-        requestForDispatch,
-        auth.user,
-        withActiveTenant,
-        { resourcePrincipal: runtimeResourcePrincipal(requestForDispatch) },
+      const principal = await runWithRuntimeDbContext({ userId: auth.user.userId }, () =>
+        resolveTenantBoundRuntimePrincipal(requestForDispatch, auth.user, withActiveTenant, {
+          resourcePrincipal: runtimeResourcePrincipal(requestForDispatch),
+        }),
       );
       if (!principal.ok) return principal.response;
       const runtimeLease = runtimeRegistry.acquirePrincipal(principal.user);
@@ -479,7 +528,15 @@ const server = Bun.serve<SocketData>({
         return new Response("Tenant membership was revoked", { status: 403 });
       }
       try {
-        return await runtimeLease.runtime.api.fetch(requestForDispatch, server);
+        return await runWithRuntimeDbContext(
+          {
+            userId: principal.user.userId,
+            ...(principal.user.tenantId ? { tenantId: principal.user.tenantId } : {}),
+            ...(principal.user.membershipId ? { membershipId: principal.user.membershipId } : {}),
+            ...(principal.user.orgNodeId ? { orgNodeId: principal.user.orgNodeId } : {}),
+          },
+          async () => runtimeLease.runtime.api.fetch(requestForDispatch, server),
+        );
       } finally {
         runtimeLease.release();
       }
@@ -497,7 +554,9 @@ const server = Bun.serve<SocketData>({
       }
       const auth = await localAuth.authenticate(req);
       if (!auth.ok) return auth.response;
-      const activeUser = await withActiveTenant(auth.user);
+      const activeUser = await runWithRuntimeDbContext({ userId: auth.user.userId }, () =>
+        withActiveTenant(auth.user),
+      );
       const runtimeLease = runtimeRegistry.acquirePrincipal(activeUser);
       if (!runtimeLease) return new Response("Tenant membership was revoked", { status: 403 });
       try {
@@ -546,8 +605,6 @@ const server = Bun.serve<SocketData>({
   },
   websocket: {
     ...websocketTransportLimits(),
-    idleTimeout: 0,
-    sendPings: false,
     open(ws: ServerWebSocket<SocketData>) {
       const data = ws.data;
       const runtimeLease = runtimeRegistry.acquireSession(data.sessionId);
@@ -598,6 +655,12 @@ console.log(`Server running on http://${host}:${server.port}`);
 console.log();
 console.log("  Mode: native Pi + Better Auth + Postgres");
 console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sessionId`);
+void nativeHelperService.status({ refreshLatest: true }).catch(() => undefined);
+const nativeHelperStatusTimer = setInterval(
+  () => void nativeHelperService.status({ refreshLatest: true }).catch(() => undefined),
+  24 * 60 * 60 * 1_000,
+);
+nativeHelperStatusTimer.unref?.();
 
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 let shutdownPromise: Promise<void> | null = null;
@@ -605,6 +668,8 @@ function gracefulShutdown(): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
     console.log("[server] Graceful shutdown started");
+    clearInterval(appCloudflareCleanupTimer);
+    clearInterval(nativeHelperStatusTimer);
     const serverStop = Promise.resolve(server.stop(false)).catch(() => undefined);
     const tlsStop = internalTlsServer
       ? Promise.resolve(internalTlsServer.stop(false)).catch(() => undefined)

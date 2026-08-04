@@ -1,10 +1,13 @@
 SHELL := /usr/bin/env bash
 
 WEB_DIR := web
+APPS_PLATFORM_DIR := packages/apps-platform
 RUNTIME_DIR := .runtime
 CRITICAL_TESTS_FILE := scripts/critical-tests.txt
 COVERAGE_THRESHOLD ?= 80
 AUTH_CLI := npx --yes auth@1.6.20
+PI_UPSTREAM_DIR := docs/upstream/pi
+PI_UPSTREAM_REPO := https://github.com/earendil-works/pi.git
 
 .PHONY: help
 help:
@@ -15,10 +18,19 @@ help:
 		  '  make install              Install web dependencies' \
 		  '  make agent-browser        Prepare the pinned agent-browser Chrome extension runtime' \
 		  '  make agent-browser-e2e    Run the real Mac Chrome extension bridge smoke test' \
-		  '  make dev                  Start local Bun API + Vite frontend' \
+		  '  make dev                  Start verified Compose source stack (OrbStack/WSL2/Linux)' \
+		  '  make dev-native           Start the in-process native Pi debug path' \
+		  '  make dev-compose          Start Compose source explicitly' \
+		  '  make selfhost-init        Generate Compose config and secret files' \
+	  '  make selfhost-doctor      Check Compose and Runtime security' \
+	  '  make selfhost-release-validate Validate the release image manifest' \
+		  '  make selfhost-up          Start the fixed Compose stack' \
+		  '  make selfhost-down        Stop the fixed Compose stack' \
+		  '  make selfhost-backup      Create a DB/data backup' \
+		  '  make selfhost-upgrade     Backup, migrate, smoke-test, and start' \
 	  '  make dev-fast             Alias for make dev' \
 	  '  make dev-fast-stop        Stop local dev processes' \
-	  '  make status               Check local server and Vite health' \
+	  '  make status               Check Compose or native local health' \
 	  '  make stop                 Alias for make dev-fast-stop' \
 	  '  make auth-generate        Generate Better Auth SQL schema' \
 	  '  make auth-migrate         Apply Better Auth Postgres schema' \
@@ -29,12 +41,14 @@ help:
 	  'Checks:' \
 	  '  make verify               Frozen install + toolchain + full tests + OnlyOffice + build' \
 	  '  make typecheck            Run TypeScript checks' \
+	  '  make apps-check           Test and dry-run the ordinary Cloudflare App wrapper' \
 	  '  make test                 Run the full Vitest suite' \
 	  '  make test-coverage        Run the full Vitest suite once and emit LCOV' \
 	  '  make test-targeted        Run focused local runtime tests' \
 	  '  make test-pi-rpc-contract Run the native Pi JSONL RPC contract probe and tests' \
 	  '  make test-srt-pi          Run real native Pi rpc-entry inside Linux SRT' \
 	  '  make verify-pi-versions   Verify exact Pi and MCP SDK dependency pins' \
+	  '  make verify-pi-upstream   Verify the pinned official Pi Git reference' \
 	  '  make verify-pi-only-runtime  Reject legacy Agent runtime surfaces' \
 	  '  make coverage-diff        Enforce 80% per-file diff coverage; whole-file for additions' \
 	  '  make test-e2e             Run Better Auth Playwright E2E tests' \
@@ -52,6 +66,7 @@ help:
 	  '  make backup               Create a locked Postgres + durable data backup' \
 	  '  make backup-verify BACKUP=/path  Verify a backup without restoring it' \
 	  '  make clean-runtime        Remove local runtime logs and pids' \
+	  '  make sync-pi-upstream     Update the official Pi Git reference from main' \
 	  '  make pi-reset-legacy-sessions  Dry-run the explicit legacy session reset' \
 	  '  make dev-reset-sessions-hard  Hard-delete local data/ session state'
 
@@ -67,18 +82,57 @@ agent-browser:
 agent-browser-e2e: agent-browser
 	node ./scripts/e2e-agent-browser-chrome-extension.mjs
 
-.PHONY: dev dev-fast dev-fast-stop status stop
-dev: dev-fast
-dev-fast: agent-browser
-	./scripts/dev-local.sh
+.PHONY: dev dev-fast dev-native dev-compose require-compose-linux-runtime require-native-linux-runtime dev-fast-stop status stop
+dev: dev-compose
+dev-fast: dev-compose
+dev-native: require-native-linux-runtime
+	./scripts/ensure-agent-browser.sh
+	PIWORK_NATIVE_DEBUG=1 ./scripts/dev-local.sh
+
+dev-compose: require-compose-linux-runtime
+	./scripts/selfhost.sh init
+	./scripts/selfhost.sh doctor
+	./scripts/selfhost.sh up --source
+	if ! ./scripts/selfhost.sh doctor --require-verified; then \
+		./scripts/selfhost.sh down || true; \
+		exit 1; \
+	fi
+
+require-compose-linux-runtime:
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo 'Docker is required for Compose development; use OrbStack on macOS or Docker in WSL2/Linux.' >&2; \
+		exit 1; \
+	fi; \
+	engine="$$(docker info --format '{{.OSType}}' 2>/dev/null || true)"; \
+	if [[ "$$engine" != "linux" ]]; then \
+		echo 'Compose development requires a Linux Docker engine; use OrbStack on macOS or Docker in WSL2/Linux.' >&2; \
+		exit 1; \
+	fi
+
+require-native-linux-runtime:
+	@if [[ "$(shell uname -s)" != "Linux" ]]; then \
+		echo 'Native Pi/SRT development requires a Linux execution host; use OrbStack Linux on macOS or WSL2 Linux on Windows.' >&2; \
+		exit 1; \
+	fi
+
 dev-fast-stop:
+	./scripts/selfhost.sh down 2>/dev/null || true
 	./scripts/dev-local-stop.sh
 status:
-	@source $(RUNTIME_DIR)/ports.env 2>/dev/null || true; \
-	  api_port="$${PORT:-3457}"; \
-	  vite_port="$${VITE_PORT:-3458}"; \
-	  curl -fsS "http://127.0.0.1:$$api_port/build-info" >/dev/null && echo "local API ready: http://127.0.0.1:$$api_port" || (echo 'local API is not ready' >&2; exit 1); \
-	  curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1)
+	@if [[ -f $(RUNTIME_DIR)/selfhost/selfhost.env ]]; then \
+		./scripts/selfhost.sh status; \
+		api_port="$${PIWORK_HTTP_PORT:-3457}"; \
+		edge_headers="$$(curl -fsS -D - -o /dev/null "http://127.0.0.1:$$api_port/build-info" || true)"; \
+		printf '%s\n' "$$edge_headers" | rg -qi '^X-Piwork-Edge:\s*piwork-caddy\r?$$' || (echo 'Published port is not served by Piwork Caddy' >&2; exit 1); \
+		curl -fsS "http://127.0.0.1:$$api_port/api/health/ready" >/dev/null && echo "Compose API ready: http://127.0.0.1:$$api_port" || (echo 'Compose API is not ready' >&2; exit 1); \
+		curl -fsS "http://127.0.0.1:$$api_port/" >/dev/null && echo "Compose frontend ready: http://127.0.0.1:$$api_port" || (echo 'Compose frontend is not ready' >&2; exit 1); \
+	else \
+		source $(RUNTIME_DIR)/ports.env 2>/dev/null || true; \
+		api_port="$${PORT:-3457}"; \
+		vite_port="$${VITE_PORT:-3458}"; \
+		curl -fsS "http://127.0.0.1:$$api_port/build-info" >/dev/null && echo "local API ready: http://127.0.0.1:$$api_port" || (echo 'local API is not ready' >&2; exit 1); \
+		curl -fsS "http://127.0.0.1:$$vite_port/index.html" >/dev/null && echo "frontend ready: http://127.0.0.1:$$vite_port" || (echo 'frontend is not ready' >&2; exit 1); \
+	fi
 stop: dev-fast-stop
 
 .PHONY: auth-generate auth-migrate rbac-migrate control-plane-migrate migrate test-srt-isolation test-srt-user-space-ipc test-srt-user-space-transport test-srt-pi
@@ -116,17 +170,23 @@ test-srt-pi:
 	@if [[ "$(shell uname -s)" == "Linux" ]]; then \
 		cd $(WEB_DIR) && bun scripts/verify-srt-pi-rpc.ts; \
 	else \
-		echo 'Skipping Linux-only native Pi SRT smoke on non-Linux.'; \
+		echo 'Skipping Linux-only native Pi SRT smoke; run this target inside OrbStack/WSL2 Linux.'; \
 	fi
 
-.PHONY: verify verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
-verify: install verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
+.PHONY: verify verify-toolchain verify-pi-versions verify-pi-upstream verify-pi-only-runtime agent-browser-verify backup-self-test typecheck apps-check test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check check
+verify: install verify-toolchain verify-pi-versions verify-pi-upstream verify-pi-only-runtime agent-browser-verify lint format-check deadcode dry-check typecheck test-coverage test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc backup-self-test build
 
 verify-toolchain:
 	./scripts/verify-toolchain.sh
 
 verify-pi-versions:
 	node ./scripts/verify-native-pi-dependencies.mjs
+
+verify-pi-upstream:
+	@test -e "$(PI_UPSTREAM_DIR)/.git" || (echo 'Initialize the Pi docs reference with: git submodule update --init $(PI_UPSTREAM_DIR)' >&2; exit 1)
+	@test "$$(git -C "$(PI_UPSTREAM_DIR)" remote get-url origin)" = "$(PI_UPSTREAM_REPO)" || (echo 'Unexpected Pi upstream remote.' >&2; exit 1)
+	@test "$$(git -C "$(PI_UPSTREAM_DIR)" rev-parse HEAD)" = "$$(git rev-parse ":$(PI_UPSTREAM_DIR)")" || (echo 'Pi upstream checkout does not match the superproject gitlink.' >&2; exit 1)
+	@test -z "$$(git -C "$(PI_UPSTREAM_DIR)" status --porcelain)" || (echo 'Pi upstream checkout contains local changes.' >&2; exit 1)
 
 verify-pi-only-runtime:
 	./scripts/verify-pi-only-runtime.sh
@@ -139,6 +199,8 @@ backup-self-test:
 
 typecheck:
 	cd $(WEB_DIR) && bun run typecheck
+apps-check:
+	cd $(APPS_PLATFORM_DIR) && bun run check
 lint:
 	cd $(WEB_DIR) && bun run lint
 format:
@@ -176,7 +238,7 @@ deadcode:
 	cd $(WEB_DIR) && bun run deadcode:check
 dry-check:
 	cd $(WEB_DIR) && bun run dry:check
-check: verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract build
+check: verify-pi-upstream verify-pi-only-runtime lint format-check deadcode dry-check typecheck test-targeted test-pi-rpc-contract build
 
 .PHONY: landing-dev landing-build landing-lint
 landing-dev:
@@ -190,9 +252,32 @@ landing-lint:
 build:
 	cd $(WEB_DIR) && bun run build
 
-.PHONY: backup backup-verify clean-runtime pi-reset-legacy-sessions dev-reset-sessions-hard
+.PHONY: backup backup-verify clean-runtime sync-pi-upstream pi-reset-legacy-sessions dev-reset-sessions-hard
 backup:
 	./scripts/backup-local.sh
+
+.PHONY: selfhost-init selfhost-configure selfhost-doctor selfhost-release-validate selfhost-up selfhost-down selfhost-status selfhost-backup selfhost-restore selfhost-upgrade
+selfhost-init:
+	./scripts/selfhost.sh init
+selfhost-configure:
+	./scripts/selfhost.sh configure
+selfhost-doctor:
+	./scripts/selfhost.sh doctor
+selfhost-release-validate:
+	node ./scripts/release-manifest.mjs validate "$${PIWORK_RELEASE_MANIFEST:-release/piwork-compose-release-manifest.json}"
+selfhost-up:
+	./scripts/selfhost.sh up --source
+selfhost-down:
+	./scripts/selfhost.sh down
+selfhost-status:
+	./scripts/selfhost.sh status
+selfhost-backup:
+	./scripts/selfhost.sh backup
+selfhost-restore:
+	@test -n "$(BACKUP)" || (echo 'BACKUP=/path/to/backup is required.' >&2; exit 2)
+	./scripts/selfhost.sh restore "$(BACKUP)"
+selfhost-upgrade:
+	./scripts/selfhost.sh upgrade --source
 
 backup-verify:
 	@if [ -z "$(BACKUP)" ]; then echo 'Usage: make backup-verify BACKUP=/path/to/backup' >&2; exit 2; fi
@@ -200,6 +285,9 @@ backup-verify:
 
 clean-runtime:
 	rm -rf $(RUNTIME_DIR)
+
+sync-pi-upstream:
+	git submodule update --init --remote --checkout "$(PI_UPSTREAM_DIR)"
 
 pi-reset-legacy-sessions:
 	./scripts/pi-reset-legacy-sessions.sh

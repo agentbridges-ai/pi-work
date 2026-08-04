@@ -1,4 +1,13 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +33,8 @@ interface FakeTaskLaunch {
   transport: {
     prompt: ReturnType<typeof vi.fn>;
     abort: ReturnType<typeof vi.fn>;
+    steer: ReturnType<typeof vi.fn>;
+    followUp: ReturnType<typeof vi.fn>;
   };
   launcher: {
     launch: ReturnType<typeof vi.fn>;
@@ -35,9 +46,24 @@ interface FakeTaskLaunch {
 const roots: string[] = [];
 const managers: PiTaskManager[] = [];
 
+function makeTreeRemovable(path: string): void {
+  let directory = false;
+  try {
+    directory = lstatSync(path).isDirectory();
+    chmodSync(path, directory ? 0o700 : 0o600);
+  } catch {
+    return;
+  }
+  if (!directory) return;
+  for (const entry of readdirSync(path)) {
+    makeTreeRemovable(join(path, entry));
+  }
+}
+
 afterEach(async () => {
   await Promise.allSettled(managers.splice(0).map((manager) => manager.dispose()));
   for (const root of roots.splice(0)) {
+    makeTreeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -59,6 +85,21 @@ function taskRequest(
     sessionId,
     generation,
     operation: "task.start",
+    payload,
+  };
+}
+
+function taskOperation(
+  operation: string,
+  payload: Record<string, unknown> = {},
+  sessionId = ROOT_SESSION_ID,
+  generation = ROOT_GENERATION,
+): PiBrokerRequest {
+  return {
+    id: `request-${Math.random()}`,
+    sessionId,
+    generation,
+    operation,
     payload,
   };
 }
@@ -86,7 +127,10 @@ function sealManagedResources(path: string): void {
   }
 }
 
-function fixture(rootMode: "agent" | "plan" = "agent") {
+function fixture(
+  rootMode: "agent" | "plan" = "agent",
+  fixtureOptions: { deferLaunch?: boolean } = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "piwork-task-manager-"));
   roots.push(root);
   const dataRoot = join(root, "data");
@@ -126,25 +170,31 @@ function fixture(rootMode: "agent" | "plan" = "agent") {
   });
 
   const launches: FakeTaskLaunch[] = [];
+  const launchResolvers: Array<() => void> = [];
   const launcherFactory = (): PiTaskLauncher => {
     const launchRecord: FakeTaskLaunch = {
       transport: {
         prompt: vi.fn(async () => undefined),
         abort: vi.fn(async () => undefined),
+        steer: vi.fn(async () => undefined),
+        followUp: vi.fn(async () => undefined),
       },
       launcher: {} as FakeTaskLaunch["launcher"],
     };
     launchRecord.launcher = {
-      launch: vi.fn(async (options: PiLaunchOptions): Promise<PiSessionInfo> => {
-        launchRecord.options = options;
+      launch: vi.fn(async (launchOptions: PiLaunchOptions): Promise<PiSessionInfo> => {
+        launchRecord.options = launchOptions;
+        if (fixtureOptions.deferLaunch) {
+          await new Promise<void>((resolveLaunch) => launchResolvers.push(resolveLaunch));
+        }
         return {
-          sessionId: options.sessionId!,
+          sessionId: launchOptions.sessionId!,
           state: "running",
           lifecycleState: "enabled",
-          model: options.model,
-          thinkingLevel: options.thinkingLevel || "medium",
-          mode: options.mode || "agent",
-          cwd: options.workingDirectory!,
+          model: launchOptions.model,
+          thinkingLevel: launchOptions.thinkingLevel || "medium",
+          mode: launchOptions.mode || "agent",
+          cwd: launchOptions.workingDirectory!,
           createdAt: Date.now(),
           backendType: "pi",
           transport: "pi-rpc",
@@ -190,6 +240,7 @@ function fixture(rootMode: "agent" | "plan" = "agent") {
   } as unknown as PiRuntimeBrokers;
   const events: Record<string, unknown>[] = [];
   const managedSkillPath = join(layout.managedSkillsDir, "managed");
+  const deliverTaskResult = vi.fn(async () => undefined);
   const manager = new PiTaskManager({
     rootSessionId: ROOT_SESSION_ID,
     rootGeneration: ROOT_GENERATION,
@@ -240,6 +291,7 @@ function fixture(rootMode: "agent" | "plan" = "agent") {
     brokers,
     launcherFactory,
     onTaskEvent: (event) => events.push(event),
+    deliverTaskResult,
   });
   managers.push(manager);
   return {
@@ -255,6 +307,9 @@ function fixture(rootMode: "agent" | "plan" = "agent") {
     childAuthorities,
     issueChildEndpoint,
     revokeChildEndpoint,
+    managedSkillPath,
+    deliverTaskResult,
+    launchResolvers,
   };
 }
 
@@ -285,6 +340,15 @@ describe("PiTaskManager", () => {
     expect(launch.bootstrapPayload.authorizedRoots).toEqual([
       { path: context.layout.workspaceDir, access: "write" },
     ]);
+    expect(launch.bootstrapPayload.instructions).toContain("isolated managed Piwork sub-agent");
+    expect(launch.bootstrapPayload.managedSkills).toEqual([
+      {
+        path: context.managedSkillPath,
+        name: "managed",
+        sha256: "a".repeat(64),
+      },
+    ]);
+    expect(launch.managedSkillPaths).toEqual([context.managedSkillPath]);
     expect(launch.bootstrapPayload.productTools).toEqual({
       userSpaceCapability: "root-user-space-capability",
     });
@@ -375,6 +439,245 @@ describe("PiTaskManager", () => {
     ).rejects.toThrow(/cannot enter Agent mode/);
 
     await context.manager.stopTask(result.taskId);
+  });
+
+  it("revokes writable child runtimes when the root enters Plan mode", async () => {
+    const context = fixture("agent");
+    const writable = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+
+    await context.manager.setRootMode("plan");
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalled();
+    await expect(
+      context.manager.handle(
+        taskOperation("task.status", { taskId: writable.taskId }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({ status: "stopped" });
+
+    const readOnly = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Read the source document",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+    expect(context.launches[1].options!.mode).toBe("plan");
+    await context.manager.stopTask(readOnly.taskId);
+  });
+
+  it("makes concurrent Plan transitions await and propagate child termination failure", async () => {
+    const context = fixture("agent");
+    const writable = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+    let rejectTermination!: (reason: unknown) => void;
+    context.launches[0].launcher.killAll.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectTermination = reject;
+        }),
+    );
+
+    const firstTransition = context.manager.setRootMode("plan");
+    await waitFor(() => context.launches[0].launcher.killAll.mock.calls.length === 1);
+    let secondFinished = false;
+    const secondTransition = context.manager.setRootMode("plan");
+    void secondTransition.then(
+      () => {
+        secondFinished = true;
+      },
+      () => {
+        secondFinished = true;
+      },
+    );
+    await Promise.resolve();
+    expect(secondFinished).toBe(false);
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalledTimes(1);
+
+    const firstFailure = expect(firstTransition).rejects.toThrow(
+      /writable tasks could not be stopped/u,
+    );
+    const secondFailure = expect(secondTransition).rejects.toThrow(
+      /writable tasks could not be stopped/u,
+    );
+    rejectTermination(new Error("child process survived SIGKILL"));
+    await firstFailure;
+    await secondFailure;
+    await expect(
+      context.manager.handle(
+        taskOperation("task.status", { taskId: writable.taskId }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({ status: "stopped" });
+
+    await expect(context.manager.setRootMode("plan")).resolves.toBeUndefined();
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes task cleanup when a child exits after an earlier stop failure", async () => {
+    const context = fixture("agent");
+    const started = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+    const launch = context.launches[0].options!;
+    context.launches[0].launcher.killAll.mockRejectedValueOnce(
+      new Error("child process survived SIGKILL"),
+    );
+
+    await expect(context.manager.stopTask(started.taskId)).rejects.toThrow(/survived SIGKILL/u);
+    expect(existsSync(launch.sessionRoot)).toBe(true);
+    launch.onExit?.({} as PiSessionInfo);
+
+    await waitFor(
+      () =>
+        context.launches[0].launcher.killAll.mock.calls.length === 2 &&
+        !existsSync(launch.sessionRoot),
+    );
+    expect(context.childAuthorities.has(`${launch.sessionId}:1`)).toBe(false);
+  });
+
+  it("kills a writable child whose launch resolves after Plan mode revoked it", async () => {
+    const context = fixture("agent", { deferLaunch: true });
+    const pending = context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    );
+    await waitFor(() => context.launchResolvers.length === 1);
+
+    const planTransition = context.manager.setRootMode("plan");
+    let planFinished = false;
+    void planTransition.finally(() => {
+      planFinished = true;
+    });
+    await Promise.resolve();
+    expect(planFinished).toBe(false);
+    const pendingFailure = expect(pending).rejects.toThrow(/stopped while launching/);
+    context.launchResolvers[0]!();
+
+    await expect(planTransition).resolves.toBeUndefined();
+    await pendingFailure;
+    expect(context.launches[0].transport.prompt).not.toHaveBeenCalled();
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalledOnce();
+  });
+
+  it("does not lose a launching child when its first post-launch termination fails", async () => {
+    const context = fixture("agent", { deferLaunch: true });
+    const pending = context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    );
+    await waitFor(() => context.launchResolvers.length === 1);
+    context.launches[0].launcher.killAll.mockRejectedValueOnce(
+      new Error("child process survived SIGKILL"),
+    );
+
+    const planTransition = context.manager.setRootMode("plan");
+    const planFailure = expect(planTransition).rejects.toThrow(
+      /writable tasks could not be stopped/u,
+    );
+    const taskFailure = expect(pending).rejects.toThrow(/survived SIGKILL/u);
+    context.launchResolvers[0]!();
+
+    await planFailure;
+    await taskFailure;
+    expect(context.launches[0].transport.prompt).not.toHaveBeenCalled();
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalledTimes(2);
+    await expect(context.manager.setRootMode("plan")).resolves.toBeUndefined();
+  });
+
+  it("shares concurrent disposal and retries a failed child termination", async () => {
+    const context = fixture("agent");
+    await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Draft a document",
+        background: true,
+      }),
+      brokerContext(),
+    );
+    let rejectTermination!: (reason: unknown) => void;
+    context.launches[0].launcher.killAll.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectTermination = reject;
+        }),
+    );
+
+    const firstDispose = context.manager.dispose();
+    const secondDispose = context.manager.dispose();
+    expect(secondDispose).toBe(firstDispose);
+    const firstOutcome = firstDispose.catch((error: unknown) => error);
+    const secondOutcome = secondDispose.catch((error: unknown) => error);
+    await waitFor(() => typeof rejectTermination === "function");
+    rejectTermination(new Error("child process survived SIGKILL"));
+    await expect(firstOutcome).resolves.toMatchObject({
+      message: expect.stringMatching(/task runtimes could not be disposed/u),
+    });
+    await expect(secondOutcome).resolves.toMatchObject({
+      message: expect.stringMatching(/task runtimes could not be disposed/u),
+    });
+
+    await expect(context.manager.dispose()).resolves.toBeUndefined();
+    expect(context.launches[0].launcher.killAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes a writable descendant when its managed parent enters Plan mode", async () => {
+    const context = fixture();
+    const parentTask = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Coordinate document research",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+    const parentLaunch = context.launches[0].options!;
+    const childTask = (await context.manager.handle(
+      taskRequest(parentLaunch.sessionId!, 1, {
+        depth: 2,
+        prompt: "Draft a section",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+
+    await context.manager.handle(
+      taskOperation("mode.set", { mode: "plan" }, parentLaunch.sessionId!, 1),
+      brokerContext(),
+    );
+    await expect(
+      context.manager.handle(
+        taskOperation("task.status", { taskId: childTask.taskId }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({ status: "stopped" });
+    await context.manager.stopTask(parentTask.taskId);
   });
 
   it("enforces four parallel tasks and a maximum depth of two", async () => {
@@ -483,6 +786,18 @@ describe("PiTaskManager", () => {
       } as unknown as PiRpcNotification,
       {} as PiSessionInfo,
     );
+    let resolved = false;
+    void pending.finally(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    notify(
+      {
+        type: "agent_settled",
+      } as unknown as PiRpcNotification,
+      {} as PiSessionInfo,
+    );
 
     await expect(pending).resolves.toMatchObject({
       status: "completed",
@@ -497,6 +812,132 @@ describe("PiTaskManager", () => {
         expect.objectContaining({ status: "completed", progress: "finished" }),
       ]),
     );
+  });
+
+  it("maps a settled Pi assistant error to a failed managed task", async () => {
+    const context = fixture();
+    const pending = context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Read the damaged document",
+        background: false,
+      }),
+      brokerContext(),
+    );
+    await waitFor(() => context.launches[0]?.transport.prompt.mock.calls.length > 0);
+    const notify = context.launches[0].options!.onNotification!;
+    notify(
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "" }],
+          stopReason: "error",
+          errorMessage: "The document parser failed.",
+        },
+      } as unknown as PiRpcNotification,
+      {} as PiSessionInfo,
+    );
+    notify({ type: "agent_settled" } as PiRpcNotification, {} as PiSessionInfo);
+
+    await expect(pending).rejects.toThrow("The document parser failed.");
+    expect(context.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          progress: "The document parser failed.",
+        }),
+      ]),
+    );
+    expect(context.events).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: "completed" })]),
+    );
+  });
+
+  it("retains background results, supports Pi-native steering/waiting, and follows up to parent", async () => {
+    const context = fixture();
+    const started = (await context.manager.handle(
+      taskRequest(ROOT_SESSION_ID, ROOT_GENERATION, {
+        depth: 1,
+        prompt: "Compare the two source documents and cite the differences.",
+        description: "Compare source documents",
+        background: true,
+      }),
+      brokerContext(),
+    )) as { taskId: string };
+
+    await expect(
+      context.manager.handle(
+        taskOperation("task.status", { taskId: started.taskId }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({
+      taskId: started.taskId,
+      status: "running",
+      description: "Compare source documents",
+    });
+    await expect(
+      context.manager.handle(taskOperation("task.list"), brokerContext()),
+    ).resolves.toMatchObject({
+      tasks: [expect.objectContaining({ taskId: started.taskId, status: "running" })],
+    });
+    await expect(
+      context.manager.handle(
+        taskOperation("task.steer", {
+          taskId: started.taskId,
+          message: "Prioritize the signed version.",
+        }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({ taskId: started.taskId, status: "running" });
+    expect(context.launches[0].transport.steer).toHaveBeenCalledWith(
+      "Prioritize the signed version.",
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    await expect(
+      context.manager.handle(
+        taskOperation("task.wait", { taskId: started.taskId, timeoutMs: 1 }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({
+      taskId: started.taskId,
+      status: "running",
+      timedOut: true,
+    });
+
+    const notify = context.launches[0].options!.onNotification!;
+    notify(
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "The signed document adds a termination clause." }],
+        },
+      } as unknown as PiRpcNotification,
+      {} as PiSessionInfo,
+    );
+    notify({ type: "agent_settled" } as PiRpcNotification, {} as PiSessionInfo);
+    await waitFor(() => context.deliverTaskResult.mock.calls.length === 1);
+
+    await expect(
+      context.manager.handle(
+        taskOperation("task.wait", { taskId: started.taskId, timeoutMs: 10 }),
+        brokerContext(),
+      ),
+    ).resolves.toMatchObject({
+      taskId: started.taskId,
+      status: "completed",
+      result: "The signed document adds a termination clause.",
+    });
+    expect(context.deliverTaskResult).toHaveBeenCalledWith(
+      ROOT_SESSION_ID,
+      expect.stringContaining("The signed document adds a termination clause."),
+    );
+    await expect(
+      context.manager.handle(taskOperation("task.list"), brokerContext()),
+    ).resolves.toMatchObject({
+      tasks: [expect.objectContaining({ taskId: started.taskId, status: "completed" })],
+    });
   });
 
   it("aborts a foreground task and cleans its child authority", async () => {
@@ -518,7 +959,12 @@ describe("PiTaskManager", () => {
     expect(context.launches[0].transport.abort).toHaveBeenCalled();
     expect(context.childAuthorities.has(`${launch.sessionId}:1`)).toBe(false);
     expect(context.events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ status: "stopped", progress: "stopped" })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "stopped",
+          progress: "Managed Pi task was aborted",
+        }),
+      ]),
     );
     expect(context.events).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ status: "failed", progress: "failed" })]),

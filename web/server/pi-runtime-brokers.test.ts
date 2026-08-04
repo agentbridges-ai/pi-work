@@ -262,6 +262,48 @@ describe("PiRuntimeBrokers", () => {
     expect(mocks.calls.at(-1)).toMatchObject({ readOnlyOnly: false });
   });
 
+  it("allows typed native file actions only for Agent-mode authority", async () => {
+    const handleNativeFile = vi.fn(async () => ({
+      operationId: "operation-a",
+      action: "file.quickLook",
+      state: "shown",
+    }));
+    const brokers = new PiRuntimeBrokers({
+      runtimeDir: "/tmp/piwork-runtime-test",
+      sessionId: "session-1",
+      generation: 3,
+      mode: "agent",
+      handleNativeFile,
+    });
+    const context = {
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+    };
+
+    await expect(
+      mocks.handle!(
+        request("native-file.action", {
+          action: "file.quickLook",
+          path: "report.docx",
+        }),
+        context,
+      ),
+    ).resolves.toMatchObject({ operationId: "operation-a", state: "shown" });
+    expect(handleNativeFile).toHaveBeenCalledOnce();
+
+    await mocks.handle!(request("mode.set", { mode: "plan" }), context);
+    await expect(
+      mocks.handle!(
+        request("native-file.action", {
+          action: "file.open",
+          path: "report.docx",
+        }),
+        context,
+      ),
+    ).rejects.toThrow(/unavailable in Plan mode/);
+    expect(handleNativeFile).toHaveBeenCalledOnce();
+  });
+
   it("exposes only configured endpoints and delegates public MCP controls", async () => {
     const withoutServices = new PiRuntimeBrokers({
       runtimeDir: "/tmp/piwork-runtime-test",
@@ -410,6 +452,11 @@ describe("PiRuntimeBrokers", () => {
     await expect(mocks.handle!(request("task.stop"), context)).resolves.toEqual({
       operation: "task.stop",
     });
+    for (const operation of ["task.list", "task.status", "task.wait", "task.steer"]) {
+      await expect(mocks.handle!(request(operation), context)).resolves.toEqual({
+        operation,
+      });
+    }
 
     await brokers.dispose();
     await brokers.dispose();

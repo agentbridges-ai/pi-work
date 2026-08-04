@@ -9,9 +9,16 @@ export const RUNTIME_TRANSPORT_MAX_MESSAGE_BYTES = 8 * MEBIBYTE;
 
 /** Browser messages are intentionally narrower than the process transport ceiling. */
 export const BROWSER_WS_MAX_MESSAGE_BYTES = MEBIBYTE;
+export const WEBSOCKET_IDLE_TIMEOUT_SECONDS = 60;
 
-export function websocketTransportLimits(): Readonly<{ maxPayloadLength: number }> {
+export function websocketTransportLimits(): Readonly<{
+  maxPayloadLength: number;
+  idleTimeout: number;
+  sendPings: true;
+}> {
   return {
     maxPayloadLength: RUNTIME_TRANSPORT_MAX_MESSAGE_BYTES,
+    idleTimeout: WEBSOCKET_IDLE_TIMEOUT_SECONDS,
+    sendPings: true,
   };
 }

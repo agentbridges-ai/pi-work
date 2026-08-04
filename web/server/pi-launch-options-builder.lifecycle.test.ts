@@ -131,6 +131,7 @@ async function fixture(controlPlane?: { resolvePinnedSessionAuthority: ReturnTyp
   await mkdir(sessionRoot, { recursive: true });
   const registerSecrets = vi.fn();
   const onTaskEvent = vi.fn();
+  const deliverTaskResult = vi.fn(async () => undefined);
   const observer = { record: vi.fn() };
   const runtimeObserverForSession = vi.fn(() => observer);
   fakes.prepare.mockImplementation(({ sessionRoot: root }: { sessionRoot: string }) => ({
@@ -166,6 +167,7 @@ async function fixture(controlPlane?: { resolvePinnedSessionAuthority: ReturnTyp
     controlPlane: controlPlane as never,
     registerRecordingSensitiveValues: registerSecrets,
     onTaskEvent,
+    deliverTaskResult,
     runtimeObserverForSession: runtimeObserverForSession as never,
   });
   return {
@@ -175,6 +177,7 @@ async function fixture(controlPlane?: { resolvePinnedSessionAuthority: ReturnTyp
     sessionRoot,
     registerSecrets,
     onTaskEvent,
+    deliverTaskResult,
     observer,
     runtimeObserverForSession,
   };
@@ -200,10 +203,19 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
         generation: 4,
         mode: "plan",
         instructions: "Use managed policy.",
+        managedSkills: [{ name: "managed", path: "skills/managed/SKILL.md" }],
         authorizedRoots: [{ path: join(value.sessionRoot, "workspace"), access: "write" }],
         taskPolicy: { depth: 0, maxDepth: 2, maxParallel: 4 },
       },
     });
+    expect(launch.managedSkillPaths).toEqual([
+      join(value.sessionRoot, "pi-resources", "skills", "managed", "SKILL.md"),
+    ]);
+    expect(fakes.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        managedSkillFiles: [],
+      }),
+    );
     expect(launch.bootstrapPayload.providers[0]?.config.apiKey).toBe("provider-secret");
     expect(launch.sandbox.toolEnvironment).not.toHaveProperty("PIWORK_PI_PROVIDER_KEY");
     expect(JSON.stringify(launch.sandbox)).not.toContain("provider-secret");
@@ -227,6 +239,9 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
       rootGeneration: 4,
       rootMode: "plan",
       rootModel: MODEL,
+      managedSkillPaths: launch.managedSkillPaths,
+      managedSkills: launch.bootstrapPayload.managedSkills,
+      deliverTaskResult: value.deliverTaskResult,
     });
 
     const brokerOptions = fakes.brokerInstances[0]!.options;
@@ -307,6 +322,8 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-1",
       effectivePolicyHash: "hash",
@@ -350,6 +367,8 @@ describe("PiLaunchOptionsBuilder lifecycle", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-1",
       effectivePolicyHash: "hash",

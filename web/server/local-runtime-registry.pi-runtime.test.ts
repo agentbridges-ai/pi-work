@@ -12,6 +12,9 @@ const fakes = vi.hoisted(() => ({
   onlyOfficeBrokers: [] as Array<Record<string, unknown>>,
   governors: [] as Array<Record<string, unknown>>,
   quotas: [] as Array<Record<string, unknown>>,
+  appsCoordinators: [] as Array<Record<string, unknown>>,
+  appsOutboxWorkers: [] as Array<Record<string, unknown>>,
+  routeOptions: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("./local-paths.js", () => ({
@@ -225,6 +228,44 @@ vi.mock("./pi-recording-observer.js", () => ({
   createPiRecordingObserver: vi.fn(() => ({ record: vi.fn() })),
 }));
 
+vi.mock("./apps-runtime-coordinator.js", () => ({
+  AppsRuntimeCoordinator: class {
+    options: Record<string, unknown>;
+    handleBroker = vi.fn();
+    handleDeploymentTargetQueued = vi.fn(async () => undefined);
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+      fakes.appsCoordinators.push(this as unknown as Record<string, unknown>);
+    }
+  },
+}));
+
+vi.mock("./apps-outbox-worker.js", () => ({
+  AppsOutboxWorker: class {
+    dependencies: Record<string, (...args: any[]) => Promise<unknown>>;
+    start = vi.fn();
+    stop = vi.fn(async () => undefined);
+    pollOnce = vi.fn(async () => 0);
+
+    constructor(dependencies: Record<string, (...args: any[]) => Promise<unknown>>) {
+      this.dependencies = dependencies;
+      fakes.appsOutboxWorkers.push(this as unknown as Record<string, unknown>);
+    }
+  },
+}));
+
+vi.mock("./routes.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./routes.js")>();
+  return {
+    ...original,
+    createRoutes: vi.fn((...args: Parameters<typeof original.createRoutes>) => {
+      fakes.routeOptions.push(args.at(-1) as Record<string, unknown>);
+      return original.createRoutes(...args);
+    }),
+  };
+});
+
 import { LocalRuntimeRegistry } from "./local-runtime-registry.js";
 
 function user(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
@@ -257,6 +298,9 @@ afterEach(() => {
     fakes.onlyOfficeBrokers,
     fakes.governors,
     fakes.quotas,
+    fakes.appsCoordinators,
+    fakes.appsOutboxWorkers,
+    fakes.routeOptions,
   ]) {
     list.splice(0);
   }
@@ -307,6 +351,98 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
     ).toHaveBeenCalled();
     second!.release();
     await registry.dispose();
+  });
+
+  it("starts a principal-scoped Apps outbox worker and stops it with the runtime", async () => {
+    const apps = {
+      claimDeploymentOutboxForPrincipal: vi.fn().mockResolvedValue([]),
+      completeOutbox: vi.fn().mockResolvedValue(true),
+      retryOutbox: vi.fn().mockResolvedValue(true),
+      failClaimedOutbox: vi.fn().mockResolvedValue(true),
+    };
+    const controlPlane = {
+      apps,
+      appCloudflareAccounts: {},
+    };
+    const registry = new LocalRuntimeRegistry(
+      3456,
+      undefined,
+      controlPlane as never,
+      undefined,
+      undefined,
+      {
+        internalTransport: { unixSocketPath: "/tmp/internal.sock" },
+        dataRoot: fakes.root,
+        appRuntimeDriver: {} as never,
+      },
+    );
+    const principal = registry.acquirePrincipal(user({ membershipId: "membership-1" }))!;
+    const outbox = fakes.appsOutboxWorkers[0] as {
+      dependencies: Record<string, (...args: any[]) => Promise<unknown>>;
+      start: ReturnType<typeof vi.fn>;
+      stop: ReturnType<typeof vi.fn>;
+      pollOnce: ReturnType<typeof vi.fn>;
+    };
+    const coordinator = fakes.appsCoordinators[0] as {
+      handleDeploymentTargetQueued: ReturnType<typeof vi.fn>;
+    };
+
+    expect(outbox.start).toHaveBeenCalledOnce();
+    const onDeploymentTargetQueued = fakes.routeOptions[0]!
+      .onAppDeploymentTargetQueued as () => Promise<void>;
+    await expect(onDeploymentTargetQueued()).resolves.toBeUndefined();
+    expect(outbox.pollOnce).toHaveBeenCalledOnce();
+    expect(coordinator.handleDeploymentTargetQueued).not.toHaveBeenCalled();
+
+    await outbox.dependencies.claim!("worker-1", 4, 15_000);
+    expect(apps.claimDeploymentOutboxForPrincipal).toHaveBeenCalledWith(
+      {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        membershipId: "membership-1",
+      },
+      "worker-1",
+      4,
+      15_000,
+    );
+
+    const context = {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+    };
+    const deployment = {
+      appId: "app-1",
+      deploymentId: "deployment-1",
+      appGeneration: 2,
+      phase: "queued",
+      target: "byoc",
+      connectionId: "connection-1",
+      temporaryAccountId: null,
+    };
+    await outbox.dependencies.run!(context, deployment, new AbortController().signal);
+    expect(coordinator.handleDeploymentTargetQueued).toHaveBeenCalledWith(context, deployment);
+
+    await outbox.dependencies.complete!("outbox-1", "worker-1");
+    await outbox.dependencies.retry!("outbox-2", "worker-1", new Error("retry"));
+    await outbox.dependencies.fail!(
+      {
+        id: "outbox-3",
+        appId: "app-1",
+        operation: "rollback",
+        idempotencyKey: "rollback:key",
+        appGeneration: 2,
+      },
+      "worker-1",
+      new Error("invalid"),
+    );
+    expect(apps.completeOutbox).toHaveBeenCalledWith("outbox-1", "worker-1");
+    expect(apps.retryOutbox).toHaveBeenCalledWith("outbox-2", "worker-1", expect.any(Error));
+    expect(apps.failClaimedOutbox).toHaveBeenCalledWith("outbox-3", "worker-1", expect.any(Error));
+
+    principal.release();
+    await registry.dispose();
+    expect(outbox.stop).toHaveBeenCalledOnce();
   });
 
   it("reserves one process lease per generation and releases it on every terminal path", async () => {
@@ -409,6 +545,9 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
         }),
       }),
     );
+    const projectedCount = bridge.broadcastToSession.mock.calls.length;
+    onTaskEvent("session-1", { status: "unknown", taskId: "task-1", generation: 3 });
+    expect(bridge.broadcastToSession).toHaveBeenCalledTimes(projectedCount);
 
     const handler = bridge.controlHandler;
     const model = { key: "openai/model", provider: "openai", modelId: "model" };

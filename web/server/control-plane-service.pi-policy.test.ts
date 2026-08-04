@@ -78,6 +78,19 @@ describe("Agent Pi publication policy", () => {
     const client = {
       query: vi.fn(async (sql: string, _params?: unknown[]) => {
         const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized.includes("from tenant_memberships m join tenants")) {
+          return queryResult([
+            {
+              id: "membership-1",
+              tenant_id: "tenant-1",
+              tenant_name: "Tenant",
+              tenant_type: "personal",
+              user_id: "user-1",
+              status: "active",
+              is_default: true,
+            },
+          ]);
+        }
         if (normalized.startsWith("select * from agent_definitions")) {
           return queryResult([{ id: "agent-1", owner_membership_id: "membership-1", draft }]);
         }
@@ -254,6 +267,8 @@ describe("pinned Pi session authority", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-2",
       effectivePolicyHash: hash,
@@ -414,6 +429,8 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-2",
         effectivePolicyHash: hash,
@@ -432,6 +449,8 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-1",
         effectivePolicyHash: "not-a-sha256",
@@ -499,6 +518,8 @@ describe("pinned Pi session authority", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-1",
       effectivePolicyHash: hash,
@@ -609,6 +630,8 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-1",
         effectivePolicyHash: hash,

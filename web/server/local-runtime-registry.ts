@@ -11,6 +11,10 @@ import { agentBrowserSessionName } from "./agent-browser-runtime.js";
 import { BrowserControlCoordinator } from "./browser-control-session.js";
 import { createBrowserControlRuntime } from "./browser-control-runtime.js";
 import type { ControlPlaneService } from "./control-plane-service.js";
+import type { AppRuntimeDriver } from "./app-runtime-driver.js";
+import { restoreAppSourceSnapshot } from "./app-source-snapshot.js";
+import { AppsOutboxWorker } from "./apps-outbox-worker.js";
+import { AppsRuntimeCoordinator } from "./apps-runtime-coordinator.js";
 import { ENV, environment } from "./environment.js";
 import {
   getLocalDataRoot,
@@ -29,6 +33,10 @@ import {
   type ProtectedInternalTransport,
 } from "./pi-launch-options-builder.js";
 import { PiLauncher } from "./pi-launcher.js";
+import { RemotePiRuntimeBackend } from "./remote-pi-runtime.js";
+import type { PiRuntimeBackend } from "./pi-runtime-backend.js";
+import { RuntimeSessionIndexStore } from "./runtime-session-index.js";
+import { projectManagedTaskEvent } from "./native-projection-contract.js";
 import { PiProviderVault } from "./pi-provider-vault.js";
 import { createPiRecordingObserver } from "./pi-recording-observer.js";
 import { OnlyOfficeBroker, registerOnlyOfficeInternalRoutes } from "./onlyoffice-broker.js";
@@ -63,7 +71,7 @@ export interface LocalRuntime {
   api: Hono;
   internal: Hono;
   wsBridge: WsBridge;
-  launcher: PiLauncher;
+  launcher: PiRuntimeBackend;
   launchBuilder: PiLaunchOptionsBuilder;
   sessionStore: SessionStore;
   recorder: RecorderManager;
@@ -82,6 +90,15 @@ export interface LocalRuntimeRegistryOptions {
   providerVault?: PiProviderVault;
   internalTransport?: ProtectedInternalTransport;
   dataRoot?: string;
+  appRuntimeDriver?: AppRuntimeDriver;
+  runtimeSessionIndex?: RuntimeSessionIndexStore;
+}
+
+export async function wakeAppsOutboxWorker(
+  worker: Pick<AppsOutboxWorker, "pollOnce">,
+  onError?: (error: unknown) => void,
+): Promise<void> {
+  void worker.pollOnce().catch((error) => onError?.(error));
 }
 
 interface PrincipalGate {
@@ -94,8 +111,9 @@ interface PrincipalGate {
 }
 
 interface RuntimeDisposalComponents {
+  appsOutboxWorker?: Pick<AppsOutboxWorker, "stop">;
   orchestrator: Pick<SessionOrchestrator, "shutdown">;
-  launcher: Pick<PiLauncher, "killAll">;
+  launcher: Pick<PiRuntimeBackend, "killAll">;
   launchBuilder: Pick<PiLaunchOptionsBuilder, "dispose">;
   userSpaceBroker: Pick<UserSpaceBroker, "dispose">;
   onlyOfficeBroker: Pick<OnlyOfficeBroker, "dispose">;
@@ -128,6 +146,9 @@ export async function disposeLocalRuntimeComponents(
     }
   };
 
+  if (components.appsOutboxWorker) {
+    await captureAsync(() => components.appsOutboxWorker!.stop());
+  }
   captureSync(() => components.orchestrator.shutdown());
   await captureAsync(() => components.launcher.killAll());
   if (components.browserSessions) {
@@ -193,6 +214,8 @@ export class LocalRuntimeRegistry {
   private readonly providerVault: PiProviderVault;
   private readonly internalTransport?: ProtectedInternalTransport;
   private readonly dataRoot: string;
+  private readonly appRuntimeDriver?: AppRuntimeDriver;
+  private readonly runtimeSessionIndex?: RuntimeSessionIndexStore;
 
   constructor(
     private readonly _port: number,
@@ -205,6 +228,12 @@ export class LocalRuntimeRegistry {
     this.providerVault = options.providerVault ?? new PiProviderVault([]);
     this.internalTransport = options.internalTransport;
     this.dataRoot = options.dataRoot ?? getLocalDataRoot();
+    this.appRuntimeDriver = options.appRuntimeDriver;
+    this.runtimeSessionIndex =
+      options.runtimeSessionIndex ||
+      (controlPlane && typeof controlPlane.getDatabasePool === "function"
+        ? new RuntimeSessionIndexStore({ database: controlPlane.getDatabasePool() })
+        : undefined);
   }
 
   private gateFor(principalKey: string): PrincipalGate {
@@ -397,7 +426,22 @@ export class LocalRuntimeRegistry {
       layout: "session-dir",
     });
     const wsBridge = new WsBridge();
-    const launcher = new PiLauncher();
+    const launcher: PiRuntimeBackend =
+      environment.runtimeMode === "compose"
+        ? new RemotePiRuntimeBackend({
+            socketPath: environment.string(
+              ENV.PIWORK_RUNTIME_SOCKET,
+              "/run/piwork-runtime/runtime.sock",
+              false,
+            ),
+            controlKeyPath: environment.string(
+              ENV.PIWORK_RUNTIME_CONTROL_KEY_FILE,
+              "/run/secrets/piwork-runtime-control",
+              false,
+            ),
+            dataRoot: this.dataRoot,
+          })
+        : new PiLauncher();
     const recorder = new RecorderManager({
       recordingsDir: sessionsRoot,
       recordingsDirForSession: (sessionId) => join(sessionDirFor(sessionId), "recordings"),
@@ -416,6 +460,49 @@ export class LocalRuntimeRegistry {
       join(profileRoot, "session-names.json"),
       userResources.diskQuota,
     );
+    const appsRuntime =
+      this.controlPlane && this.appRuntimeDriver
+        ? new AppsRuntimeCoordinator({
+            controlPlane: this.controlPlane.apps,
+            cloudflareAccounts: this.controlPlane.appCloudflareAccounts,
+            driver: this.appRuntimeDriver,
+            getCurrentUser: () => runtimeRef?.user || fullUser,
+            creatorRoot: profileRoot,
+            resolveCreatorRoot: (ownerUserId) =>
+              user.tenantId
+                ? join(getTenantUserDataRoot(user.tenantId, ownerUserId), "profile")
+                : getUserDataRoot(ownerUserId),
+          })
+        : undefined;
+    const reportAppsOutboxError = (error: unknown) => {
+      console.error("[apps-outbox] Background worker error", {
+        error: error instanceof Error ? error.name : "UnknownError",
+      });
+    };
+    const appsOutboxWorker =
+      appsRuntime && this.controlPlane && user.tenantId && user.membershipId
+        ? new AppsOutboxWorker({
+            claim: (workerId, limit, leaseMs) =>
+              this.controlPlane!.apps.claimDeploymentOutboxForPrincipal(
+                {
+                  tenantId: user.tenantId!,
+                  userId: user.userId,
+                  membershipId: user.membershipId!,
+                },
+                workerId,
+                limit,
+                leaseMs,
+              ),
+            run: (context, deployment) =>
+              appsRuntime.handleDeploymentTargetQueued(context, deployment),
+            complete: (id, workerId) => this.controlPlane!.apps.completeOutbox(id, workerId),
+            retry: (id, workerId, error) =>
+              this.controlPlane!.apps.retryOutbox(id, workerId, error),
+            fail: (record, workerId, error) =>
+              this.controlPlane!.apps.failClaimedOutbox(record.id, workerId, error),
+            onError: reportAppsOutboxError,
+          })
+        : undefined;
     const launchBuilder = new PiLaunchOptionsBuilder({
       dataRoot: this.dataRoot,
       tenantRoot,
@@ -424,7 +511,14 @@ export class LocalRuntimeRegistry {
       internalTransport: this.internalTransport,
       providerVault: this.providerVault,
       issueUserSpaceCapability: (sessionId) => userSpaceBroker.issueInternalCapability(sessionId),
+      nativeHelperOwnerKey: uuid,
       controlPlane: this.controlPlane,
+      ...(appsRuntime
+        ? {
+            handleApp: (request, context, scope) =>
+              appsRuntime.handleBroker(request, context, scope),
+          }
+        : {}),
       runtimeObserverForSession: ({ recordingSessionId, cwd }) =>
         createPiRecordingObserver({
           recorder,
@@ -433,35 +527,19 @@ export class LocalRuntimeRegistry {
         }),
       registerRecordingSensitiveValues: (recordingSessionId, values) =>
         recorder.addSensitiveValues(recordingSessionId, values),
+      deliverTaskResult: async (parentSessionId, message) => {
+        const transport = launcher.getTransport(parentSessionId);
+        if (!transport) {
+          throw new Error("Parent Pi transport is unavailable for managed task delivery");
+        }
+        await transport.prompt(message, { streamingBehavior: "followUp" });
+      },
       onTaskEvent: (sessionId, event) => {
-        const status =
-          event.status === "completed"
-            ? "completed"
-            : event.status === "failed"
-              ? "failed"
-              : event.status === "stopped"
-                ? "cancelled"
-                : "running";
-        wsBridge.broadcastToSession(sessionId, {
-          type: "tool_execution",
+        const projected = projectManagedTaskEvent(event, {
           generation: typeof event.generation === "number" ? event.generation : 0,
-          toolCallId: `task:${String(event.taskId || "unknown")}`,
-          toolName: "task",
-          status,
           timestamp: Date.now(),
-          progress: typeof event.progress === "string" ? event.progress : undefined,
-          task: {
-            taskId: String(event.taskId || ""),
-            name: "Managed Pi task",
-            execution: event.background ? "background" : "foreground",
-            status:
-              event.status === "starting"
-                ? "running"
-                : (event.status as "running" | "completed" | "failed" | "stopped"),
-            depth: typeof event.depth === "number" ? event.depth : 1,
-            progress: typeof event.progress === "string" ? event.progress : undefined,
-          },
         });
+        if (projected) wsBridge.broadcastToSession(sessionId, projected);
       },
     });
 
@@ -483,6 +561,7 @@ export class LocalRuntimeRegistry {
       launcher,
       wsBridge,
       sessionStore,
+      runtimeSessionIndex: this.runtimeSessionIndex,
       sessionNameStore,
       browserSessionCleanup: (sessionId) => browserControl.stop(sessionId).then(() => undefined),
       onRuntimeStopped: async (sessionId) => {
@@ -577,9 +656,64 @@ export class LocalRuntimeRegistry {
       this.bindSession(key, session.sessionId);
     }
 
+    const continueAppDevelopment = this.controlPlane
+      ? async (source: import("./apps-types.js").AppContinueDevelopmentResponse) => {
+          if (source.sourceSessionId && orchestrator.hasSessionData(source.sourceSessionId)) {
+            this.bindSession(key, source.sourceSessionId);
+            return { sessionId: source.sourceSessionId, restoredFromSnapshot: false };
+          }
+          if (!source.sourceSnapshotKey) {
+            throw new Error("App source snapshot is unavailable.");
+          }
+          const currentUser = runtimeRef?.user || fullUser;
+          if (!currentUser.tenantId) throw new Error("Tenant membership not found.");
+          const agentId = workspaceStateStore.get().selectedAgentId;
+          const governed = await this.controlPlane!.resolveSessionAuthority(
+            currentUser.userId,
+            currentUser.tenantId,
+            agentId,
+          );
+          const modelPolicy = await launchBuilder.probeModels(agentId, governed.launch);
+          const created = await orchestrator.createSession({
+            backend: "pi",
+            agentId,
+            model: modelPolicy.defaultModel,
+            thinkingLevel: modelPolicy.defaultThinkingLevel,
+            mode: "agent",
+            authority: governed.authority,
+            resolvedSandbox: governed.launch,
+          });
+          if (!created.ok) throw new Error(created.error);
+          const sessionId = created.session.sessionId;
+          try {
+            await restoreAppSourceSnapshot({
+              creatorRoot: profileRoot,
+              snapshotKey: source.sourceSnapshotKey,
+              workspaceRoot: join(sessionDirFor(sessionId), "workspace"),
+            });
+          } catch (error) {
+            await orchestrator.hardDeleteSession(sessionId).catch(() => undefined);
+            throw error;
+          }
+          this.bindSession(key, sessionId);
+          workspaceStateStore.bindSession(agentId, sessionId);
+          return { sessionId, restoredFromSnapshot: true };
+        }
+      : undefined;
+
     const api = new Hono();
     registerRequestContext(api, {
       getUserId: () => runtimeRef?.user.uuid || fullUser.uuid,
+      getDatabaseScope: () => {
+        const current = runtimeRef?.user || fullUser;
+        if (!current.tenantId || !current.membershipId || !current.orgNodeId) return undefined;
+        return {
+          userId: current.userId,
+          tenantId: current.tenantId,
+          membershipId: current.membershipId,
+          orgNodeId: current.orgNodeId,
+        };
+      },
     });
     api.route(
       "/api",
@@ -602,6 +736,14 @@ export class LocalRuntimeRegistry {
           browserControl,
           providerVault: this.providerVault,
           launchBuilder,
+          appsRuntime,
+          ...(appsOutboxWorker
+            ? {
+                onAppDeploymentTargetQueued: () =>
+                  wakeAppsOutboxWorker(appsOutboxWorker, reportAppsOutboxError),
+              }
+            : {}),
+          continueAppDevelopment,
           onSessionBound: (sessionId) => this.bindSession(key, sessionId),
         },
       ),
@@ -632,6 +774,7 @@ export class LocalRuntimeRegistry {
           wsBridge,
           sessionStore,
           recorder,
+          appsOutboxWorker,
           browserSessions: agentBrowserBridge
             ? {
                 closeAll: async () => {
@@ -653,6 +796,7 @@ export class LocalRuntimeRegistry {
       },
     };
     runtimeRef = runtime;
+    appsOutboxWorker?.start();
     this.runtimes.set(key, runtime);
     console.log(`[local-runtime] Native Pi ready for ${fullUser.username} (${uuid})`);
     return runtime;

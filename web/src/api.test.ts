@@ -313,6 +313,344 @@ describe("API request contracts", () => {
     });
   });
 
+  it("binds Apps and Cloudflare deployment requests to the active runtime context", async () => {
+    const lease = runtimeContextCoordinator.activate({
+      userId: "user-a",
+      userScopeKey: userScopeKeyFromCurrentUser({ ...user, tenantId: "tenant-a" }),
+      agentId: "agent",
+      sessionId: "session-a",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            apps: [
+              {
+                id: "app-a",
+                tenantId: "tenant-a",
+                ownerUserId: "user-a",
+                sourceSessionId: "session/a",
+                slug: "demo",
+                name: "Demo",
+                status: "preview",
+                targetKind: "temporary",
+                stableUrl: "https://demo.example.workers.dev",
+                currentDeploymentId: "deployment-2",
+                canManage: true,
+                createdAt: "2026-08-01T00:00:00.000Z",
+                updatedAt: "2026-08-01T00:00:00.000Z",
+              },
+            ],
+            nextCursor: null,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            deployment: {
+              id: "deployment-2",
+              appId: "app-a",
+              version: 2,
+              phase: "claim_pending",
+              targetKind: "temporary",
+              stableUrl: "https://demo.example.workers.dev",
+              requestedCustomDomain: "App.Example.com",
+              temporaryPreview: {
+                id: "preview-1",
+                expiresAt: "2026-08-01T01:00:00.000Z",
+                claimExpiresAt: "2026-08-01T00:30:00.000Z",
+                claimAvailable: true,
+              },
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            events: [
+              {
+                id: "event-1",
+                phase: "temporary_ready",
+                at: "2026-08-01T00:10:00.000Z",
+                detail: "Preview ready",
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            connections: [
+              {
+                id: "connection-1",
+                accountId: "account-1",
+                accountName: "Alice Cloudflare",
+                scope: "user",
+                status: "active",
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { authorizationUrl: "https://dash.cloudflare.com/oauth2/auth" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 202,
+          body: {
+            deployment: {
+              id: "deployment-2",
+              appId: "app-a",
+              version: 2,
+              phase: "queued",
+              targetKind: "temporary",
+            },
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const appPage = await api.listApps({ scope: "current-session", sessionId: "session/a" });
+    const deployment = await api.getAppDeployment("deployment/2");
+    const events = await api.getAppDeploymentEvents("deployment/2");
+    await api.listCloudflareConnections();
+    await api.startCloudflareOAuth({
+      returnPath: "/apps?scope=mine",
+      deploymentId: "deployment/2",
+      purpose: "claim",
+      temporaryPreviewId: "preview-1",
+    });
+    await api.selectAppDeploymentTarget("deployment/2", {
+      target: "temporary",
+      termsAcceptance: {
+        acceptedTermsOfService: true,
+        acceptedPrivacyPolicy: true,
+      },
+    });
+
+    expect(appPage.apps[0]).toMatchObject({
+      displayName: "Demo",
+      ownerDisplayName: "user-a",
+      latestDeploymentId: "deployment-2",
+      status: "preview",
+      targetKind: "temporary",
+      stableUrl: "https://demo.example.workers.dev",
+    });
+    expect(deployment.deployment).toMatchObject({
+      number: 2,
+      phase: "claim_pending",
+      requestedCustomDomain: "app.example.com",
+      temporaryPreview: expect.objectContaining({ id: "preview-1", claimAvailable: true }),
+    });
+    expect(events.events[0]).toMatchObject({
+      deploymentId: "deployment/2",
+      phase: "temporary_ready",
+      message: "Preview ready",
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/apps?scope=current-session&sessionId=session%2Fa",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: "GET",
+      headers: expect.objectContaining({
+        "X-Piwork-Context-Epoch": String(lease.context.epoch),
+        "X-Piwork-Context-Id": lease.context.contextId,
+      }),
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/apps?scope=current-session&sessionId=session%2Fa",
+      "/api/apps/deployments/deployment%2F2",
+      "/api/apps/deployments/deployment%2F2/events",
+      "/api/cloudflare/connections",
+      "/api/cloudflare/oauth/start",
+      "/api/apps/deployments/deployment%2F2/target",
+    ]);
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        returnPath: "/apps?scope=mine",
+        deploymentId: "deployment/2",
+        purpose: "claim",
+        temporaryPreviewId: "preview-1",
+      }),
+    });
+    expect(fetchMock.mock.calls[5]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        target: "temporary",
+        termsAcceptance: {
+          acceptedTermsOfService: true,
+          acceptedPrivacyPolicy: true,
+        },
+      }),
+    });
+    expect(api.getAppDeploymentClaimUrl("deployment/2")).toBe(
+      "/api/apps/deployments/deployment%2F2/claim",
+    );
+  });
+
+  it("uses BYOC Worker Custom Domain routes with an explicit impact confirmation", async () => {
+    runtimeContextCoordinator.activate({
+      userId: "user-a",
+      userScopeKey: userScopeKeyFromCurrentUser({ ...user, tenantId: "tenant-a" }),
+      agentId: "agent",
+      sessionId: "session-a",
+    });
+    const app = {
+      id: "app-a",
+      tenantId: "tenant-a",
+      ownerUserId: "user-a",
+      sourceSessionId: "session-a",
+      slug: "demo",
+      name: "Demo",
+      status: "ready",
+      targetKind: "byoc",
+      cloudflareConnectionId: "connection-1",
+      stableUrl: "https://demo.example.workers.dev",
+      canManage: true,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { zones: [{ id: "zone-1", name: "example.com", status: "active" }] },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            app: {
+              ...app,
+              customDomain: {
+                id: "domain-1",
+                cloudflareConnectionId: "connection-1",
+                zoneId: "zone-1",
+                hostname: "app.example.com",
+                status: "pending",
+                sslStatus: "pending_validation",
+                createdAt: "2026-08-01T00:10:00.000Z",
+                updatedAt: "2026-08-01T00:10:00.000Z",
+              },
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { app: { ...app, customDomain: null } },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const input = {
+      connectionId: "connection-1",
+      zoneId: "zone-1",
+      hostname: "app.example.com",
+      confirmImpact: true as const,
+    };
+
+    const zones = await api.listCloudflareConnectionZones("connection/1");
+    const attached = await api.setAppWorkerCustomDomain("app/a", input);
+    await api.removeAppWorkerCustomDomain("app/a", input);
+
+    expect(zones.zones).toEqual([{ id: "zone-1", name: "example.com", status: "active" }]);
+    expect(attached.app.customDomain).toMatchObject({
+      hostname: "app.example.com",
+      connectionId: "connection-1",
+      zoneId: "zone-1",
+      status: "pending",
+      sslStatus: "pending_validation",
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/cloudflare/connections/connection%2F1/zones",
+      "/api/apps/app%2Fa/domains",
+      "/api/apps/app%2Fa/domains",
+    ]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      method: "DELETE",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("loads browser-safe Cloudflare feature config inside the active runtime context", async () => {
+    const lease = runtimeContextCoordinator.activate({
+      userId: "user-a",
+      userScopeKey: userScopeKeyFromCurrentUser({ ...user, tenantId: "tenant-a" }),
+      agentId: "agent",
+      sessionId: "session-a",
+    });
+    const fetchMock = vi.fn(async () =>
+      response({
+        ok: true,
+        status: 200,
+        body: {
+          temporaryEnabled: true,
+          byocEnabled: true,
+          turnstileEnabled: true,
+          siteKey: "site-key-public",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.getCloudflareConfig()).resolves.toEqual({
+      temporaryEnabled: true,
+      byocEnabled: true,
+      turnstileEnabled: true,
+      siteKey: "site-key-public",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/cloudflare/config",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          "X-Piwork-Context-Epoch": String(lease.context.epoch),
+          "X-Piwork-Context-Id": lease.context.contextId,
+        }),
+      }),
+    );
+  });
+
+  it("fails Apps authority-bearing requests when no runtime context is active", async () => {
+    await runtimeContextCoordinator.dispose();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(() => api.listApps({ scope: "mine" })).toThrow("Runtime context is stale");
+    expect(() => api.getCloudflareConfig()).toThrow("Runtime context is stale");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("passes an AbortSignal through bootstrap requests and preserves AbortError", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn(
@@ -352,6 +690,7 @@ describe("API request contracts", () => {
             status: 409,
             message: "Workspace state changed",
             requestId: "req-body",
+            requiredPermissionNames: ["Workers Scripts Write", "D1 Write"],
           },
         }),
       ),
@@ -366,6 +705,7 @@ describe("API request contracts", () => {
       status: 409,
       requestId: "req-body",
       message: "Workspace state changed",
+      requiredPermissionNames: ["Workers Scripts Write", "D1 Write"],
     });
   });
 

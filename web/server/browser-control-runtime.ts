@@ -4,7 +4,7 @@ import { BrowserControlCoordinator, browserControlStatePath } from "./browser-co
 
 interface BrowserControlMessageBridge {
   interruptSession(sessionId: string): boolean;
-  injectUserMessage(sessionId: string, content: string): boolean;
+  injectUserMessage(sessionId: string, content: string): boolean | Promise<boolean>;
 }
 
 export function createBrowserControlRuntime(options: {
@@ -44,7 +44,7 @@ export function createBrowserControlRuntime(options: {
         await agentBrowserBridge.setSessionControl(sessionId, "human");
         return { handoffDelivered: false, semanticReadbackVerified: false };
       }
-      const accepted = messageBridge.injectUserMessage(
+      const accepted = await messageBridge.injectUserMessage(
         sessionId,
         [
           "Browser control has been returned to the Agent after a temporary user takeover.",

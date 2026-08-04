@@ -7,13 +7,17 @@ import { compileSrtPolicy } from "../server/srt-policy.js";
 import { createPiProbeLayout, runPiRpcProbe } from "./pi-rpc-probe.js";
 
 if (process.platform !== "linux") {
-  throw new Error("The production Pi SRT smoke must run on Linux.");
+  throw new Error(
+    "The production Pi SRT smoke must run on Linux; use OrbStack Linux on macOS or WSL2 Linux on Windows.",
+  );
 }
 
 const node = resolveBinary("node");
 const srt = resolveBinary("srt");
 if (!node) throw new Error("Node.js is required for native Pi rpc-entry.");
 if (!srt) throw new Error("Pinned repo-local SRT executable was not found.");
+const executionMode =
+  process.env.PIWORK_RUNTIME_DEPLOYMENT_MODE === "compose-nested" ? "compose-nested" : "native";
 
 const rpcEntry = realpathSync(
   fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent/rpc-entry")),
@@ -47,6 +51,7 @@ try {
     runtimeReadPaths: [realpathSync(node), nodeModulesRoot],
     requiredInternalDomains: [],
     domainLayers: [],
+    executionMode,
   };
   writeFileSync(
     settingsPath,
@@ -66,7 +71,7 @@ try {
     layout,
   );
   console.log(
-    `[srt-pi-rpc] real Pi ${piPackage.version} rpc-entry passed inside Linux SRT ` +
+    `[srt-pi-rpc] real Pi ${piPackage.version} rpc-entry passed inside Linux SRT (${executionMode}) ` +
       `with isolated pi-config/pi-sessions and exact JSONL resume ` +
       `(${result.modelCount} models, ${result.commandCount} commands).`,
   );

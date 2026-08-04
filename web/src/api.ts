@@ -83,14 +83,19 @@ export class ApiError extends Error implements ApiErrorContract {
   readonly code: string;
   readonly status: number;
   readonly requestId: string;
+  readonly requiredPermissionNames: string[];
 
-  constructor(input: ApiErrorContract, options?: ErrorOptions) {
+  constructor(
+    input: ApiErrorContract & { requiredPermissionNames?: string[] },
+    options?: ErrorOptions,
+  ) {
     super(input.message, options);
     this.name = "ApiError";
     this.category = input.category;
     this.code = input.code;
     this.status = input.status;
     this.requestId = input.requestId;
+    this.requiredPermissionNames = [...(input.requiredPermissionNames || [])];
   }
 }
 
@@ -263,6 +268,11 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
           ? record.requestId
           : requestIdHeader,
     message,
+    requiredPermissionNames: Array.isArray(record.requiredPermissionNames)
+      ? record.requiredPermissionNames.filter(
+          (value): value is string => typeof value === "string" && value.length <= 200,
+        )
+      : [],
   });
 }
 
@@ -441,6 +451,344 @@ export interface UsageLimits {
     used_credits: number;
     utilization: number | null;
   } | null;
+}
+
+export type AppListScope = "current-session" | "mine" | "tenant";
+export type AppStatus =
+  "building" | "needs_action" | "deploying" | "preview" | "ready" | "failed" | "archived";
+export type AppDeploymentPhase =
+  | "building"
+  | "awaiting_target"
+  | "awaiting_oauth"
+  | "queued"
+  | "provisioning"
+  | "deploying"
+  | "temporary_ready"
+  | "claim_pending"
+  | "verifying_claim"
+  | "ready"
+  | "expired"
+  | "failed"
+  | "cancelled";
+export type AppDeploymentTargetKind = "unassigned" | "temporary" | "byoc";
+
+export interface PublishedAppSummary {
+  id: string;
+  tenantId: string;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  sourceSessionId: string;
+  slug: string;
+  displayName: string;
+  status: AppStatus;
+  statusReason?: string | null;
+  stableUrl: string | null;
+  screenshotUrl?: string | null;
+  latestDeploymentNumber?: number | null;
+  latestDeploymentId?: string | null;
+  targetKind: AppDeploymentTargetKind;
+  cloudflareConnectionId: string | null;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+}
+
+export interface PublishedApp extends PublishedAppSummary {
+  customDomain: AppWorkerCustomDomain | null;
+  manifest?: Record<string, unknown> | null;
+  lastFailure?: string | null;
+}
+
+export interface AppWorkerCustomDomain {
+  id: string;
+  hostname: string;
+  connectionId?: string | null;
+  zoneId?: string | null;
+  status: "pending" | "active" | "failed" | "removing";
+  sslStatus: "pending_validation" | "pending_issuance" | "active" | "failed";
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  activatedAt?: string | null;
+}
+
+export interface AppTemporaryPreview {
+  id?: string | null;
+  expiresAt: string | null;
+  claimExpiresAt: string | null;
+  claimAvailable: boolean;
+}
+
+export interface AppDeployment {
+  id: string;
+  appId: string;
+  number: number;
+  phase: AppDeploymentPhase;
+  targetKind: AppDeploymentTargetKind;
+  sourceDigest: string;
+  cloudflareVersion?: string | null;
+  stableUrl: string | null;
+  requestedCustomDomain: string | null;
+  temporaryPreview: AppTemporaryPreview | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdByUserId: string;
+  createdByDisplayName?: string;
+  createdAt: string;
+  completedAt?: string | null;
+  current?: boolean;
+}
+
+export interface AppDeploymentEvent {
+  id: string;
+  deploymentId: string;
+  phase: AppDeploymentPhase;
+  timestamp: string;
+  message?: string | null;
+  code?: string | null;
+}
+
+export interface AppCloudflareConnection {
+  id: string;
+  accountId: string;
+  accountName: string;
+  scope: "user" | "tenant";
+  status: "active" | "refresh_required" | "error" | "revoked";
+  accessExpiresAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface AppCloudflareZone {
+  id: string;
+  name: string;
+  status: string;
+}
+
+export interface AppCloudflareBrowserConfig {
+  temporaryEnabled: boolean;
+  byocEnabled: boolean;
+  turnstileEnabled: boolean;
+  siteKey: string | null;
+}
+
+export interface AppWorkerCustomDomainInput {
+  connectionId: string;
+  zoneId: string;
+  hostname: string;
+  confirmImpact: true;
+}
+
+export type AppDeploymentTargetInput =
+  | {
+      target: "temporary";
+      termsAcceptance: {
+        acceptedTermsOfService: true;
+        acceptedPrivacyPolicy: true;
+        turnstileToken?: string;
+      };
+    }
+  | {
+      target: "byoc";
+      connectionId: string;
+    };
+
+export interface StartCloudflareOAuthInput {
+  returnPath: string;
+  deploymentId: string;
+  purpose: "direct" | "claim";
+  temporaryPreviewId?: string;
+}
+
+export interface StartCloudflareOAuthResponse {
+  authorizationUrl: string;
+}
+
+export interface AppPage {
+  apps: PublishedAppSummary[];
+  nextCursor?: string | null;
+}
+
+export interface AppDeploymentPage {
+  versions: AppDeployment[];
+  nextCursor?: string | null;
+}
+
+interface AppsApiRecord extends Omit<Partial<PublishedApp>, "sourceSessionId" | "stableUrl"> {
+  name?: string;
+  ownerMembershipId?: string;
+  sourceSessionId?: string | null;
+  sourceSessionGeneration?: number;
+  statusReason?: string | null;
+  stableUrl?: string | null;
+  currentDeploymentId?: string | null;
+  generation?: number;
+  targetKind?: AppDeploymentTargetKind;
+  cloudflareConnectionId?: string | null;
+  temporaryPreviewId?: string | null;
+}
+
+interface AppsApiWorkerCustomDomain extends Partial<AppWorkerCustomDomain> {
+  appId?: string;
+  cloudflareConnectionId?: string | null;
+}
+
+interface AppsApiDeploymentRecord extends Partial<AppDeployment> {
+  version?: number;
+  phase?: AppDeploymentPhase;
+  targetKind?: AppDeploymentTargetKind;
+  sourceSessionId?: string;
+  sourceSessionGeneration?: number;
+  artifactKey?: string | null;
+  cloudflareVersionId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdBy?: string;
+  deployedAt?: string | null;
+}
+
+interface AppsApiDeploymentEvent extends Partial<AppDeploymentEvent> {
+  at?: string;
+  createdAt?: string;
+  detail?: string;
+}
+
+function appStatusFromApi(value: unknown): AppStatus {
+  return value === "building" ||
+    value === "needs_action" ||
+    value === "deploying" ||
+    value === "preview" ||
+    value === "ready" ||
+    value === "failed" ||
+    value === "archived"
+    ? value
+    : "failed";
+}
+
+function appDeploymentPhaseFromApi(value: unknown): AppDeploymentPhase {
+  return value === "building" ||
+    value === "awaiting_target" ||
+    value === "awaiting_oauth" ||
+    value === "queued" ||
+    value === "provisioning" ||
+    value === "deploying" ||
+    value === "temporary_ready" ||
+    value === "claim_pending" ||
+    value === "verifying_claim" ||
+    value === "ready" ||
+    value === "expired" ||
+    value === "failed" ||
+    value === "cancelled"
+    ? value
+    : "failed";
+}
+
+function appTargetKindFromApi(value: unknown): AppDeploymentTargetKind {
+  return value === "temporary" || value === "byoc" ? value : "unassigned";
+}
+
+function appFromApi(record: AppsApiRecord): PublishedApp {
+  const customDomain = record.customDomain as AppsApiWorkerCustomDomain | null | undefined;
+  return {
+    id: String(record.id || ""),
+    tenantId: String(record.tenantId || ""),
+    ownerUserId: String(record.ownerUserId || ""),
+    ownerDisplayName: String(record.ownerDisplayName || record.ownerUserId || ""),
+    sourceSessionId: String(record.sourceSessionId || ""),
+    slug: String(record.slug || ""),
+    displayName: String(record.displayName || record.name || record.slug || ""),
+    status: appStatusFromApi(record.status),
+    statusReason: record.statusReason || null,
+    stableUrl: record.stableUrl ? String(record.stableUrl) : null,
+    screenshotUrl: record.screenshotUrl || null,
+    latestDeploymentNumber: record.latestDeploymentNumber ?? null,
+    latestDeploymentId: record.latestDeploymentId || record.currentDeploymentId || null,
+    targetKind: appTargetKindFromApi(record.targetKind),
+    cloudflareConnectionId: record.cloudflareConnectionId || null,
+    canManage: record.canManage === true,
+    createdAt: String(record.createdAt || ""),
+    updatedAt: String(record.updatedAt || record.createdAt || ""),
+    archivedAt: record.archivedAt || null,
+    customDomain: customDomain
+      ? {
+          id: String(customDomain.id || customDomain.hostname || ""),
+          hostname: String(customDomain.hostname || ""),
+          connectionId:
+            customDomain.connectionId ||
+            customDomain.cloudflareConnectionId ||
+            record.cloudflareConnectionId ||
+            null,
+          zoneId: customDomain.zoneId || null,
+          status:
+            customDomain.status === "active" ||
+            customDomain.status === "failed" ||
+            customDomain.status === "removing"
+              ? customDomain.status
+              : "pending",
+          sslStatus:
+            customDomain.sslStatus === "pending_issuance" ||
+            customDomain.sslStatus === "active" ||
+            customDomain.sslStatus === "failed"
+              ? customDomain.sslStatus
+              : "pending_validation",
+          error: customDomain.error || null,
+          createdAt: String(customDomain.createdAt || ""),
+          updatedAt: String(customDomain.updatedAt || customDomain.createdAt || ""),
+          activatedAt: customDomain.activatedAt || null,
+        }
+      : null,
+    manifest: record.manifest,
+    lastFailure: record.lastFailure || record.statusReason || null,
+  };
+}
+
+function appDeploymentFromApi(record: AppsApiDeploymentRecord): AppDeployment {
+  const temporaryPreview = record.temporaryPreview;
+  return {
+    id: String(record.id || ""),
+    appId: String(record.appId || ""),
+    number: Number(record.number ?? record.version ?? 0),
+    phase: appDeploymentPhaseFromApi(record.phase),
+    targetKind: appTargetKindFromApi(record.targetKind),
+    sourceDigest: String(record.sourceDigest || ""),
+    cloudflareVersion: record.cloudflareVersion || record.cloudflareVersionId || null,
+    stableUrl: record.stableUrl ? String(record.stableUrl) : null,
+    requestedCustomDomain:
+      typeof record.requestedCustomDomain === "string" && record.requestedCustomDomain.trim()
+        ? record.requestedCustomDomain.trim().toLowerCase()
+        : null,
+    temporaryPreview: temporaryPreview
+      ? {
+          id: temporaryPreview.id || null,
+          expiresAt: temporaryPreview.expiresAt || null,
+          claimExpiresAt: temporaryPreview.claimExpiresAt || null,
+          claimAvailable: temporaryPreview.claimAvailable === true,
+        }
+      : null,
+    errorCode: record.errorCode || null,
+    errorMessage: record.errorMessage || null,
+    createdByUserId: String(record.createdByUserId || record.createdBy || ""),
+    createdByDisplayName: record.createdByDisplayName,
+    createdAt: String(record.createdAt || ""),
+    completedAt: record.completedAt || record.deployedAt || null,
+    current: record.current,
+  };
+}
+
+function appDeploymentEventFromApi(
+  record: AppsApiDeploymentEvent,
+  deploymentId: string,
+  index: number,
+): AppDeploymentEvent {
+  const timestamp = String(record.timestamp || record.at || record.createdAt || "");
+  return {
+    id: String(record.id || `${deploymentId}:${timestamp}:${index}`),
+    deploymentId: String(record.deploymentId || deploymentId),
+    phase: appDeploymentPhaseFromApi(record.phase),
+    timestamp,
+    message: record.message || record.detail || null,
+    code: record.code || null,
+  };
 }
 
 // ─── SSE Session Creation ────────────────────────────────────────────────────
@@ -1076,12 +1424,260 @@ export async function getMe(options?: ApiRequestOptions): Promise<MeResponse> {
   return get<MeResponse>("/me", options);
 }
 
+export interface NativeShareCapabilities {
+  available: boolean;
+  platform: string;
+  maxBytes: number;
+}
+
+export type NativeFileAction =
+  | "file.quickLook"
+  | "file.open"
+  | "file.openWith"
+  | "file.print"
+  | "file.saveAs"
+  | "file.revealExport"
+  | "file.share"
+  | "file.nativeEdit";
+
+export interface NativeHelperStatus {
+  supported: boolean;
+  installed: boolean;
+  connected: boolean;
+  compatible: boolean;
+  helperVersion: string | null;
+  protocolVersion: number | null;
+  platformVersion: string | null;
+  capabilities: string[];
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  upgradeCommand: string;
+  lastError: string | null;
+}
+
+export interface NativeFileSource {
+  space: "agent" | "user";
+  path: string;
+  mountId?: string;
+  baselineSha256?: string;
+  baselineMtime?: number;
+}
+
+export interface NativeFileOperation {
+  id: string;
+  sessionId: string;
+  action: NativeFileAction;
+  filename: string;
+  source: NativeFileSource;
+  baselineSha256: string;
+  managedSha256: string;
+  state: string;
+  createdAt: string;
+}
+
+export interface NativeShareAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+async function createNativeFileAction(
+  sessionId: string,
+  file: File,
+  input: {
+    action: NativeFileAction;
+    source: NativeFileSource;
+    anchor?: NativeShareAnchor;
+  },
+): Promise<{ operation: NativeFileOperation }> {
+  const requestContext = captureRequestContext();
+  const params = new URLSearchParams({
+    action: input.action,
+    filename: file.name,
+    space: input.source.space,
+    path: input.source.path,
+  });
+  if (input.source.mountId) params.set("mountId", input.source.mountId);
+  if (input.source.baselineSha256) {
+    params.set("baselineSha256", input.source.baselineSha256);
+  }
+  if (input.source.baselineMtime !== undefined) {
+    params.set("baselineMtime", String(input.source.baselineMtime));
+  }
+  if (input.anchor) {
+    params.set("x", String(input.anchor.x));
+    params.set("y", String(input.anchor.y));
+    params.set("width", String(input.anchor.width));
+    params.set("height", String(input.anchor.height));
+  }
+  const response = await fetch(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/native-file-actions?${params.toString()}`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        ...expectedTenantHeaders(requestContext.tenantPrincipal),
+        ...getAuthHeaders(),
+        "Content-Type": "application/octet-stream",
+      },
+      body: file,
+    },
+  );
+  if (!response.ok) {
+    handle401(response.status, requestContext);
+    throw await errorFromResponse(response);
+  }
+  return (await response.json()) as { operation: NativeFileOperation };
+}
+
+async function reclaimNativeFileAction(
+  sessionId: string,
+  operationId: string,
+  filename: string,
+): Promise<{
+  file: File;
+  baselineSha256: string;
+  managedSha256: string;
+  changed: boolean;
+}> {
+  const requestContext = captureRequestContext();
+  const response = await fetch(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/native-file-actions/${encodeURIComponent(operationId)}/reclaim`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        ...expectedTenantHeaders(requestContext.tenantPrincipal),
+        ...getAuthHeaders(),
+      },
+    },
+  );
+  if (!response.ok) {
+    handle401(response.status, requestContext);
+    throw await errorFromResponse(response);
+  }
+  const blob = await response.blob();
+  return {
+    file: new File([blob], filename, { type: blob.type || undefined }),
+    baselineSha256: response.headers.get("X-Piwork-Native-Baseline-Sha256") || "",
+    managedSha256: response.headers.get("X-Piwork-Native-Managed-Sha256") || "",
+    changed: response.headers.get("X-Piwork-Native-Changed") === "true",
+  };
+}
+
+async function cancelNativeFileAction(
+  sessionId: string,
+  operationId: string,
+): Promise<{ ok: boolean }> {
+  const requestContext = captureRequestContext();
+  const response = await fetch(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/native-file-actions/${encodeURIComponent(operationId)}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: {
+        ...expectedTenantHeaders(requestContext.tenantPrincipal),
+        ...getAuthHeaders(),
+      },
+    },
+  );
+  if (!response.ok) {
+    handle401(response.status, requestContext);
+    throw await errorFromResponse(response);
+  }
+  return (await response.json()) as { ok: boolean };
+}
+
+async function listNativeFileActions(
+  sessionId: string,
+): Promise<{ operations: NativeFileOperation[] }> {
+  return get<{ operations: NativeFileOperation[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/native-file-actions`,
+  );
+}
+
+async function writeAgentSpaceFileBytes(
+  sessionId: string,
+  path: string,
+  file: Blob,
+  baselineSha256?: string,
+  create = false,
+): Promise<{ ok: boolean; path: string; size: number; mtime: number; sha256: string }> {
+  const requestContext = captureRequestContext();
+  const params = new URLSearchParams({ path });
+  if (baselineSha256) params.set("baselineSha256", baselineSha256);
+  if (create) params.set("create", "1");
+  const response = await fetch(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/agent-space/raw?${params.toString()}`,
+    {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        ...expectedTenantHeaders(requestContext.tenantPrincipal),
+        ...getAuthHeaders(),
+        "Content-Type": "application/octet-stream",
+      },
+      body: file,
+    },
+  );
+  if (!response.ok) {
+    handle401(response.status, requestContext);
+    throw await errorFromResponse(response);
+  }
+  return (await response.json()) as {
+    ok: boolean;
+    path: string;
+    size: number;
+    mtime: number;
+    sha256: string;
+  };
+}
+
+async function shareNativeFile(
+  sessionId: string,
+  file: File,
+  source: NativeFileSource,
+  anchor: NativeShareAnchor,
+): Promise<{ operation: NativeFileOperation }> {
+  return createNativeFileAction(sessionId, file, {
+    action: "file.share",
+    source,
+    anchor,
+  });
+}
+
+async function getNativeShareCapabilities(): Promise<NativeShareCapabilities> {
+  const status = await get<NativeHelperStatus>("/native-helper/status");
+  return {
+    available:
+      status.supported &&
+      status.connected &&
+      status.compatible &&
+      status.capabilities.includes("file.share"),
+    platform: status.supported ? "darwin" : "unsupported",
+    maxBytes: 100 * 1024 * 1024,
+  };
+}
+
+async function getNativeHelperStatus(refresh = false): Promise<NativeHelperStatus> {
+  return get<NativeHelperStatus>(`/native-helper/status${refresh ? "?refresh=1" : ""}`);
+}
+
 export const api = {
   // Auth
   getAuthMode,
   logoutSession,
   destroyWorkspaceAndLogout,
   getMe,
+  getNativeHelperStatus,
+  getNativeShareCapabilities,
+  createNativeFileAction,
+  reclaimNativeFileAction,
+  cancelNativeFileAction,
+  listNativeFileActions,
+  writeAgentSpaceFileBytes,
+  shareNativeFile,
   completeOnboarding: (input: {
     type: "personal" | "team" | "enterprise";
     workspaceName?: string;
@@ -1117,6 +1713,135 @@ export const api = {
     get<WorkspaceSessionState>("/workspace/session-state", options),
   putWorkspaceSessionState: (state: WorkspaceSessionState, options?: ApiRequestOptions) =>
     put<WorkspaceSessionState>("/workspace/session-state", state, options),
+
+  // Published Apps
+  listApps: (
+    opts: {
+      scope: AppListScope;
+      sessionId?: string | null;
+      cursor?: string | null;
+    },
+    options?: ApiRequestOptions,
+  ) => {
+    const params = new URLSearchParams({ scope: opts.scope });
+    if (opts.scope === "current-session" && opts.sessionId) {
+      params.set("sessionId", opts.sessionId);
+    }
+    if (opts.cursor) params.set("cursor", opts.cursor);
+    return get<{ apps: AppsApiRecord[]; nextCursor?: string | null }>(
+      `/apps?${params.toString()}`,
+      requireCurrentRuntimeContext(options),
+    ).then((page): AppPage => ({
+      apps: page.apps.map(appFromApi),
+      nextCursor: page.nextCursor || null,
+    }));
+  },
+  getApp: (appId: string, options?: ApiRequestOptions) =>
+    get<{ app: AppsApiRecord }>(
+      `/apps/${encodeURIComponent(appId)}`,
+      requireCurrentRuntimeContext(options),
+    ).then(({ app }) => ({ app: appFromApi(app) })),
+  listAppVersions: (appId: string, cursor?: string | null, options?: ApiRequestOptions) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    const query = params.size > 0 ? `?${params.toString()}` : "";
+    return get<{ versions: AppsApiDeploymentRecord[]; nextCursor?: string | null }>(
+      `/apps/${encodeURIComponent(appId)}/versions${query}`,
+      requireCurrentRuntimeContext(options),
+    ).then((page): AppDeploymentPage => ({
+      versions: page.versions.map(appDeploymentFromApi),
+      nextCursor: page.nextCursor || null,
+    }));
+  },
+  getAppDeployment: (deploymentId: string, options?: ApiRequestOptions) =>
+    get<{ deployment: AppsApiDeploymentRecord }>(
+      `/apps/deployments/${encodeURIComponent(deploymentId)}`,
+      requireCurrentRuntimeContext(options),
+    ).then(({ deployment }) => ({ deployment: appDeploymentFromApi(deployment) })),
+  getAppDeploymentEvents: (deploymentId: string, options?: ApiRequestOptions) =>
+    get<{ events: AppsApiDeploymentEvent[] }>(
+      `/apps/deployments/${encodeURIComponent(deploymentId)}/events`,
+      requireCurrentRuntimeContext(options),
+    ).then(({ events }) => ({
+      events: events.map((event, index) => appDeploymentEventFromApi(event, deploymentId, index)),
+    })),
+  listCloudflareConnections: (options?: ApiRequestOptions) =>
+    get<{ connections: AppCloudflareConnection[] }>(
+      "/cloudflare/connections",
+      requireCurrentRuntimeContext(options),
+    ),
+  getCloudflareConfig: (options?: ApiRequestOptions) =>
+    get<AppCloudflareBrowserConfig>("/cloudflare/config", requireCurrentRuntimeContext(options)),
+  listCloudflareConnectionZones: (connectionId: string, options?: ApiRequestOptions) =>
+    get<{ zones: AppCloudflareZone[] }>(
+      `/cloudflare/connections/${encodeURIComponent(connectionId)}/zones`,
+      requireCurrentRuntimeContext(options),
+    ),
+  startCloudflareOAuth: (input: StartCloudflareOAuthInput, options?: ApiRequestOptions) =>
+    post<StartCloudflareOAuthResponse>(
+      "/cloudflare/oauth/start",
+      input,
+      requireCurrentRuntimeContext(options),
+    ),
+  selectAppDeploymentTarget: (
+    deploymentId: string,
+    input: AppDeploymentTargetInput,
+    options?: ApiRequestOptions,
+  ) =>
+    post<{ deployment: AppsApiDeploymentRecord }>(
+      `/apps/deployments/${encodeURIComponent(deploymentId)}/target`,
+      input,
+      requireCurrentRuntimeContext(options),
+    ).then(({ deployment }) => ({ deployment: appDeploymentFromApi(deployment) })),
+  getAppDeploymentClaimUrl: (deploymentId: string) =>
+    `${BASE}/apps/deployments/${encodeURIComponent(deploymentId)}/claim`,
+  setAppWorkerCustomDomain: (
+    appId: string,
+    input: AppWorkerCustomDomainInput,
+    options?: ApiRequestOptions,
+  ) =>
+    put<{ app: AppsApiRecord }>(
+      `/apps/${encodeURIComponent(appId)}/domains`,
+      input,
+      requireCurrentRuntimeContext(options),
+    ).then(({ app }) => ({ app: appFromApi(app) })),
+  removeAppWorkerCustomDomain: (
+    appId: string,
+    input: AppWorkerCustomDomainInput,
+    options?: ApiRequestOptions,
+  ) =>
+    del<{ app: AppsApiRecord }>(
+      `/apps/${encodeURIComponent(appId)}/domains`,
+      input,
+      requireCurrentRuntimeContext(options),
+    ).then(({ app }) => ({ app: appFromApi(app) })),
+  rollbackApp: (appId: string, deploymentId: string, options?: ApiRequestOptions) =>
+    post<{ app: AppsApiRecord; deployment: AppsApiDeploymentRecord }>(
+      `/apps/${encodeURIComponent(appId)}/rollback`,
+      { deploymentId },
+      requireCurrentRuntimeContext(options),
+    ).then(({ app, deployment }) => ({
+      app: appFromApi(app),
+      deployment: appDeploymentFromApi(deployment),
+    })),
+  archiveApp: (appId: string, options?: ApiRequestOptions) =>
+    del<{ app: AppsApiRecord }>(
+      `/apps/${encodeURIComponent(appId)}`,
+      { intent: true },
+      requireCurrentRuntimeContext(options),
+    ).then(({ app }) => ({ app: appFromApi(app) })),
+  unarchiveApp: (appId: string, options?: ApiRequestOptions) =>
+    post<{ app: AppsApiRecord }>(
+      `/apps/${encodeURIComponent(appId)}/restore`,
+      {},
+      requireCurrentRuntimeContext(options),
+    ).then(({ app }) => ({ app: appFromApi(app) })),
+  continueAppDevelopment: (appId: string, options?: ApiRequestOptions) =>
+    post<{ sessionId: string; restoredFromSnapshot: boolean }>(
+      `/apps/${encodeURIComponent(appId)}/continue-development`,
+      {},
+      requireCurrentRuntimeContext(options),
+    ),
 
   // Browser bridge
   getBrowserBridgeStatus: (options?: ApiRequestOptions) =>

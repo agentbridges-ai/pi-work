@@ -11,6 +11,14 @@ export interface ReadinessChecks {
 export interface ReadinessResponse extends HealthResponse {
   status: "ready" | "not_ready";
   checks: ReadinessChecks;
+  capabilityContract?: RuntimeCapabilityContract;
+}
+
+export interface RuntimeCapabilityContract {
+  version: 1;
+  mode: "native" | "compose-nested";
+  configured: boolean;
+  verified: boolean;
 }
 
 export function livenessResponse(): HealthResponse {
@@ -22,6 +30,7 @@ export async function readinessResponse(deps: {
   databaseReady: () => Promise<boolean>;
   piRuntimeAvailable: boolean;
   internalFileTransportAvailable: boolean;
+  runtimeCapabilities?: RuntimeCapabilityContract;
 }): Promise<ReadinessResponse> {
   let dataRoot = false;
   try {
@@ -36,6 +45,14 @@ export async function readinessResponse(deps: {
     piRuntime: deps.piRuntimeAvailable,
     internalFileTransport: deps.internalFileTransportAvailable,
   };
-  const ok = Object.values(checks).every(Boolean);
-  return { ok, status: ok ? "ready" : "not_ready", checks };
+  const capabilityReady =
+    !deps.runtimeCapabilities ||
+    (deps.runtimeCapabilities.configured && deps.runtimeCapabilities.verified);
+  const ok = Object.values(checks).every(Boolean) && capabilityReady;
+  return {
+    ok,
+    status: ok ? "ready" : "not_ready",
+    checks,
+    ...(deps.runtimeCapabilities ? { capabilityContract: deps.runtimeCapabilities } : {}),
+  };
 }

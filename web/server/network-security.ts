@@ -4,6 +4,8 @@ export interface NetworkExposureSettings {
   registrationEnabled: boolean;
   sessionSandbox: string | undefined;
   requireSessionSandbox: boolean;
+  /** The process is reachable only through the fixed local reverse proxy. */
+  internalProxyOnly?: boolean;
 }
 
 export function isLoopbackHost(host: string): boolean {
@@ -28,6 +30,18 @@ export function isLoopbackHost(host: string): boolean {
 export function assertSecureNetworkExposure(settings: NetworkExposureSettings): void {
   if (isLoopbackHost(settings.host)) return;
   const failures: string[] = [];
+  if (settings.internalProxyOnly) {
+    if (settings.sessionSandbox !== "srt" || !settings.requireSessionSandbox) {
+      failures.push("the SRT session sandbox is not configured and required");
+    }
+    if (failures.length) {
+      throw new Error(
+        `Refusing internal proxy listener HOST=${settings.host}: ${failures.join("; ")}. ` +
+          "The fixed proxy path requires an available SRT sandbox.",
+      );
+    }
+    return;
+  }
   try {
     const origin = new URL(settings.publicOrigin || "");
     if (

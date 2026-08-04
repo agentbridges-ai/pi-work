@@ -421,12 +421,23 @@ describe("Piwork trusted Pi extension runtime", () => {
         "bash",
         "ask",
         "todo_write",
+        "todo_read",
         "task",
+        "deploy_app",
+        "list_apps",
+        "list_app_versions",
+        "rollback_app",
+        "delete_app",
+        "restore_app",
+        "open_app_preview",
+        "native_file",
         "propose_plan",
         "mcp__docs__search",
         "mcp__docs__mutate",
       ]),
     );
+    expect(value.tools.has("get_app_logs")).toBe(false);
+    expect(value.tools.has("set_app_visibility")).toBe(false);
     expect(value.pi.registerProvider).toHaveBeenCalledTimes(1);
     expect(value.payload.providers).toEqual([]);
     expect(value.payload.mcp).toEqual([]);
@@ -466,6 +477,47 @@ describe("Piwork trusted Pi extension runtime", () => {
     expect(bash?.options.exposeSessionEnvironment).toBe(false);
   });
 
+  it("brokers typed native file actions in Agent mode and rejects Plan mode", async () => {
+    const plan = await extensionFixture();
+    await expect(
+      executeTool(plan, "native_file", {
+        action: "file.quickLook",
+        path: "report.docx",
+      }),
+    ).rejects.toThrow(/unavailable in Plan mode/u);
+    expect(mocks.requestBroker).not.toHaveBeenCalled();
+
+    const agent = await extensionFixture({ mode: "agent" });
+    mocks.requestBroker.mockResolvedValueOnce({
+      operationId: "operation-a",
+      action: "file.quickLook",
+      state: "shown",
+    });
+    await expect(
+      executeTool(agent, "native_file", {
+        action: "file.quickLook",
+        path: "report.docx",
+      }),
+    ).resolves.toMatchObject({
+      details: {
+        operationId: "operation-a",
+        action: "file.quickLook",
+        state: "shown",
+      },
+    });
+    expect(mocks.requestBroker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        generation: 7,
+        operation: "native-file.action",
+        payload: {
+          action: "file.quickLook",
+          path: "report.docx",
+        },
+      }),
+    );
+  });
+
   it("asks a group of questions in one trusted interaction and returns a review payload", async () => {
     const value = await extensionFixture();
     const noUi = { ...value.context, hasUI: false } as ExtensionContext;
@@ -490,6 +542,21 @@ describe("Piwork trusted Pi extension runtime", () => {
       },
     ];
     await expect(executeTool(value, "ask", { questions }, noUi)).rejects.toThrow(/unavailable/u);
+    await expect(
+      executeTool(value, "ask", {
+        questions: [questions[0], { ...questions[0] }],
+      }),
+    ).rejects.toThrow(/questions must be unique/u);
+    await expect(
+      executeTool(value, "ask", {
+        questions: [
+          {
+            ...questions[0],
+            options: [questions[0].options[0], { ...questions[0].options[0] }],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/option labels must be unique/u);
 
     value.ui.select.mockResolvedValueOnce(undefined);
     await expect(executeTool(value, "ask", { questions, timeoutMs: 50 })).resolves.toMatchObject({
@@ -521,12 +588,20 @@ describe("Piwork trusted Pi extension runtime", () => {
     await expect(executeTool(value, "ask", { questions })).rejects.toThrow(/invalid/u);
   });
 
-  it("replaces todo state atomically and rejects duplicate ids", async () => {
+  it("replaces and reads Pi session todo state while enforcing one active item", async () => {
     const value = await extensionFixture();
     const todo = { id: "one", text: "First", status: "pending" };
     await expect(executeTool(value, "todo_write", { todos: [todo, todo] })).rejects.toThrow(
       /unique/u,
     );
+    await expect(
+      executeTool(value, "todo_write", {
+        todos: [
+          { ...todo, status: "in_progress" },
+          { id: "two", text: "Second", status: "in_progress" },
+        ],
+      }),
+    ).rejects.toThrow(/Only one todo/u);
     await expect(
       executeTool(value, "todo_write", {
         todos: [todo, { id: "two", text: "Second", status: "completed" }],
@@ -540,6 +615,15 @@ describe("Piwork trusted Pi extension runtime", () => {
       version: 1,
       todos: [todo, { id: "two", text: "Second", status: "completed" }],
     });
+    await expect(executeTool(value, "todo_read", {})).resolves.toMatchObject({
+      content: [
+        {
+          text: JSON.stringify({
+            todos: [todo, { id: "two", text: "Second", status: "completed" }],
+          }),
+        },
+      ],
+    });
   });
 
   it("enforces task broker inputs, depth, read-only inheritance, and progress", async () => {
@@ -551,7 +635,7 @@ describe("Piwork trusted Pi extension runtime", () => {
     await expect(
       executeTool(value, "task", { action: "stop", taskId: "task-1" }),
     ).resolves.toMatchObject({
-      content: [{ text: "Task stop requested." }],
+      content: [{ text: '{"stopped":true}' }],
       details: { stopped: true },
     });
     await expect(executeTool(value, "task", { action: "start" })).rejects.toThrow(
@@ -569,12 +653,17 @@ describe("Piwork trusted Pi extension runtime", () => {
       executeTool(
         value,
         "task",
-        { action: "start", prompt: "Research", background: true },
+        {
+          action: "start",
+          prompt: "Research",
+          description: "Research evidence",
+          background: true,
+        },
         value.context,
         onUpdate,
       ),
     ).resolves.toMatchObject({
-      content: [{ text: "Task started in background." }],
+      content: [{ text: '{"taskId":"task-2"}' }],
       details: { taskId: "task-2" },
     });
     expect(onUpdate).toHaveBeenCalledWith({
@@ -586,6 +675,7 @@ describe("Piwork trusted Pi extension runtime", () => {
         operation: "task.start",
         payload: expect.objectContaining({
           background: true,
+          description: "Research evidence",
           depth: 1,
           maxDepth: 2,
           maxParallel: 4,
@@ -601,6 +691,56 @@ describe("Piwork trusted Pi extension runtime", () => {
             },
           ],
         }),
+      }),
+    );
+
+    mocks.requestBroker.mockResolvedValueOnce({
+      tasks: [{ taskId: "task-2", status: "running" }],
+    });
+    await expect(executeTool(value, "task", { action: "list" })).resolves.toMatchObject({
+      content: [{ text: '{"tasks":[{"taskId":"task-2","status":"running"}]}' }],
+    });
+    expect(mocks.requestBroker).toHaveBeenLastCalledWith(
+      expect.objectContaining({ operation: "task.list" }),
+    );
+
+    await expect(executeTool(value, "task", { action: "wait" })).rejects.toThrow(
+      /taskId is required/u,
+    );
+    mocks.requestBroker.mockResolvedValueOnce({ taskId: "task-2", status: "completed" });
+    await expect(
+      executeTool(value, "task", {
+        action: "wait",
+        taskId: "task-2",
+        timeoutMs: 12_000,
+      }),
+    ).resolves.toMatchObject({
+      content: [{ text: '{"taskId":"task-2","status":"completed"}' }],
+    });
+    expect(mocks.requestBroker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: "task.wait",
+        payload: { taskId: "task-2", timeoutMs: 12_000 },
+        timeoutMs: 17_000,
+      }),
+    );
+
+    await expect(executeTool(value, "task", { action: "steer", taskId: "task-2" })).rejects.toThrow(
+      /message is required/u,
+    );
+    mocks.requestBroker.mockResolvedValueOnce({ taskId: "task-2", status: "running" });
+    await executeTool(value, "task", {
+      action: "steer",
+      taskId: "task-2",
+      message: "Focus on the signed source.",
+    });
+    expect(mocks.requestBroker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: "task.steer",
+        payload: {
+          taskId: "task-2",
+          message: "Focus on the signed source.",
+        },
       }),
     );
 
@@ -670,9 +810,32 @@ describe("Piwork trusted Pi extension runtime", () => {
     expect(value.ui.setStatus).toHaveBeenCalled();
   });
 
+  it("locks local tools before a Plan broker transition can emit task follow-ups", async () => {
+    const value = await extensionFixture({ mode: "agent" });
+    const toolCall = value.events.get("tool_call")!;
+    let releaseBroker!: (value: unknown) => void;
+    mocks.requestBroker.mockImplementationOnce(
+      () =>
+        new Promise((resolveBroker) => {
+          releaseBroker = resolveBroker;
+        }),
+    );
+
+    const transition = value.commands.get("piwork-plan")!.handler("", value.context);
+    await Promise.resolve();
+    expect(toolCall({ toolName: "write", input: { path: "/tmp/file" } })).toMatchObject({
+      block: true,
+      reason: expect.stringMatching(/disabled/u),
+    });
+
+    releaseBroker({ mode: "plan" });
+    await transition;
+  });
+
   it("restores state and applies fail-closed lifecycle policies", async () => {
     const value = await extensionFixture();
     const sessionStart = value.events.get("session_start")!;
+    const sessionTree = value.events.get("session_tree")!;
     const resourcesDiscover = value.events.get("resources_discover")!;
     const messageEnd = value.events.get("message_end")!;
     const toolCall = value.events.get("tool_call")!;
@@ -695,7 +858,19 @@ describe("Piwork trusted Pi extension runtime", () => {
       },
     } as unknown as ExtensionContext;
 
-    expect(sessionStart({ type: "session_start" }, restoredContext)).toBeUndefined();
+    expect(await sessionStart({ type: "session_start" }, restoredContext)).toBeUndefined();
+    expect(await sessionTree({ type: "session_tree" }, restoredContext)).toBeUndefined();
+    expect(mocks.requestBroker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "mode.set",
+        payload: { mode: "agent" },
+      }),
+    );
+    await expect(executeTool(value, "todo_read", {})).resolves.toMatchObject({
+      details: {
+        todos: [{ id: "restored", text: "Restored", status: "pending" }],
+      },
+    });
     expect(resourcesDiscover()).toEqual({
       skillPaths: ["/managed/skills/research"],
     });
@@ -718,7 +893,19 @@ describe("Piwork trusted Pi extension runtime", () => {
     expect(input({ text: "/packages add unknown" })).toEqual({ action: "handled" });
     expect(input({ text: "continue" })).toEqual({ action: "continue" });
 
-    await value.commands.get("piwork-plan")!.handler("", restoredContext);
+    const planBranchContext = {
+      ...restoredContext,
+      sessionManager: {
+        getBranch: () => [{ type: "custom", customType: "piwork.mode", data: { mode: "plan" } }],
+      },
+    } as unknown as ExtensionContext;
+    expect(await sessionTree({ type: "session_tree" }, planBranchContext)).toBeUndefined();
+    expect(mocks.requestBroker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: "mode.set",
+        payload: { mode: "plan" },
+      }),
+    );
     expect(toolCall({ toolName: "write", input: { path: "/tmp/file" } })).toMatchObject({
       block: true,
       reason: expect.stringMatching(/disabled/u),
@@ -737,18 +924,12 @@ describe("Piwork trusted Pi extension runtime", () => {
     });
   });
 
-  it("refreshes MCP state, publishes governed prompts, and disables stale tools", async () => {
+  it("refreshes MCP state without rewriting the system prompt and disables stale tools", async () => {
     const value = await extensionFixture();
     const beforeAgentStart = value.events.get("before_agent_start")!;
     const toolCall = value.events.get("tool_call")!;
 
-    const planPrompt = await beforeAgentStart({ systemPrompt: "Base prompt" }, value.context);
-    expect(planPrompt).toMatchObject({
-      systemPrompt: expect.stringContaining("Piwork Plan mode is active"),
-    });
-    expect((planPrompt as { systemPrompt: string }).systemPrompt).toContain(
-      "Follow managed instructions.",
-    );
+    expect(await beforeAgentStart({ systemPrompt: "Base prompt" }, value.context)).toBeUndefined();
 
     mocks.requestBroker.mockResolvedValueOnce({ servers: [mcpServer(false)] });
     await beforeAgentStart({ systemPrompt: "Base prompt" }, value.context);
@@ -758,10 +939,7 @@ describe("Piwork trusted Pi extension runtime", () => {
     });
 
     await value.commands.get("piwork-agent")!.handler("", value.context);
-    const agentPrompt = await beforeAgentStart({ systemPrompt: "Base prompt" }, value.context);
-    expect(agentPrompt).toEqual({
-      systemPrompt: "Base prompt\n\nFollow managed instructions.",
-    });
+    expect(await beforeAgentStart({ systemPrompt: "Base prompt" }, value.context)).toBeUndefined();
 
     mocks.requestBroker.mockRejectedValueOnce(new Error("mcp unavailable"));
     await expect(beforeAgentStart({ systemPrompt: "Base prompt" }, value.context)).rejects.toThrow(

@@ -67,4 +67,27 @@ describe("network exposure startup policy", () => {
       }),
     ).not.toThrow();
   });
+
+  it("permits the fixed Compose internal proxy listener only with required SRT", () => {
+    expect(() =>
+      assertSecureNetworkExposure({
+        host: "0.0.0.0",
+        publicOrigin: "http://127.0.0.1:3457",
+        registrationEnabled: true,
+        sessionSandbox: "srt",
+        requireSessionSandbox: true,
+        internalProxyOnly: true,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertSecureNetworkExposure({
+        host: "0.0.0.0",
+        registrationEnabled: true,
+        sessionSandbox: undefined,
+        requireSessionSandbox: false,
+        internalProxyOnly: true,
+      }),
+    ).toThrow(/SRT/i);
+  });
 });

@@ -14,6 +14,7 @@ export interface InteractionsSlice {
     response: InteractionResponse,
     timestamp?: number,
   ) => void;
+  replacePendingInteractions: (sessionId: string, requests: InteractionRequest[]) => void;
   clearPendingInteractions: (sessionId: string) => void;
   clearCompletedInteractions: (sessionId: string) => void;
 }
@@ -59,6 +60,17 @@ export const createInteractionsSlice: StateCreator<AppState, [], [], Interaction
         ),
       );
       return { pendingInteractions, completedInteractions };
+    }),
+  replacePendingInteractions: (sessionId, requests) =>
+    set((state) => {
+      const pendingInteractions = new Map(state.pendingInteractions);
+      if (requests.length === 0) pendingInteractions.delete(sessionId);
+      else
+        pendingInteractions.set(
+          sessionId,
+          new Map(requests.map((request) => [request.id, request])),
+        );
+      return { pendingInteractions };
     }),
   clearPendingInteractions: (sessionId) =>
     set((state) => {

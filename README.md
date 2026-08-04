@@ -10,16 +10,22 @@
 
 ```text
 Browser
-  -> Vite frontend
-  -> Bun/Hono API + browser WebSocket
-  -> Better Auth + Postgres
-  -> PiAdapter + strict LF JSONL RPC
-  -> one SRT-contained Node + native Pi rpc-entry per session
+  -> Caddy (the only published Compose port)
+  -> Web: Bun/Hono API + browser WebSocket
+  -> Better Auth + Postgres (backend network)
+  -> private Unix JSONL/HMAC Runtime control socket
+  -> Runtime: one Node + native Pi rpc-entry per session in SRT
   -> explicit trusted Piwork Pi extension
 ```
 
+On macOS, the Linux development runtime is an [OrbStack](https://orbstack.dev/)
+Linux machine. On Windows, it is a WSL2 Linux distribution. The browser, IDE,
+and Chrome extension remain on the host, but Bun, Node, SRT, Pi, Postgres, the
+repository checkout, and `data/` run inside Linux. Do not run `make dev` from a
+native macOS or Windows shell.
+
 - **认证**：Better Auth 原生接口挂在 `/api/auth/*`，派活 保留 `/api/auth/mode` 和 `/api/me` 给应用层使用。
-- **用户数据**：用户目录为 `data/<betterAuthUserId>/`；`profile.json` 是从 Better Auth user 派生的快照，不是认证来源。
+- **用户/组织隔离**：tenant 是文件系统隔离边界；`org_nodes` 只提供 RBAC 范围。会话目录为 `data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/`，创建时固定 `membershipId` 与 `orgNodeId`。
 - **会话数据**：每个 session 固定使用 `workspace`、`home`、`tmp`、`pi-config`、`pi-sessions`、`recordings`、`user-space-checkouts` 和 `session.json`。Pi JSONL 是对话、模型、压缩、Plan 和 Todo 的唯一真源。
 - **启动约束**：Pi 至少带 `--no-builtin-tools --no-extensions --no-skills --no-prompt-templates --no-themes --no-approve`，然后只显式加载 派活 trusted extension 和平台受管 Skills；工作区 `.pi`、项目扩展、包安装和 `/login` 均不可用。
 - **凭据**：模型与 MCP capability 由服务端通过一次性 Unix socket bootstrap 交给扩展并在消费后销毁。凭据不进入 argv、磁盘、shell env、日志、录制或 Pi JSONL；子 Agent 使用独立的一次性通道。
@@ -31,22 +37,22 @@ Browser
 - Bun 1.3.9 和 Node.js >= 22.19.0
 - 外部 Postgres，并通过 `DATABASE_URL` 暴露连接串
 - `make install` 会安装精确锁定的 `@earendil-works/pi-coding-agent@0.82.1`、`@modelcontextprotocol/sdk@1.29.0` 与 `@anthropic-ai/sandbox-runtime@0.0.65`
-- Linux 的 SRT 还需要 `bubblewrap`、`socat`、`ripgrep` 及可用的 unprivileged user namespace
+- Linux 的 SRT 还需要 `bubblewrap`、`socat`、`ripgrep` 及可用的 unprivileged user namespace；这些依赖必须安装在 OrbStack/WSL2 Linux 内
 - Linux 通过真实 Pi RPC smoke 和中性 `user-space.piwork.internal` 受保护文件传输 canary 验证 SRT；该通道不承载模型流量
-- 当前只有 Linux SRT 提供可验证的后代进程生命周期隔离；macOS 和 Windows 上的 Agent session 会在创建进程前 fail closed
+- 当前只有 Linux SRT 提供可验证的后代进程生命周期隔离；宿主 macOS/Windows 只提供浏览器和开发工具，不运行 Agent session
 - 最新版桌面 Chrome、Microsoft Edge 或其他 Chromium 浏览器；Safari、Firefox、手机和平板不受支持
 
 ```bash
+# 在 OrbStack Linux、WSL2 Linux 或原生 Linux 终端内执行
 make install
-install -m 600 .env.example .env
-# 编辑 .env: DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
-make auth-migrate
+# Compose 会生成 0600 配置、Runtime HMAC key、数据库应用角色 secret
+make selfhost-init
 make dev
 ```
 
 打开脚本输出的 Frontend URL，使用邮箱密码注册或登录。
 
-生产服务默认使用稳定地址 `http://127.0.0.1:3456`。当 Chromium 完成安装条件检查后，工作台会显示“安装桌面应用”；安装版以独立窗口运行。断线页不会缓存或展示账号、会话或文件数据。
+生产服务默认使用稳定地址 `http://127.0.0.1:3457`。当 Chromium 完成安装条件检查后，工作台会显示“安装桌面应用”；安装版以独立窗口运行。断线页不会缓存或展示账号、会话或文件数据。
 
 ## 常用命令
 
@@ -58,6 +64,14 @@ make auth-migrate
 make dev
 make dev-fast
 make dev-fast-stop
+make dev-native
+make selfhost-doctor
+make selfhost-release-validate  # release manifest 已填充时执行
+make selfhost-up
+make selfhost-down
+make selfhost-backup
+make selfhost-restore BACKUP=/path/to/backup
+make selfhost-upgrade
 make status
 make agent-browser-e2e
 
@@ -76,11 +90,15 @@ CONFIRM_PI_SESSION_RESET=1 CONFIRM_EXTERNAL_PI_DATA_ROOT=1 make pi-reset-legacy-
 CONFIRM_HARD_RESET=1 make dev-reset-sessions-hard
 ```
 
-`make dev` 会启动：
+`make dev` 必须在 OrbStack Linux、WSL2 Linux 或原生 Linux 内执行，会启动固定 Compose source 栈：
 
-- Bun API: `http://127.0.0.1:3457`，或下一个空闲端口
-- Vite frontend: `http://127.0.0.1:3458`，或下一个空闲端口
-- 数据目录：`data/`
+- Caddy: `http://127.0.0.1:3457`（唯一发布端口）
+- Web/Runtime/Postgres: 仅在 Compose 网络和共享 Unix socket 内部可见
+- Vite HMR: source 栈内部通过 Caddy 提供
+- 数据卷：Linux Runtime 内的 `data/`
+
+`make dev-native` 保留原生 Linux 的进程内 Pi debug 路径；它不关闭 SRT。Compose
+在 `selfhost doctor --require-verified` 和 nested-SRT canary 未通过时会停止并拒绝就绪。
 
 更多细节见 [docs/development.md](docs/development.md)。
 
@@ -101,8 +119,8 @@ Office 编辑器 Host 与字体、SDK、WASM 等静态资源由独立部署的
 
 - Better Auth + Postgres 是唯一认证来源。
 - Better Auth `user.id` 是本地隔离 ID，并继续填入 app 内部 `CurrentUser.uuid` 字段。
-- 服务端状态保存在 `data/<betterAuthUserId>/...`；frontend 不把 session/员工状态写成浏览器权威缓存。
-- session 权威路径是 `data/<betterAuthUserId>/<sessionId>/...`；跨用户不能枚举或路由到对方 session。
+- 服务端状态保存在 `data/tenants/<tenantId>/users/<userId>/...`；frontend 不把 session/员工状态写成浏览器权威缓存。
+- session 权威路径是 `data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/...`；跨 tenant、用户和 session 不能枚举或路由。
 - `session.json` 只保存产品 authority、归档、Pi 相对路径、离线队列和客户端去重；不会复制消息历史或 pending permission。
 - provider credentials 不由 派活 持久化；短生命周期 bootstrap 只在内存中注册允许的 Pi provider。
 
@@ -126,7 +144,7 @@ Office 编辑器 Host 与字体、SDK、WASM 等静态资源由独立部署的
 
 平台模型白名单、Agent 的 `provider/model` glob 白名单、已注入凭据和网络策略会做交集。`GET /backends/pi/models?agentId=...` 通过短生命周期受控 Pi RPC probe 返回可用模型，不返回任何凭据。
 
-运行模式仅有 `agent` 和 `plan`。Plan 模式不注册 `write`/`edit`，子任务强制只读，MCP 只暴露明确标记为 `readOnly` 的工具，bash 对重定向、动态执行和无法分类的语法 fail closed。`ask`、`todo_write`、`task`、`propose_plan` 与 `mcp__<server>__<tool>` 都由 trusted extension 和服务端受管 broker 提供。
+运行模式仅有 `agent` 和 `plan`。Plan 模式不注册 `write`/`edit`，子任务强制只读，MCP 只暴露明确标记为 `readOnly` 的工具，bash 对重定向、动态执行和无法分类的语法 fail closed。`ask`、`todo_write`/`todo_read`、`task`、`propose_plan` 与 `mcp__<server>__<tool>` 都由 trusted extension 和服务端受管 broker 提供。后台 `task` 以 Pi 原生 `agent_settled` 为终态，可通过 `list/status/wait/steer/stop` 管理，并用 Pi 原生 `prompt` 的 `followUp` 流式行为将有界结果送回父会话；不会加载第二套 Agent runtime。
 
 ## 代码目录
 

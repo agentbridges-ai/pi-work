@@ -88,6 +88,23 @@ describe("SRT policy compiler", () => {
     ]);
   });
 
+  it("enables nested SRT only for the explicit Compose execution mode", () => {
+    const paths = fixture();
+    const native = compileSrtPolicy({
+      ...paths,
+      requiredInternalDomains: [],
+      domainLayers: [],
+    });
+    const nested = compileSrtPolicy({
+      ...paths,
+      requiredInternalDomains: [],
+      domainLayers: [],
+      executionMode: "compose-nested",
+    });
+    expect(native.enableWeakerNestedSandbox).toBe(false);
+    expect(nested.enableWeakerNestedSandbox).toBe(true);
+  });
+
   it("rejects a knowledge path from another tenant", () => {
     const paths = fixture();
     const other = join(paths.tenantsRoot, "t2/knowledge/k2");
