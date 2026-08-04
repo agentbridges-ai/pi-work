@@ -379,7 +379,10 @@ export function validateExternalCoverageRunner(
   const inVerify = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`).test(
     verifyDependencies?.replace(/^verify\s*:/, "") || "",
   );
-  const inWorkflow = new RegExp(`\\bmake\\s+${escaped}(?:\\s|$)`).test(inputs.workflow);
+  const inWorkflow = inputs.workflow.split(/\r?\n/).some((line) => {
+    const command = line.replace(/#.*/, "");
+    return /\bmake\b/.test(command) && new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`).test(command);
+  });
   if (!declared || (!inVerify && !inWorkflow)) {
     throw new Error(
       `External coverage make target is not declared and wired into CI: ${boundary.runner.target}`,
