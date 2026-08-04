@@ -22,6 +22,13 @@ runs:
       with:
         bun-version: ${{ inputs.bun-version }}
 
+    # SRT needs a private copyfile node_modules installation, so cache only
+    # Bun's immutable package downloads rather than the installed tree.
+    - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ inputs.bun-version }}-${{ hashFiles('bun.lock', 'web/bun.lock') }}
+
     - name: Verify CI toolchain pins
       shell: bash
       run: |
