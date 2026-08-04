@@ -152,6 +152,23 @@ const brokerScope = {
 };
 
 describe("AppsRuntimeCoordinator", () => {
+  it("honors the operator deployment kill switch before a dry run", async () => {
+    const fixture = await appFixture();
+    const { coordinator } = harness({}, fixture.creatorRoot);
+    vi.stubEnv("PIWORK_APPS_KILL_SWITCH", "1");
+    try {
+      await expect(
+        coordinator.handleBroker(
+          brokerRequest("app.deploy", { path: "demo", dryRun: true }),
+          brokerContext,
+          { ...brokerScope, workspaceDir: fixture.workspace },
+        ),
+      ).rejects.toThrow("paused by the platform operator");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("runs dry-run validation without creating control-plane or staged artifact state", async () => {
     const fixture = await appFixture();
     const beginDeployment = vi.fn();
@@ -263,6 +280,12 @@ describe("AppsRuntimeCoordinator", () => {
       createdAt: "2026-08-04T00:00:00.000Z",
       updatedAt: "2026-08-04T00:00:00.000Z",
     };
+    const workerReceipt = {
+      ...priorReceipt,
+      id: "receipt-worker",
+      logicalKey: "worker",
+      resourceKind: "worker" as const,
+    };
     const controlPlane = {
       acquireLease: vi.fn().mockResolvedValue({ leaseToken: "lease-1" }),
       renewLease: vi.fn().mockResolvedValue(true),
@@ -285,7 +308,7 @@ describe("AppsRuntimeCoordinator", () => {
         expiresAt: null,
       }),
       transitionDeploymentPhase: vi.fn().mockResolvedValue(undefined),
-      listDeploymentReceipts: vi.fn().mockResolvedValue([priorReceipt]),
+      listDeploymentReceipts: vi.fn().mockResolvedValue([priorReceipt, workerReceipt]),
       recordResourceReceipt: vi.fn().mockResolvedValue({}),
     };
     const driver = {
@@ -358,6 +381,71 @@ describe("AppsRuntimeCoordinator", () => {
     expect(controlPlane.releaseLease).toHaveBeenCalledWith("app-1", "lease-1");
   });
 
+  it("fails a queued deployment when its creator artifact locator is unavailable", async () => {
+    const fixture = await appFixture();
+    const queued = deployment({
+      phase: "queued",
+      targetKind: "byoc",
+      cloudflareConnectionId: "connection-1",
+      artifactKey: null,
+    });
+    const appRecord = {
+      ...app("needs_action"),
+      targetKind: "byoc" as const,
+      cloudflareConnectionId: "connection-1",
+    };
+    const controlPlane = {
+      acquireLease: vi.fn().mockResolvedValue({ leaseToken: "lease-artifact" }),
+      renewLease: vi.fn().mockResolvedValue(true),
+      releaseLease: vi.fn().mockResolvedValue(true),
+      getApp: vi.fn().mockResolvedValue(appRecord),
+      getDeployment: vi.fn().mockResolvedValue(queued),
+      failDeployment: vi.fn().mockResolvedValue(undefined),
+      failOutboxByKey: vi.fn().mockResolvedValue(true),
+    };
+    const accounts = {
+      resolveDeploymentCredential: vi.fn().mockResolvedValue({
+        target: "byoc",
+        accountId: "account-1",
+        apiToken: "server-only-token",
+        connectionId: "connection-1",
+        temporaryAccountId: null,
+        expiresAt: null,
+      }),
+    };
+    const driver = {
+      kind: "cloudflare",
+      validate: vi.fn(),
+      prepareResources: vi.fn(),
+      deploy: vi.fn(),
+    } as unknown as AppRuntimeDriver;
+    const coordinator = new AppsRuntimeCoordinator({
+      controlPlane: controlPlane as unknown as AppsControlPlane,
+      cloudflareAccounts: accounts as unknown as AppCloudflareAccountService,
+      driver,
+      creatorRoot: fixture.creatorRoot,
+      getCurrentUser: () => null,
+    });
+
+    await expect(
+      coordinator.handleDeploymentTargetQueued(
+        { tenantId: "tenant-1", userId: "user-1", membershipId: "member-1" },
+        {
+          appId: "app-1",
+          deploymentId: queued.id,
+          appGeneration: 1,
+          phase: "queued",
+          target: "byoc",
+          connectionId: "connection-1",
+          temporaryAccountId: null,
+        },
+      ),
+    ).rejects.toThrow("artifact is unavailable");
+    expect(driver.deploy).not.toHaveBeenCalled();
+    expect(controlPlane.failDeployment).toHaveBeenCalledOnce();
+    expect(controlPlane.releaseLease).toHaveBeenCalledWith("app-1", "lease-artifact");
+  });
+
   it("marks prepared created resources for cleanup when deployment fails before provider upload", async () => {
     const fixture = await appFixture();
     await writeFile(
@@ -405,7 +493,11 @@ describe("AppsRuntimeCoordinator", () => {
       releaseLease: vi.fn().mockResolvedValue(true),
       getApp: vi.fn().mockResolvedValue(appRecord),
       getDeployment: vi.fn().mockResolvedValue(queued),
-      markDeploymentDeploying: vi.fn().mockRejectedValue(new Error("database unavailable")),
+      markDeploymentDeploying: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error("database unavailable"), { code: "database_unavailable" }),
+        ),
       failDeployment: vi.fn().mockResolvedValue(undefined),
       failOutboxByKey: vi.fn().mockResolvedValue(true),
     };
