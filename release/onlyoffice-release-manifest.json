@@ -24,7 +24,7 @@
     "name": "@agentbridges-ai/onlyoffice-browser",
     "version": "0.5.13",
     "publish": true,
-    "integrity": "sha512-00SSlMuSqLk4khEiVN+oaMEXfgC9FpMpczYJ0l/9xucqR8HWLY2ffc+yHRg2H7zpvljq7txIngWCMauzxy/uw==",
+    "integrity": "sha512-00SSlMuSqLk4khEiVN+oaMEXfgC9FpMpczYJ0Yl/9xucqR8HWLY2ffc+yHRg2H7zpvljq7txIngWCMauzxy/uw==",
     "gitHead": "4ed9febf1d4851279f817abd0b857bc874943128",
     "sourceCommit": "4ed9febf1d4851279f817abd0b857bc874943128"
   },
@@ -50,7 +50,7 @@
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "5fb41b19db4cd4f6aa7f230d2b997c5e75dae4524425ada22cf67aae0dc67fef"
+      "sha256": "93a6be0694889213fc1dd72b1545093d7b2d8be4e6b88022c85af668974aeeb2"
     },
     {
       "repository": "onlyoffice-browser",
