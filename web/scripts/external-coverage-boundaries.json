@@ -2,68 +2,6 @@
   "policyVersion": 3,
   "boundaries": [
     {
-      "path": "web/scripts/apply-control-plane-migration.ts",
-      "reason": "The Compose migration entrypoint executes against the real Postgres service and is covered by the Linux Compose canary outside Vitest V8 instrumentation.",
-      "runner": {
-        "kind": "make-target",
-        "target": "test-compose-runtime"
-      },
-      "evidence": [
-        "Makefile",
-        ".github/workflows/compose-runtime.yml",
-        "scripts/selfhost.sh",
-        "web/scripts/check-diff-coverage.ts",
-        "web/scripts/check-diff-coverage.test.ts"
-      ]
-    },
-    {
-      "path": "web/scripts/compose-migrate.ts",
-      "reason": "The Compose migration orchestrator runs real Bun child processes and applies database role grants in the Linux Compose canary outside Vitest V8 instrumentation.",
-      "runner": {
-        "kind": "make-target",
-        "target": "test-compose-runtime"
-      },
-      "evidence": [
-        "Makefile",
-        ".github/workflows/compose-runtime.yml",
-        "scripts/selfhost.sh",
-        "compose/docker-compose.yml",
-        "web/scripts/check-diff-coverage.ts",
-        "web/scripts/check-diff-coverage.test.ts"
-      ]
-    },
-    {
-      "path": "web/scripts/verify-runtime-rls.ts",
-      "reason": "This file is itself the real non-BYPASSRLS PostgreSQL isolation canary executed by the Linux Compose doctor gate outside Vitest V8 instrumentation.",
-      "runner": {
-        "kind": "make-target",
-        "target": "test-compose-runtime"
-      },
-      "evidence": [
-        "Makefile",
-        ".github/workflows/compose-runtime.yml",
-        "scripts/selfhost.sh",
-        "web/scripts/check-diff-coverage.ts",
-        "web/scripts/check-diff-coverage.test.ts"
-      ]
-    },
-    {
-      "path": "web/server/runtime-entry.ts",
-      "reason": "The Runtime container entrypoint is started as the non-root Compose service and verified by the Linux Compose canary outside Vitest V8 instrumentation.",
-      "runner": {
-        "kind": "make-target",
-        "target": "test-compose-runtime"
-      },
-      "evidence": [
-        "Makefile",
-        ".github/workflows/compose-runtime.yml",
-        "compose/docker-compose.yml",
-        "scripts/selfhost.sh",
-        "web/scripts/check-diff-coverage.ts",
-        "web/scripts/check-diff-coverage.test.ts"
-      ]
-    },
-    {
       "path": "web/bin/cli.ts",
       "reason": "The public process entrypoint delegates commands through real Bun child-process execution, outside Vitest V8 instrumentation.",
       "runner": {
