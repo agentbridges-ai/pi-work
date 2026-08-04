@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 4,
   "createdAt": "2026-08-03T01:51:31.000Z",
   "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
   "repositories": {
@@ -15,19 +15,22 @@
       "commitSha": "3da3e7b624be474f2d4573f32f3acef678fe8bf2"
     },
     "Piwork": {
-      "url": "https://github.com/agentbridges-ai/Piwork.git",
+      "url": "https://github.com/agentbridges-ai/pi-work.git",
       "version": "0.95.0",
-      "commitSha": "a82a27bb0e8008083a9491f08eb9653cffefcaef"
+      "integrationBaseCommit": "607a5d3309c77c39a1ec4aa17074621fef55ae99"
     }
   },
   "npmPackage": {
     "name": "@agentbridges-ai/onlyoffice-browser",
     "version": "0.5.12",
     "publish": true,
-    "integrity": "sha512-WZBwiss68Glrac+GrM7qVxDwDvLgCcIg8m2nbbjmNbtUZYoK+aZSy0IbMN7PITGWb02CXFtxsImpM4xRj0FIXQ=="
+    "integrity": "sha512-WZBwiss68Glrac+GrM7qVxDwDvLgCcIg8m2nbbjmNbtUZYoK+aZSy0IbMN7PITGWb02CXFtxsImpM4xRj0FIXQ==",
+    "gitHead": "3da3e7b624be474f2d4573f32f3acef678fe8bf2",
+    "sourceCommit": "3da3e7b624be474f2d4573f32f3acef678fe8bf2"
   },
   "runtimeIdentity": {
     "packageVersion": "0.5.12",
+    "sourceCommit": "3da3e7b624be474f2d4573f32f3acef678fe8bf2",
     "hostBuildId": "office-host-0.5.12-r1",
     "assetManifestDigest": "a6e158288a9e728f1178ff4370ebf6ffadbb4b7c368e9ec19f9544096c6adb78"
   },
@@ -36,8 +39,12 @@
     "releaseId": "v0.5.12-40948d549d546d2c",
     "sha256": "a208d335e724826917401caccac3905bacaeb4e7b6054d9b579ffb93bca39cb8",
     "hostBuildId": "133571ec80edc374c4aa425c93ef61ad43e6cd40ce6d355c71c9ed414fe12d67",
-    "channel": "stable-v5",
-    "deployed": true
+    "channel": "stable-v5"
+  },
+  "lifecycle": "supported",
+  "deployment": {
+    "canonicalOrigin": "https://onlyoffice.getpi.work",
+    "editorOrigin": "https://office-editor-health.getpi.work"
   },
   "lockfiles": [
     {
