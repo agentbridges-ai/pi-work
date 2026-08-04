@@ -12,9 +12,9 @@
   "dependencies": {
     "@heroui/react": "3.2.2",
     "@heroui/styles": "3.2.2",
-    "@piwork/design-tokens": "file:../packages/design-tokens",
-    "@piwork/ui": "file:../packages/ui",
-    "@piwork/ui-patterns": "file:../packages/ui-patterns",
+    "@piwork/design-tokens": "workspace:*",
+    "@piwork/ui": "workspace:*",
+    "@piwork/ui-patterns": "workspace:*",
     "clsx": "2.1.1",
     "intl-messageformat": "10.7.16",
     "next": "16.2.6",
