@@ -50,7 +50,10 @@ jobs:
       - name: Run the critical test suite
         # Pi RPC/SRT changes have their own required Linux canary. Keeping the
         # contract probe there prevents this fast lane from doing the same work.
-        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted
+        # Keep the macOS-only IPC boundary explicitly wired. On Linux the Make
+        # target is a controlled no-op, while macOS runners execute the real
+        # IPC canary instead of leaving the external coverage contract orphaned.
+        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted test-srt-user-space-ipc
 
       - name: Build the production frontend
         run: make build
