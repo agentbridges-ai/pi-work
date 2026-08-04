@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { access, lstat, readFile, readdir, realpath } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   materializeAppBindingManifest,
@@ -230,7 +229,6 @@ async function walkRegularFiles(
 
 async function requiredFile(path: string, message: string): Promise<Uint8Array> {
   try {
-    await access(path, constants.R_OK);
     return await readFile(path);
   } catch {
     throw new AppBuildError("missing_build_contract", message);
