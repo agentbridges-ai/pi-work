@@ -4213,6 +4213,25 @@ describe("UserSpaceExplorer", () => {
     expect(mockCreateOfficeEditor).toHaveBeenCalledTimes(2);
   });
 
+  it("handles a preview-body drop by requesting a detached window", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "预览 app.ts" }));
+      const bodyArea = screen.getByTestId("user-space-preview-body-area");
+      fireEvent.drop(bodyArea, {
+        dataTransfer: {
+          getData: vi.fn(() => "uw-mounted:app.ts"),
+        },
+      });
+
+      expect(openSpy).toHaveBeenCalledWith("", "_blank", expect.stringContaining("width=1180"));
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
   it("moves the OnlyOffice tab with single ownership, restores edit mode, and can dock it back", async () => {
     mockFilePreviewDefaults = {
       ...createDefaultFilePreviewDefaults(),
