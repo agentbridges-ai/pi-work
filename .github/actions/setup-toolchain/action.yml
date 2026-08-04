@@ -30,7 +30,7 @@ runs:
         # Rotate once after a corrupted immutable tarball was observed in the
         # old key. The lockfile and toolchain still provide the cache identity;
         # the suffix prevents reusing that damaged archive on every job.
-        key: bun-v2-${{ runner.os }}-${{ inputs.bun-version }}-${{ hashFiles('bun.lock', 'web/bun.lock') }}
+        key: bun-v2-${{ runner.os }}-${{ inputs.bun-version }}-${{ hashFiles('web/bun.lock', 'landing-page/bun.lock') }}
 
     - name: Verify CI toolchain pins
       shell: bash

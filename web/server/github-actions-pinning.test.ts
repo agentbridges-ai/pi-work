@@ -66,7 +66,7 @@ describe("GitHub Actions supply-chain pins", () => {
       "utf8",
     );
     const makefile = readFileSync(resolve(root, "Makefile"), "utf8");
-    const landingLock = readFileSync(resolve(root, "bun.lock"), "utf8");
+    const landingLock = readFileSync(resolve(root, "landing-page/bun.lock"), "utf8");
 
     expect(verify).not.toMatch(/test-targeted test-pi-rpc-contract/);
     expect(srt).toContain("test-pi-rpc-contract test-srt-isolation test-srt-pi");
@@ -76,14 +76,12 @@ describe("GitHub Actions supply-chain pins", () => {
     expect(makefile).toContain("VERIFY_SRT ?= 1");
     expect(makefile).toContain("$(VERIFY_SRT_TARGETS)");
     expect(toolchain).toContain("path: ~/.bun/install/cache");
-    expect(toolchain).toContain("hashFiles('bun.lock', 'web/bun.lock')");
+    expect(toolchain).toContain("hashFiles('web/bun.lock', 'landing-page/bun.lock')");
     expect(verify).toContain("path: ~/.cache/ms-playwright");
-    expect(deploy).toContain(
-      "bun install --filter piwork-landing-page --backend copyfile --linker hoisted --frozen-lockfile",
-    );
+    expect(deploy).toContain("bun install --backend copyfile --linker isolated --frozen-lockfile");
     expect(deploy).toContain("bunx --no-install wrangler pages deploy");
     expect(deploy).toContain("Production Pages deployments must run from refs/heads/main.");
     expect(deploy).toContain("DEPLOY_URL");
-    expect(landingLock).toContain('"wrangler": "4.63.0"');
+    expect(landingLock).toContain('"wrangler": "4.118.0"');
   });
 });
