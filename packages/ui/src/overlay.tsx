@@ -1,7 +1,8 @@
+/** @jsxImportSource react */
 import { Drawer as HeroDrawer, Modal as HeroModal } from "@heroui/react";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ElementType, type ReactNode, type RefObject } from "react";
-import { cn } from "./utils.js";
+import { cn } from "./utils";
 
 export type DialogSize = "sm" | "md" | "lg";
 

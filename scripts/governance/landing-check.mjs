@@ -14,7 +14,7 @@ function run(args) {
 }
 
 if (!existsSync(join(landing, "bun.lock"))) failures.push("landing-page/bun.lock is missing");
-run(["install", "--frozen-lockfile"]);
+run(["install", "--frozen-lockfile", "--backend", "copyfile", "--linker", "isolated"]);
 run(["run", "lint", "--", "--max-warnings=0"]);
 run(["x", "tsc", "--noEmit"]);
 run(["run", "build"]);

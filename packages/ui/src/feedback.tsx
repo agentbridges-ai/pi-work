@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import {
   Alert as HeroAlert,
   Chip as HeroChip,
@@ -7,7 +8,7 @@ import {
 } from "@heroui/react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import { type HTMLAttributes, type ReactNode } from "react";
-import { cn } from "./utils.js";
+import { cn } from "./utils";
 
 export type FeedbackStatus = "info" | "success" | "warning" | "danger";
 

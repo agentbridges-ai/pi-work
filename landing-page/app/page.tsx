@@ -1,45 +1,42 @@
-import { siteConfig } from "@/config/site";
-import { title, subtitle } from "@/components/primitives";
+import { ButtonLink } from "@piwork/ui";
+import { PageHeader, PageLayout } from "@piwork/ui-patterns";
+
 import { GithubIcon } from "@/components/icons";
+import { siteConfig } from "@/config/site";
 
 export default function Home() {
   return (
-    <section className="flex flex-col items-center justify-center gap-4 py-8 md:py-10">
-      <div className="inline-block max-w-xl text-center justify-center">
-        <span className={title({ color: "blue" })}>All-in-One Paperwork Agent Workspace</span>
-        <div className={subtitle({ class: "mt-4" })}>一站式Paperwork Agent工作台</div>
-      </div>
+    <PageLayout className="justify-center py-16 md:py-24" width="content">
+      <PageHeader
+        actions={
+          <>
+            <ButtonLink href={siteConfig.links.twitter} rel="noopener noreferrer" target="_blank">
+              Follow us on X
+            </ButtonLink>
+            <ButtonLink
+              href={siteConfig.links.github}
+              rel="noopener noreferrer"
+              target="_blank"
+              variant="secondary"
+            >
+              <GithubIcon aria-hidden="true" size={20} />
+              GitHub
+            </ButtonLink>
+          </>
+        }
+        description="一站式 Paperwork Agent 工作台"
+        eyebrow="Piwork"
+        title="All-in-One Paperwork Agent Workspace"
+      />
 
-      <div className="flex gap-3">
-        <a
-          className="button button--primary button--md rounded-full"
-          href={siteConfig.links.twitter}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Follow us on X
-        </a>
-        <a
-          className="button button--tertiary button--md rounded-full"
-          href={siteConfig.links.github}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <GithubIcon size={20} />
-          GitHub
-        </a>
-      </div>
-
-      <div className="mt-8">
-        <div className="flex items-center gap-2 rounded-xl bg-surface shadow-surface px-4 py-2">
-          <pre className="text-sm  font-mediumfont-mono">
-            Get started by editing{" "}
-            <code className="px-2 py-1 h-fit font-mono font-normal inline whitespace-nowrap rounded-sm bg-accent/20 text-accent text-sm">
-              app/page.tsx
-            </code>
-          </pre>
-        </div>
-      </div>
-    </section>
+      <section className="rounded-[var(--piwork-panel-radius)] border border-border bg-card p-4">
+        <pre className="overflow-x-auto text-sm font-medium">
+          Get started by editing{" "}
+          <code className="inline h-fit whitespace-nowrap rounded-[var(--piwork-control-radius)] bg-muted px-2 py-1 font-mono text-sm font-normal text-foreground">
+            app/page.tsx
+          </code>
+        </pre>
+      </section>
+    </PageLayout>
   );
 }

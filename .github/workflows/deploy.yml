@@ -1,11 +1,23 @@
 name: Deploy to Cloudflare Pages
 
 on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "landing-page/**"
+      - "packages/design-tokens/**"
+      - "packages/ui/**"
+      - "packages/ui-patterns/**"
+      - ".github/workflows/deploy.yml"
   push:
     branches:
       - main
     paths:
+      - "package.json"
       - "landing-page/**"
+      - "packages/design-tokens/**"
+      - "packages/ui/**"
+      - "packages/ui-patterns/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -35,7 +47,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: landing-page
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --backend copyfile --linker isolated
 
       - name: Lint with zero warnings
         working-directory: landing-page
@@ -50,6 +62,7 @@ jobs:
         run: bun run build
 
       - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'pull_request'
         working-directory: landing-page
         run: bun run deploy
         env:
