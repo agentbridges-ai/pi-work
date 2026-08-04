@@ -34,6 +34,27 @@ async function graphql(query, variables) {
   return payload.data;
 }
 
+async function createCommitStatus({ sha, state, context, description, targetUrl }) {
+  const response = await fetch(
+    `https://api.github.com/repos/${policy.repository}/statuses/${sha}`,
+    {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        state,
+        context,
+        description,
+        target_url: targetUrl,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `REST commit status request failed: ${response.status} ${await response.text()}`,
+    );
+  }
+}
+
 function globToRegExp(pattern) {
   let expression = "";
   for (let index = 0; index < pattern.length; index += 1) {
@@ -58,7 +79,6 @@ let filesCursor = null;
 let reviewsCursor = null;
 let filesDone = false;
 let reviewsDone = false;
-let repositoryId;
 let headSha = pullRequest.head.sha;
 while (!filesDone || !reviewsDone) {
   const data = await graphql(
@@ -73,7 +93,6 @@ while (!filesDone || !reviewsDone) {
         $includeReviews: Boolean!
       ) {
         repository(owner: $owner, name: $name) {
-          id
           pullRequest(number: $number) {
             headRefOid
             files(first: 100, after: $filesCursor) @include(if: $includeFiles) {
@@ -114,7 +133,6 @@ while (!filesDone || !reviewsDone) {
       includeReviews: !reviewsDone,
     },
   );
-  repositoryId = data.repository.id;
   headSha = data.repository.pullRequest.headRefOid;
   if (!filesDone) {
     const filesConnection = data.repository.pullRequest.files;
@@ -153,39 +171,13 @@ const workflowUrl = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
   : `https://github.com/${policy.repository}/pull/${pullRequestNumber}`;
 
-await graphql(
-  `
-    mutation (
-      $repositoryId: ID!
-      $sha: GitObjectID!
-      $state: CommitState!
-      $context: String!
-      $description: String!
-      $targetUrl: URI
-    ) {
-      createCommitStatus(
-        input: {
-          repositoryId: $repositoryId
-          sha: $sha
-          state: $state
-          context: $context
-          description: $description
-          targetUrl: $targetUrl
-        }
-      ) {
-        context
-      }
-    }
-  `,
-  {
-    repositoryId,
-    sha: headSha,
-    state: state.toUpperCase(),
-    context: "governance-review",
-    description: description.slice(0, 140),
-    targetUrl: workflowUrl,
-  },
-);
+await createCommitStatus({
+  sha: headSha,
+  state,
+  context: "governance-review",
+  description: description.slice(0, 140),
+  targetUrl: workflowUrl,
+});
 
 if (state !== "success") process.exit(1);
 console.log(`[governance-review] ${description}`);

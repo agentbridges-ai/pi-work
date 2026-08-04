@@ -51,7 +51,43 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      srt: ${{ steps.classify.outputs.srt }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          # Scheduled and manually-dispatched runs are intentional full probes.
+          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "srt=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="$PR_BASE_SHA"
+          if [[ "$EVENT_NAME" == "push" ]]; then base="$PUSH_BEFORE_SHA"; fi
+          # A repository's first push has GitHub's all-zero before SHA. Diff it
+          # from the empty tree instead of failing the named deep-verify check.
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git hash-object -t tree /dev/null)"
+          fi
+          changed="$(git diff --name-only "$base" "$GITHUB_SHA")"
+          if grep -Eq '^(\.github/workflows/srt-linux\.yml|\.github/actions/setup-toolchain/action\.yml|Makefile|scripts/(verify-native-pi-dependencies\.mjs|verify-pi-only-runtime\.sh)|web/(bin/user-space\.ts|bun\.lock|package\.json|scripts/(pi-rpc-probe\.ts|verify-pi-rpc-contract\.ts|verify-srt-pi-rpc\.ts|verify-srt-isolation\.ts|verify-srt-user-space-transport\.ts)|server/(network-security\.ts|path-resolver\.ts|pi-bootstrap-channel\.ts|pi-rpc-contract\.ts|pi-rpc-transport\.ts|pi-[^/]+\.ts|managed-mcp\.ts|srt-policy\.ts)|src/user-space-shell-contract\.ts))$' <<<"$changed"; then
+            echo "srt=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "srt=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -105,17 +141,25 @@ jobs:
 
       - name: Run the complete verification suite
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.onlyoffice_candidate_integration != true }}
-        run: make verify
-
-      - name: Run the complete verification suite for an explicit candidate integration
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}
-        run: make verify ONLYOFFICE_RELEASE_VERIFY_ARGS=--allow-candidate
-
-      - name: Verify published OnlyOffice release descriptor
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.onlyoffice_candidate_integration != true }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: make verify-onlyoffice-release ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
+        # Linux SRT owns the native RPC/SRT canaries whenever its protected
+        # surface changes; deep verification still runs its portable suite and
+        # coverage once.
+        run: make verify VERIFY_SRT=${{ needs.changes.outputs.srt == 'true' && '0' || '1' }} ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
+
+      - name: Verify the explicit candidate descriptor before integration
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONLYOFFICE_EXPECTED_RELEASE_ID: ${{ inputs.onlyoffice_candidate_release_id }}
+        run: |
+          test -n "${ONLYOFFICE_EXPECTED_RELEASE_ID}"
+          candidate_base_sha="$(git rev-parse refs/remotes/origin/main)"
+          ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA="${candidate_base_sha}" \
+            ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA="${GITHUB_SHA}" \
+            make verify-onlyoffice-release \
+            ONLYOFFICE_RELEASE_VERIFY_ARGS="--online --allow-candidate --candidate-integration"
 
       - name: Enforce pull request diff coverage
         if: ${{ github.event_name == 'pull_request' }}

@@ -60,10 +60,8 @@ describe("Piwork design system package contract", () => {
       "bun install --frozen-lockfile --backend copyfile --linker isolated",
     );
     expect(workflow).toContain('pull_request:\n    paths:\n      - "package.json"');
-    expect(workflow).toContain(
-      'push:\n    branches:\n      - main\n    paths:\n      - "package.json"',
-    );
-    expect(workflow).toContain("if: github.event_name != 'pull_request'");
+    expect(workflow).toContain('push:\n    branches: [main]\n    paths:\n      - "package.json"');
+    expect(workflow).toContain("if: ${{ github.event_name != 'pull_request' }}");
   });
 
   it("keeps the required Linux SRT check reachable for every pull request", () => {
