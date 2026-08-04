@@ -2,6 +2,11 @@ name: release evidence
 
 on:
   workflow_dispatch:
+    inputs:
+      required_check_urls:
+        description: Comma-separated URLs for the required checks that produced this evidence
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -16,7 +21,7 @@ jobs:
           fetch-depth: 1
       - name: Generate release evidence
         env:
-          REQUIRED_CHECK_URLS: ${{ github.event.release.html_url || '' }}
+          REQUIRED_CHECK_URLS: ${{ inputs.required_check_urls || '' }}
         run: node scripts/governance/release-evidence.mjs --output release-evidence.json
       - name: Export SPDX dependency graph
         env:

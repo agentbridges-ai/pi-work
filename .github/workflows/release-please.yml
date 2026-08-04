@@ -36,12 +36,39 @@ jobs:
           ref: ${{ steps.release.outputs.tag_name }}
           fetch-depth: 1
 
+      - name: Collect required check URLs for the release commit
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        id: required-checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha || github.sha }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs?per_page=100" > release-check-runs.json
+          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/status?per_page=100" > release-statuses.json
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const policy = JSON.parse(readFileSync(".governance/github-policy.json", "utf8"));
+          const checkRuns = JSON.parse(readFileSync("release-check-runs.json", "utf8")).check_runs || [];
+          const statuses = JSON.parse(readFileSync("release-statuses.json", "utf8")).statuses || [];
+          const required = new Set(policy.requiredChecks);
+          const urls = new Set([
+            ...checkRuns
+              .filter((run) => required.has(run.name) && run.conclusion === "success")
+              .map((run) => run.html_url),
+            ...statuses
+              .filter((status) => required.has(status.context) && status.state === "success")
+              .map((status) => status.target_url),
+          ].filter(Boolean));
+          if (!urls.size) throw new Error("No successful required-check URLs found for release commit");
+          appendFileSync(process.env.GITHUB_OUTPUT, `urls=${[...urls].join(",")}\n`);
+          NODE
+
       - name: Generate release evidence
         if: ${{ steps.release.outputs.release_created == 'true' }}
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ steps.release.outputs.sha }}
-          REQUIRED_CHECK_URLS: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_SHA: ${{ steps.release.outputs.sha || github.sha }}
+          REQUIRED_CHECK_URLS: ${{ steps.required-checks.outputs.urls }}
         run: node scripts/governance/release-evidence.mjs --output release-evidence.json
 
       - name: Export SPDX dependency graph

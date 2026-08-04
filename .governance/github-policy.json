@@ -48,6 +48,8 @@
     "web/server/migrations/**",
     "web/server/routes/*diagnostics*",
     "web/server/routes/*metrics*",
+    "web/server/routes.ts",
+    "web/server/routes/**",
     "web/server/routes/control-plane-*.ts",
     "web/server/onlyoffice-*.ts",
     "web/shared/**",

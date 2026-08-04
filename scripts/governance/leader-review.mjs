@@ -136,6 +136,10 @@ const description = !highRisk
     ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
     : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
 
+const workflowUrl = process.env.GITHUB_RUN_ID
+  ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+  : `https://github.com/${policy.repository}/pull/${pullRequestNumber}`;
+
 await graphql(
   `
     mutation (
@@ -166,7 +170,7 @@ await graphql(
     state: state.toUpperCase(),
     context: "governance-review",
     description: description.slice(0, 140),
-    targetUrl: `https://github.com/${policy.repository}/pull/${pullRequestNumber}`,
+    targetUrl: workflowUrl,
   },
 );
 

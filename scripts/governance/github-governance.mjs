@@ -219,7 +219,13 @@ function readbackDrift() {
     }
   }
 
-  const rulesets = gh("GET", `/repos/${repository}/rulesets?includes_parents=false`);
+  const rulesetsResponse = gh("GET", `/repos/${repository}/rulesets?includes_parents=false`);
+  const rulesetSummaries = Array.isArray(rulesetsResponse)
+    ? rulesetsResponse
+    : rulesetsResponse?.rulesets || [];
+  const rulesets = rulesetSummaries.map((summary) =>
+    summary.id ? gh("GET", `/repos/${repository}/rulesets/${summary.id}`) : summary,
+  );
   for (const name of ["Piwork main governance", "Piwork high-risk review", "Piwork release tags"]) {
     const ruleset = rulesets.find((item) => item.name === name);
     if (!ruleset || ruleset.enforcement !== "active")
@@ -335,7 +341,13 @@ try {
   );
   configureProductionEnvironment();
 
-  const rulesets = gh("GET", `/repos/${repository}/rulesets?includes_parents=false`);
+  const rulesetsResponse = gh("GET", `/repos/${repository}/rulesets?includes_parents=false`);
+  const rulesetSummaries = Array.isArray(rulesetsResponse)
+    ? rulesetsResponse
+    : rulesetsResponse?.rulesets || [];
+  const rulesets = rulesetSummaries.map((summary) =>
+    summary.id ? gh("GET", `/repos/${repository}/rulesets/${summary.id}`) : summary,
+  );
   const automationId = releaseAutomationId();
   for (const desired of [
     mainRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
