@@ -728,7 +728,17 @@ export function runCli(args = process.argv.slice(2)): number {
   const runnerInputs = {
     criticalTests: gitFile(repoRoot, options.head, "web/scripts/critical-tests.txt"),
     makefile: gitFile(repoRoot, options.head, "Makefile"),
-    workflow: gitFile(repoRoot, options.head, ".github/workflows/verify.yml"),
+    // External make-target boundaries may be owned by a specialised required
+    // workflow (for example the SRT canary), rather than the fast verify lane.
+    // Validate the union of maintained workflows without forcing heavyweight
+    // sandbox dependencies into the quality job.
+    workflow: [
+      ".github/workflows/verify.yml",
+      ".github/workflows/srt-linux.yml",
+    ]
+      .map((path) => optionalGitFile(repoRoot, options.head, path))
+      .filter((workflow): workflow is string => workflow !== undefined)
+      .join("\n"),
   };
   for (const boundary of externalBoundaries) {
     if (!isCoverageEligiblePath(boundary.path)) {
