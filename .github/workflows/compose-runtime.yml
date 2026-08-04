@@ -64,6 +64,13 @@ jobs:
       - name: Validate Compose source configuration
         run: ./scripts/selfhost.sh doctor
 
+      - name: Enable capability-bearing user namespaces for nested SRT
+        run: |
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
+          fi
+
       - name: Build and start the source stack
         run: make test-compose-migrate
 
