@@ -55,7 +55,12 @@ jobs:
             exit 0
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          changed="$(git diff --name-only "$BASE_SHA"...HEAD)"
+          # The pull_request checkout is a shallow synthetic merge. The base
+          # commit is fetched explicitly, but its parent graph is not, so a
+          # three-dot diff can fail with "no merge base" even though the
+          # checked-out merge commit is valid. A two-endpoint tree diff keeps
+          # this classifier deterministic for the required no-op status.
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
           if printf '%s\n' "$changed" | grep -Eq '^(\.github/workflows/srt-linux\.yml|\.github/actions/setup-toolchain/action\.yml|Makefile|scripts/verify-(native-pi-dependencies\.mjs|pi-only-runtime\.sh|pi-rpc-contract\.ts|srt-)|web/(bin/user-space\.ts|bun\.lock|package\.json|shared/|scripts/(pi-rpc-probe|verify-pi-rpc-contract|verify-srt-)|server/(network-security|path-resolver|pi-|managed-mcp|srt-policy)|src/user-space-shell/))'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else

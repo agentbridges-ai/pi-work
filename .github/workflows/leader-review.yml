@@ -30,4 +30,14 @@ jobs:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/governance/leader-review.mjs
+        run: |
+          # pull_request_target checks out the trusted base ref. During the
+          # governance bootstrap that ref predates this script, so report a
+          # controlled no-op instead of executing untrusted PR code or
+          # producing a missing-module failure. After the baseline merges,
+          # the same step executes the full read-only metadata check.
+          if [[ -f scripts/governance/leader-review.mjs ]]; then
+            node scripts/governance/leader-review.mjs
+          else
+            echo "Governance baseline is not present on the trusted base ref; controlled bootstrap no-op."
+          fi
