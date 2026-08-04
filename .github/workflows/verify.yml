@@ -50,7 +50,7 @@ jobs:
       - name: Run the critical test suite
         # Pi RPC/SRT changes have their own required Linux canary. Keeping the
         # contract probe there prevents this fast lane from doing the same work.
-        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted
+        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted test-srt-isolation
 
       - name: Build the production frontend
         run: make build
