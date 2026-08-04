@@ -194,6 +194,7 @@
         "unlinkat",
         "unshare",
         "utimensat",
+        "vfork",
         "wait4",
         "waitid",
         "write",
