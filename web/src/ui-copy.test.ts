@@ -128,4 +128,27 @@ describe("uiCopy", () => {
     );
     expect(en.userSpace.office.resourcePreparationDescription("24 MB")).toContain("24 MB");
   });
+
+  it("keeps App and native-helper copy callable in both languages", () => {
+    for (const language of ["zh-CN", "en-US"] as const) {
+      const copy = getUiCopyCatalog(language);
+      expect(copy.apps.screenshotAlt("Demo")).toContain("Demo");
+      expect(copy.apps.countdown.hoursMinutes(1, 2)).toContain("1");
+      expect(copy.apps.countdown.minutesSeconds(3, 4)).toContain("3");
+      expect(copy.apps.archiveConfirm("Demo")).toContain("Demo");
+      expect(copy.apps.archivedAt("2026-08-04")).toContain("2026-08-04");
+      expect(copy.chat.preferencesPanel.officeResources.failedResource("fonts/core")).toContain(
+        "fonts/core",
+      );
+      expect(copy.chat.preferencesPanel.nativeHelper.version("0.1.0")).toContain("0.1.0");
+      expect(copy.chat.preferencesPanel.nativeHelper.latestVersion("0.2.0")).toContain("0.2.0");
+      expect(copy.chat.preferencesPanel.nativeHelper.capabilities(2)).toContain("2");
+      expect(copy.chat.preferencesPanel.nativeHelper.lastError("offline")).toContain("offline");
+      expect(copy.userSpace.contextMenu.nativeActionFailed("failed")).toContain("failed");
+      expect(copy.userSpace.contextMenu.shareFailed("failed")).toContain("failed");
+      expect(copy.userSpace.nativeEdit.handoffClean("Demo")).toContain("Demo");
+      expect(copy.userSpace.nativeEdit.handoffDirty("Demo")).toContain("Demo");
+      expect(copy.userSpace.nativeEdit.savedCopy("demo.txt")).toContain("demo.txt");
+    }
+  });
 });

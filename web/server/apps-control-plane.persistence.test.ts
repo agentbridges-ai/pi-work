@@ -1,7 +1,13 @@
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { AppsControlPlane } from "./apps-control-plane.js";
-import type { AppOperationContext } from "./apps-types.js";
+import {
+  APP_DEPLOYMENT_PHASES,
+  APP_DOMAIN_STATUSES,
+  APP_SSL_STATUSES,
+  APP_STATUSES,
+  type AppOperationContext,
+} from "./apps-types.js";
 
 const context: AppOperationContext = {
   tenantId: "tenant-1",
@@ -189,6 +195,41 @@ function makePool() {
 }
 
 describe("AppsControlPlane persistence paths", () => {
+  it("keeps the public status contracts and cursor scopes explicit", async () => {
+    expect(APP_STATUSES).toEqual([
+      "building",
+      "needs_action",
+      "deploying",
+      "preview",
+      "ready",
+      "failed",
+      "archived",
+    ]);
+    expect(APP_DEPLOYMENT_PHASES).toContain("verifying_claim");
+    expect(APP_DOMAIN_STATUSES).toEqual(["pending", "active", "failed", "removing"]);
+    expect(APP_SSL_STATUSES).toContain("pending_issuance");
+
+    const { pool } = makePool();
+    const service = new AppsControlPlane(pool as unknown as Pool);
+    const cursor = Buffer.from(
+      JSON.stringify(["2026-08-04T00:00:00.000Z", "app-0"]),
+      "utf8",
+    ).toString("base64url");
+    await expect(service.listApps(context, { scope: "mine", cursor })).resolves.toMatchObject({
+      apps: [expect.objectContaining({ id: "app-1" })],
+    });
+    await expect(
+      service.listApps(context, { scope: "current-session", sessionId: "session-1", cursor }),
+    ).resolves.toMatchObject({ apps: [expect.objectContaining({ id: "app-1" })] });
+    const versionCursor = Buffer.from("1", "utf8").toString("base64url");
+    await expect(service.listVersions(context, "app-1", versionCursor)).resolves.toMatchObject({
+      versions: [expect.objectContaining({ id: "deployment-1" })],
+    });
+    await expect(
+      service.listApps(context, { scope: "tenant", cursor: "not-a-cursor" }),
+    ).rejects.toThrow("Invalid pagination cursor");
+  });
+
   it("covers read, deployment, domain, lifecycle, lease, and outbox transitions", async () => {
     const { pool, currentApp } = makePool();
     const service = new AppsControlPlane(pool as unknown as Pool);

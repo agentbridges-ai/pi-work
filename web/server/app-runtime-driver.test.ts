@@ -266,6 +266,34 @@ describe("App runtime drivers", () => {
     );
   });
 
+  it("fails closed for every disabled driver mutation and preserves a health projection", async () => {
+    const driver = createAppRuntimeDriver({ env: {} });
+    await expect(driver.validate({} as never, "temporary")).rejects.toBeInstanceOf(
+      AppRuntimeDisabledError,
+    );
+    await expect(driver.prepareResources({} as never)).rejects.toBeInstanceOf(
+      AppRuntimeDisabledError,
+    );
+    await expect(driver.rollback({} as never)).rejects.toBeInstanceOf(AppRuntimeDisabledError);
+    await expect(driver.disableExposure({} as never, {} as never)).rejects.toBeInstanceOf(
+      AppRuntimeDisabledError,
+    );
+    await expect(
+      driver.setCustomDomain({} as never, {} as never, {} as never),
+    ).rejects.toBeInstanceOf(AppRuntimeDisabledError);
+    await expect(
+      driver.verifyCustomDomain({} as never, "provider", "app.example.com"),
+    ).rejects.toBeInstanceOf(AppRuntimeDisabledError);
+    await expect(driver.removeCustomDomain({} as never, "provider")).rejects.toBeInstanceOf(
+      AppRuntimeDisabledError,
+    );
+    await expect(driver.health()).resolves.toMatchObject({
+      ok: false,
+      driver: "disabled",
+      details: expect.stringContaining("disabled"),
+    });
+  });
+
   it("rejects a staged artifact whose bytes were changed without updating its digest", () => {
     const encoded = serializeAppArtifact(artifact());
     const value = JSON.parse(new TextDecoder().decode(encoded)) as {
@@ -275,6 +303,37 @@ describe("App runtime drivers", () => {
     expect(() => deserializeAppArtifact(new TextEncoder().encode(JSON.stringify(value)))).toThrow(
       "digest does not match",
     );
+  });
+
+  it("rejects malformed staged artifacts and unsafe wrapper binding declarations", () => {
+    const encoded = serializeAppArtifact(artifact());
+    const value = JSON.parse(new TextDecoder().decode(encoded)) as Record<string, unknown>;
+    value.version = 2;
+    expect(() => deserializeAppArtifact(new TextEncoder().encode(JSON.stringify(value)))).toThrow(
+      "Stored App artifact is invalid",
+    );
+    const invalidAsset = JSON.parse(new TextDecoder().decode(encoded)) as {
+      assets: Array<{ path: string; contentType: string; sha256: string; base64: string }>;
+    };
+    invalidAsset.assets.push({
+      path: "/asset.txt",
+      contentType: "text/plain",
+      sha256: "bad",
+      base64: Buffer.from("asset").toString("base64"),
+    });
+    expect(() =>
+      deserializeAppArtifact(new TextEncoder().encode(JSON.stringify(invalidAsset))),
+    ).toThrow("digest does not match");
+    expect(() =>
+      prepareWrappedWorkerUpload({
+        appId: target().appId,
+        artifact: artifact(),
+        bindings: [
+          { type: "kv_namespace", name: "CACHE", namespace_id: "one" },
+          { type: "kv_namespace", name: "CACHE", namespace_id: "two" },
+        ],
+      }),
+    ).toThrow("binding allowlist is invalid");
   });
 
   it("round-trips creator-owned staged artifacts without storing credentials", () => {
@@ -408,6 +467,20 @@ describe("App runtime drivers", () => {
       providerVersion: "version-old",
     });
     expect(fake.rollback).toHaveBeenCalledOnce();
+
+    await adapter.disableExposure(target(), credential("byoc"));
+    await adapter.setCustomDomain(target(), credential("byoc"), {
+      hostname: "app.example.com",
+      zoneId: "zone-1",
+      confirmImpact: true,
+      workersDevHealthy: true,
+    });
+    await adapter.verifyCustomDomain(credential("byoc"), "domain-1", "app.example.com");
+    await adapter.removeCustomDomain(credential("byoc"), "domain-1");
+    expect(fake.disableExposure).toHaveBeenCalledOnce();
+    expect(fake.setCustomDomain).toHaveBeenCalledOnce();
+    expect(fake.verifyCustomDomain).toHaveBeenCalledOnce();
+    expect(fake.removeCustomDomain).toHaveBeenCalledOnce();
   });
 
   it("provisions BYOC create/adopt resources and persists each ledger transition", async () => {
@@ -621,6 +694,25 @@ describe("App runtime drivers", () => {
       resources: { receipts: [] },
     });
     expect(result.readiness).toBe("pending");
+  });
+
+  it("accepts successful and redirect workers.dev health responses", async () => {
+    for (const status of [200, 302]) {
+      const api = new FakeCloudflareApi();
+      const driver = new CloudflareAppRuntimeDriver({
+        apiFactory: () => api,
+        fetch: vi.fn(async () => new Response(null, { status })) as unknown as typeof fetch,
+      });
+      const result = await driver.deploy({
+        target: target(),
+        deploymentId: `deployment-health-${status}`,
+        targetKind: "byoc",
+        credential: credential(),
+        artifact: artifact(),
+        resources: { receipts: [] },
+      });
+      expect(result.readiness).toBe("ready");
+    }
   });
 
   it("rejects destructive Durable Object migrations", async () => {
@@ -837,5 +929,27 @@ describe("App runtime drivers", () => {
       expect.objectContaining({ method: "GET", redirect: "manual" }),
     );
     expect(api.calls.some((call) => call.name === "attachDomain")).toBe(false);
+  });
+
+  it("rejects an attached custom domain that changes hostname and reports provider health", async () => {
+    const api = new FakeCloudflareApi();
+    vi.spyOn(api, "getDomain").mockResolvedValueOnce({
+      id: "domain-1",
+      hostname: "other.example.com",
+      zoneId: "a".repeat(32),
+      certificateId: null,
+    });
+    const driver = new CloudflareAppRuntimeDriver({ apiFactory: () => api });
+    await expect(
+      driver.verifyCustomDomain(credential("byoc"), "domain-1", "app.example.com"),
+    ).rejects.toMatchObject({ code: "cloudflare_domain_mismatch" });
+    await expect(driver.health()).resolves.toMatchObject({ ok: true, driver: "cloudflare" });
+    vi.spyOn(api, "getWorkersSubdomain").mockRejectedValueOnce(new Error("unavailable"));
+    await expect(driver.health(credential("byoc"))).resolves.toMatchObject({
+      ok: false,
+      details: "Cloudflare account is unavailable",
+    });
+    await driver.disableExposure(target(), credential("byoc"));
+    await driver.removeCustomDomain(credential("byoc"), "domain-1");
   });
 });

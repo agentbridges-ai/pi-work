@@ -45,6 +45,23 @@ compose() {
     -f "$COMPOSE_BASE" "${compose_files[@]}" "$@"
 }
 
+materialize_runtime_secrets() {
+  local image="${PIWORK_WEB_IMAGE:-piwork-web:source}"
+  local postgres_password_file="${PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST:-$POSTGRES_APP_PASSWORD_FILE}"
+  docker volume create piwork_runtime_secrets >/dev/null
+  docker run --rm --user 0:0 --entrypoint /bin/sh \
+    -v 'piwork_runtime_secrets:/out' \
+    -v "$KEY_FILE:/in/runtime-control.key:ro" \
+    -v "$MARKER_FILE:/in/runtime-security.marker:ro" \
+    -v "$postgres_password_file:/in/postgres-app.password:ro" \
+    "$image" -eu -c '
+      install -d -m 0700 /out
+      install -o 65532 -g 65532 -m 0400 /in/runtime-control.key /out/runtime-control.key
+      install -o 65532 -g 65532 -m 0400 /in/runtime-security.marker /out/runtime-security.marker
+      install -o 65532 -g 65532 -m 0400 /in/postgres-app.password /out/postgres-app.password
+    '
+}
+
 select_mode() {
   compose_files=()
   case "$mode" in
@@ -223,7 +240,13 @@ NODE
 up() {
   load_config
   select_mode
-  if [[ "$mode" == "source" ]]; then compose up -d --build; else compose up -d; fi
+  if [[ "$mode" == "source" ]]; then
+    compose build
+  else
+    compose pull web runtime >/dev/null
+  fi
+  materialize_runtime_secrets
+  compose up -d
   compose --profile migrate run --rm migrate
 }
 

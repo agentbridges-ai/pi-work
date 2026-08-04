@@ -602,6 +602,117 @@ describe("API request contracts", () => {
     });
   });
 
+  it("covers the remaining App lifecycle API methods and native error contracts", async () => {
+    runtimeContextCoordinator.activate({
+      userId: "user-a",
+      userScopeKey: userScopeKeyFromCurrentUser({ ...user, tenantId: "tenant-a" }),
+      agentId: "agent",
+      sessionId: "session-a",
+    });
+    const appRecord = {
+      id: "app-a",
+      tenantId: "tenant-a",
+      ownerUserId: "user-a",
+      sourceSessionId: "session-a",
+      slug: "demo",
+      name: "Demo",
+      status: "ready",
+      targetKind: "byoc",
+      cloudflareConnectionId: "connection-1",
+      canManage: true,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    };
+    const deploymentRecord = {
+      id: "deployment-1",
+      appId: "app-a",
+      version: 1,
+      phase: "ready",
+      targetKind: "byoc",
+      sourceDigest: "a".repeat(64),
+      createdBy: "user-a",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      deployedAt: "2026-08-01T00:01:00.000Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { app: appRecord } }))
+      .mockResolvedValueOnce(
+        response({ ok: true, status: 200, body: { versions: [deploymentRecord] } }),
+      )
+      .mockResolvedValueOnce(
+        response({ ok: true, status: 200, body: { temporaryEnabled: true, byocEnabled: true } }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { app: appRecord, deployment: deploymentRecord },
+        }),
+      )
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { app: appRecord } }))
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { app: appRecord } }))
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { sessionId: "session-b", restoredFromSnapshot: true },
+        }),
+      )
+      .mockResolvedValue(
+        response({ ok: false, status: 500, body: { error: "native operation failed" } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.getApp("app/a")).resolves.toMatchObject({ app: { id: "app-a" } });
+    await expect(api.listAppVersions("app/a", "cursor-1")).resolves.toMatchObject({
+      versions: [{ id: "deployment-1", number: 1 }],
+    });
+    await expect(api.getCloudflareConfig()).resolves.toEqual({
+      temporaryEnabled: true,
+      byocEnabled: true,
+    });
+    await expect(api.rollbackApp("app/a", "deployment-1")).resolves.toMatchObject({
+      app: { id: "app-a" },
+      deployment: { id: "deployment-1" },
+    });
+    await expect(api.archiveApp("app/a")).resolves.toMatchObject({ app: { id: "app-a" } });
+    await expect(api.unarchiveApp("app/a")).resolves.toMatchObject({ app: { id: "app-a" } });
+    await expect(api.continueAppDevelopment("app/a")).resolves.toEqual({
+      sessionId: "session-b",
+      restoredFromSnapshot: true,
+    });
+
+    const file = new File(["contents"], "demo.txt", { type: "text/plain" });
+    await expect(
+      api.createNativeFileAction("session-a", file, {
+        action: "file.open",
+        source: { space: "agent", path: "demo.txt" },
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    await expect(
+      api.reclaimNativeFileAction("session-a", "operation-1", "demo.txt"),
+    ).rejects.toThrow();
+    await expect(api.cancelNativeFileAction("session-a", "operation-1")).rejects.toThrow();
+    await expect(
+      api.writeAgentSpaceFileBytes("session-a", "demo.txt", new Blob(["x"])),
+    ).rejects.toThrow();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/apps/app%2Fa",
+      "/api/apps/app%2Fa/versions?cursor=cursor-1",
+      "/api/cloudflare/config",
+      "/api/apps/app%2Fa/rollback",
+      "/api/apps/app%2Fa",
+      "/api/apps/app%2Fa/restore",
+      "/api/apps/app%2Fa/continue-development",
+      expect.stringContaining("/api/sessions/session-a/native-file-actions?"),
+      "/api/sessions/session-a/native-file-actions/operation-1/reclaim",
+      "/api/sessions/session-a/native-file-actions/operation-1",
+      expect.stringContaining("/api/sessions/session-a/agent-space/raw?"),
+    ]);
+  });
+
   it("covers native file byte and share helpers with scoped request metadata", async () => {
     runtimeContextCoordinator.activate({
       userId: "user-a",

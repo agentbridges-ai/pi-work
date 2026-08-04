@@ -27,31 +27,21 @@ services:
       PIWORK_SERVE_FRONTEND: "0"
       PIWORK_DATA_ROOT: /var/lib/piwork/data
       PIWORK_POSTGRES_APP_USER: ${PIWORK_POSTGRES_APP_USER:-piwork_web}
-      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/secrets/piwork-postgres-app-password
+      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/piwork-secrets/postgres-app.password
       POSTGRES_DB: ${POSTGRES_DB:-piwork}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3457}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run selfhost init first}
       PIWORK_RUNTIME_MODE: compose
       PIWORK_RUNTIME_SOCKET: /run/piwork-runtime/runtime.sock
-      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/secrets/piwork-runtime-control
+      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/piwork-secrets/runtime-control.key
       PIWORK_RUNTIME_SECURITY_GATE: verified
       PIWORK_REQUIRE_SESSION_SANDBOX: "1"
       PIWORK_SESSION_SANDBOX: srt
       PIWORK_INTERNAL_PROXY_ONLY: "1"
-    secrets:
-      - source: piwork-runtime-control
-        target: piwork-runtime-control
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
-      - source: piwork-postgres-app-password
-        target: piwork-postgres-app-password
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
     volumes:
       - piwork-data:/var/lib/piwork/data
       - runtime-socket:/run/piwork-runtime:ro
+      - runtime-secrets:/run/piwork-secrets:ro
     networks:
       - edge
       - backend
@@ -79,24 +69,14 @@ services:
       NODE_ENV: production
       PIWORK_DATA_ROOT: /var/lib/piwork/data
       PIWORK_RUNTIME_SOCKET: /run/piwork-runtime/runtime.sock
-      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/secrets/piwork-runtime-control
+      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/piwork-secrets/runtime-control.key
       PIWORK_RUNTIME_DEPLOYMENT_MODE: compose-nested
       PIWORK_RUNTIME_SECURITY_GATE: verified
-      PIWORK_RUNTIME_SECURITY_MARKER: /run/secrets/runtime-security.marker
-    secrets:
-      - source: piwork-runtime-control
-        target: piwork-runtime-control
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
-      - source: runtime-security-marker
-        target: runtime-security.marker
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
+      PIWORK_RUNTIME_SECURITY_MARKER: /run/piwork-secrets/runtime-security.marker
     volumes:
       - piwork-data:/var/lib/piwork/data
       - runtime-socket:/run/piwork-runtime
+      - runtime-secrets:/run/piwork-secrets:ro
     networks:
       - backend
 
@@ -126,18 +106,13 @@ services:
       PIWORK_DATA_ROOT: /var/lib/piwork/data
       DATABASE_URL: postgres://${POSTGRES_USER:-piwork}:${POSTGRES_PASSWORD:-piwork}@postgres:5432/${POSTGRES_DB:-piwork}
       PIWORK_POSTGRES_APP_USER: ${PIWORK_POSTGRES_APP_USER:-piwork_web}
-      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/secrets/piwork-postgres-app-password
+      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/piwork-secrets/postgres-app.password
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run selfhost init first}
     volumes:
       - piwork-data:/var/lib/piwork/data
+      - runtime-secrets:/run/piwork-secrets:ro
     networks:
       - backend
-    secrets:
-      - source: piwork-postgres-app-password
-        target: piwork-postgres-app-password
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,13 +127,7 @@ volumes:
   piwork-data:
   postgres-data:
   runtime-socket:
+  runtime-secrets:
+    name: piwork_runtime_secrets
   caddy-data:
   caddy-config:
-
-secrets:
-  piwork-runtime-control:
-    file: ${PIWORK_RUNTIME_CONTROL_KEY_FILE_HOST:-.runtime/selfhost/runtime-control.key}
-  runtime-security-marker:
-    file: ${PIWORK_RUNTIME_SECURITY_MARKER_FILE:-.runtime/selfhost/runtime-security.marker}
-  piwork-postgres-app-password:
-    file: ${PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST:-.runtime/selfhost/postgres-app.password}
