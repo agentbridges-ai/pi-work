@@ -55,7 +55,7 @@ materialize_runtime_secrets() {
     -v "$MARKER_FILE:/in/runtime-security.marker:ro" \
     -v "$postgres_password_file:/in/postgres-app.password:ro" \
     "$image" -eu -c '
-      install -d -m 0700 /out
+      install -d -o 65532 -g 65532 -m 0700 /out
       install -o 65532 -g 65532 -m 0400 /in/runtime-control.key /out/runtime-control.key
       install -o 65532 -g 65532 -m 0400 /in/runtime-security.marker /out/runtime-security.marker
       install -o 65532 -g 65532 -m 0400 /in/postgres-app.password /out/postgres-app.password
