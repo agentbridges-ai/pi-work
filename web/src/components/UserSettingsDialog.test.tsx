@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { DEFAULT_USER_PREFERENCES, type CurrentUser } from "../api.js";
+import {
+  checkAndRepairOfficeResources,
+  downloadOfficeFontFamily,
+  installOfficeFontPreset,
+  loadAllOfficeResources,
+  pauseOfficeResources,
+  resumeOfficeResources,
+} from "../office-runtime-resources.js";
 import { setUiCopyLanguage, uiCopy } from "../ui-copy.js";
 import type { UiLanguage } from "../store/ui-slice.js";
 import type { PiSessionInfo } from "../types.js";
@@ -92,6 +100,7 @@ const officeResourcesMock = vi.hoisted(() => ({
       installedRelease: null,
       targetRelease: "release-v3",
       availableRelease: "release-v3",
+      availablePackageVersion: "0.5.12",
       storageMode: "http-cache" as const,
       phase: "idle" as const,
       currentChunk: null,
@@ -220,7 +229,7 @@ describe("UserSettingsDialog", () => {
         within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.title),
       ).toBeInTheDocument();
       expect(
-        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.4.0")),
+        within(section).getByText(uiCopy.chat.preferencesPanel.officeResources.version("0.5.12")),
       ).toBeInTheDocument();
       expect(
         within(section).getByRole("progressbar", {
@@ -286,6 +295,107 @@ describe("UserSettingsDialog", () => {
     } finally {
       resources.packs = originalPacks;
       resources.fonts = originalFonts;
+    }
+  });
+
+  it("runs the complete compact and advanced Office resource controls", async () => {
+    const resources = officeResourcesMock.snapshot.resources;
+    const mutableResources = resources as unknown as {
+      readiness: string;
+      phase: string;
+    };
+    const originalState = {
+      readiness: resources.readiness,
+      phase: resources.phase,
+      verifiedBytes: resources.verifiedBytes,
+      verifyBytes: resources.verifyBytes,
+      canPause: resources.canPause,
+      canResume: resources.canResume,
+      canRetry: resources.canRetry,
+      fontBytes: resources.fonts[1].bytes,
+    };
+    try {
+      mutableResources.readiness = "paused";
+      mutableResources.phase = "verifying";
+      resources.verifiedBytes = 1024 ** 2;
+      resources.verifyBytes = 2 * 1024 ** 2;
+      resources.canPause = true;
+      resources.canResume = true;
+      resources.canRetry = true;
+      resources.fonts[1].bytes = 2 * 1024 ** 2;
+
+      renderDialog("en-US");
+      const section = screen.getByTestId("office-resources-section");
+      expect(
+        within(section).getByText(
+          uiCopy.chat.preferencesPanel.officeResources.verifyProgress("1.0 MB", "2.0 MB"),
+        ),
+      ).toBeInTheDocument();
+
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.basicPreset,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.pause,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.resume,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.retry,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.advanced,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.compatibilityPreset,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.download,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.checkAndRepair,
+        }),
+      );
+      fireEvent.click(
+        within(section).getByRole("button", {
+          name: uiCopy.chat.preferencesPanel.officeResources.downloadAll,
+        }),
+      );
+
+      expect(vi.mocked(installOfficeFontPreset)).toHaveBeenCalledWith("basic");
+      expect(vi.mocked(pauseOfficeResources)).toHaveBeenCalledOnce();
+      expect(vi.mocked(resumeOfficeResources)).toHaveBeenCalledOnce();
+      expect(vi.mocked(checkAndRepairOfficeResources)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(installOfficeFontPreset)).toHaveBeenCalledWith("office-compatibility");
+      expect(vi.mocked(downloadOfficeFontFamily)).toHaveBeenCalledWith("microsoft yahei");
+      expect(vi.mocked(loadAllOfficeResources)).toHaveBeenCalledOnce();
+    } finally {
+      Object.assign(resources, {
+        readiness: originalState.readiness,
+        phase: originalState.phase,
+        verifiedBytes: originalState.verifiedBytes,
+        verifyBytes: originalState.verifyBytes,
+        canPause: originalState.canPause,
+        canResume: originalState.canResume,
+        canRetry: originalState.canRetry,
+      });
+      resources.fonts[1].bytes = originalState.fontBytes;
     }
   });
 

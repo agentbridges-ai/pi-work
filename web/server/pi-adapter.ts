@@ -647,7 +647,7 @@ export class PiAdapter {
     if (this.disconnected) return;
     this.disconnected = true;
     this.pendingInteractions.clear();
-    await this.transport.dispose();
+    this.transport.dispose();
     this.disconnectHandler?.();
   }
 

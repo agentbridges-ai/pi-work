@@ -484,7 +484,8 @@ export const enUSCopyOverrides = {
         error: "Operation failed",
         statusUnavailable: "Resource status is temporarily unavailable",
         summary: (completed: number, total: number) => `${completed} / ${total} files cached`,
-        failedFiles: (count: number) => `${count} files failed to load`,
+        failedFiles: (count: number) =>
+          count === 1 ? "1 file failed to load" : `${count} files failed to load`,
         progressLabel: "Office resource cache progress",
         downloadProgress: (completed: string, total: string) =>
           `Downloading ${completed} / ${total}`,
@@ -1507,8 +1508,8 @@ export const enUSCopyOverrides = {
       openLimitReached:
         "You can open up to 12 Office documents at once. Close an Office tab and try again.",
       manageResources: "Manage Office resources",
+      resourcesNotReady: "Office resources are not fully downloaded and verified yet.",
       prepareResources: "Prepare and open",
-      resourcesNotReady: "Office resources are not ready for an editor.",
       resourcePreparationClose: "Cancel Office resource preparation",
       resourcePreparationDescription: (size: string) =>
         `Opening this document requires downloading and verifying ${size} of Office resources. The document will open automatically when ready.`,

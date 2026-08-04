@@ -15,14 +15,16 @@ fallback is supported.
 | `@anthropic-ai/sandbox-runtime`                           | `0.0.65`                                                                 | exact manifest/lock pin, filesystem canary and real native Pi Linux smoke                            |
 | Better Auth runtime and CLI                               | `1.6.20`                                                                 | exact package/CLI pin and frozen Bun lockfile                                                        |
 | `agentbridges-ai/agent-browser` Chrome extension provider | `0.31.1` at `6ee4f5bcd6010af4927b2fc274878323504141ed`                   | `release/agent-browser-release-manifest.json`, `make agent-browser-verify`, `make agent-browser-e2e` |
-| `@agentbridges-ai/onlyoffice-browser`                     | `0.4.0`                                                                  | exact manifest/lock pin, release runtime identity, Office integration tests                          |
-| OnlyOffice x2t WASM                                       | `v9.3.0+0`                                                               | pinned commit and browser artifact digests in the release manifest                                   |
+| `@agentbridges-ai/onlyoffice-browser`                     | `0.5.12`                                                                 | exact manifest/lock pin, release v5 identity, canonical Broker and Office integration tests          |
+| OnlyOffice x2t WASM                                       | `v9.3.0+2`                                                               | pinned commit and browser artifact digests in the release manifest                                   |
 | ONLYOFFICE DocumentServer reference                       | `9.3.0`                                                                  | generated font metadata and browser-runtime compatibility work                                       |
 | Browser / PWA                                             | Current stable desktop Chromium (Chrome, Edge, Chromium-family browsers) | platform gate tests, production asset tests, production build, real Chromium smoke test              |
 
 Pi's sole allowed upstream `@mariozechner` package is its optional
 `@mariozechner/clipboard@0.3.9`. It is not a Piwork direct dependency and
-production installs omit optional packages and source must not import it.
+source must not import it. Development and CI install platform-specific optional
+toolchain packages from the frozen lockfile; the runtime still must not load or
+expose the clipboard package.
 Other `@mariozechner` Pi packages,
 forks, alternate Agent transports, and SDK proxy fallbacks are unsupported.
 

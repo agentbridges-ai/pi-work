@@ -2,14 +2,13 @@ name: verify
 
 on:
   pull_request:
-    paths-ignore: &non_runtime_paths
+  push:
+    branches: [main]
+    paths-ignore:
       - "**/*.md"
       - "docs/**"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/PULL_REQUEST_TEMPLATE.md"
-  push:
-    branches: [main]
-    paths-ignore: *non_runtime_paths
   workflow_dispatch:
 
 concurrency:
@@ -23,8 +22,13 @@ jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-toolchain
 
@@ -44,7 +48,12 @@ jobs:
         run: make dry-check
 
       - name: Run the critical test suite
-        run: make verify-pi-only-runtime test-targeted test-pi-rpc-contract
+        # Pi RPC/SRT changes have their own required Linux canary. Keeping the
+        # contract probe there prevents this fast lane from doing the same work.
+        # Keep the macOS-only IPC boundary explicitly wired. On Linux the Make
+        # target is a controlled no-op, while macOS runners execute the real
+        # IPC canary instead of leaving the external coverage contract orphaned.
+        run: make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted test-srt-user-space-ipc
 
       - name: Build the production frontend
         run: make build
@@ -79,12 +88,19 @@ jobs:
       PIWORK_SERVE_FRONTEND: "0"
       PIWORK_RECORD: "0"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: ./.github/actions/setup-toolchain
 
       - name: Install frozen dependencies
         run: make install
+
+      - name: Restore pinned Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
 
       - name: Install pinned Playwright Chromium
         run: cd web && bunx playwright install --with-deps chromium
@@ -94,7 +110,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: playwright-better-auth-${{ github.run_id }}
           path: |

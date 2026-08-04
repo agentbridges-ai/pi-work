@@ -13,6 +13,9 @@ process.env.TMP = canonicalTestTempDir;
 process.env.TEMP = canonicalTestTempDir;
 
 export default defineConfig({
+  esbuild: {
+    jsx: "automatic",
+  },
   test: {
     globals: true,
     environment: "node",
@@ -22,6 +25,7 @@ export default defineConfig({
       reportsDirectory: "coverage",
       include: [
         "bin/**/*.ts",
+        "scripts/**/*.mjs",
         "scripts/**/*.ts",
         "server/**/*.ts",
         "shared/**/*.ts",

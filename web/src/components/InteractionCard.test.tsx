@@ -209,7 +209,7 @@ describe("InteractionCard", () => {
           inline
         />,
       );
-      act(() => vi.advanceTimersByTime(1_000));
+      void act(() => vi.advanceTimersByTime(1_000));
       expect(mockSend).toHaveBeenCalledWith(
         "session-1",
         expect.objectContaining({ requestId: "ask-timeout", status: "timed_out" }),

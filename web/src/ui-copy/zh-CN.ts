@@ -1473,8 +1473,8 @@ export const zhCNCopy = {
       localPreviewFailed: "Office 文件本地预览失败。",
       openLimitReached: "最多可同时打开 12 个 Office 文档，请先关闭一个 Office 标签后再试。",
       manageResources: "管理 Office 资源",
+      resourcesNotReady: "Office 资源尚未完整下载并校验，暂时无法打开编辑器。",
       prepareResources: "准备并打开",
-      resourcesNotReady: "Office 资源尚未就绪，暂时无法打开编辑器。",
       resourcePreparationClose: "取消准备 Office 资源",
       resourcePreparationDescription: (size: string) =>
         `打开此文档还需要下载并校验 ${size} 的 Office 资源。完成后会自动打开文档。`,

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import releaseDescriptor from "../../release/onlyoffice-release-manifest.json";
 
 const runtimeMock = vi.hoisted(() => {
   const resources = {
@@ -39,12 +40,16 @@ const runtimeMock = vi.hoisted(() => {
       },
     ],
     verifiedFontPaths: ["fonts/dengxian.ttf"],
+    installedRelease: "release-v3",
+    targetRelease: "release-v3",
+    availableRelease: "release-v3",
+    phase: "idle" as const,
     operation: null,
     error: null,
   };
   const manager = {
     getSnapshot: vi.fn(() => resources),
-    subscribe: vi.fn(() => () => undefined),
+    subscribe: vi.fn((_listener: (resources: unknown) => void) => () => undefined),
     getVerifiedFontPaths: vi.fn(() => [...resources.verifiedFontPaths]),
     remainingBytes: vi.fn(() => 4),
     loadAll: vi.fn(async () => undefined),
@@ -64,6 +69,8 @@ const runtimeMock = vi.hoisted(() => {
     installFontPreset: vi.fn(async () => undefined),
     downloadFontFamily: vi.fn(async () => undefined),
     uninstallFontFamily: vi.fn(async () => undefined),
+    pause: vi.fn(),
+    resume: vi.fn(async () => undefined),
   };
   return {
     resources,
@@ -78,14 +85,25 @@ vi.mock("@agentbridges-ai/onlyoffice-browser", () => ({
 
 import {
   downloadOfficeFontFamily,
+  applyOfficeResourcePlan,
+  checkAndRepairOfficeResources,
   ensureOfficeResources,
   getOfficeResourceSnapshot,
+  getTargetOfficeReleaseId,
   getVerifiedOfficeFontPaths,
+  installOfficeFontPreset,
   loadAllOfficeResources,
+  officeResourcesNeedAttention,
+  officeResourcesReadyForRelease,
+  pauseOfficeResources,
+  planOfficeResourcesForFile,
   prepareOfficeResourcesForFile,
   requestOfficeResourceSettings,
   resetOfficeResourcesForTests,
+  resumeOfficeResources,
+  subscribeOfficeResources,
   subscribeOfficeResourceSettingsRequests,
+  uninstallOfficeFontFamily,
 } from "./office-runtime-resources.js";
 
 describe("Piwork Office resource state", () => {
@@ -93,10 +111,16 @@ describe("Piwork Office resource state", () => {
     resetOfficeResourcesForTests();
     runtimeMock.create.mockClear();
     runtimeMock.manager.getSnapshot.mockClear();
+    runtimeMock.manager.getSnapshot.mockImplementation(() => runtimeMock.resources);
     runtimeMock.manager.loadAll.mockClear();
     runtimeMock.manager.downloadFontFamily.mockClear();
     runtimeMock.manager.plan.mockClear();
     runtimeMock.manager.apply.mockClear();
+    runtimeMock.manager.installFontPreset.mockClear();
+    runtimeMock.manager.repair.mockClear();
+    runtimeMock.manager.uninstallFontFamily.mockClear();
+    runtimeMock.manager.pause.mockClear();
+    runtimeMock.manager.resume.mockClear();
     Object.defineProperty(navigator, "storage", {
       configurable: true,
       value: {
@@ -107,6 +131,8 @@ describe("Piwork Office resource state", () => {
   });
 
   it("lazily coalesces initialization and exposes verified font paths", async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeOfficeResources(listener);
     const first = ensureOfficeResources();
     const second = ensureOfficeResources();
 
@@ -115,9 +141,29 @@ describe("Piwork Office resource state", () => {
     expect(runtimeMock.create).toHaveBeenCalledTimes(1);
     expect(runtimeMock.create).toHaveBeenCalledWith({
       assetBaseUrl: "https://onlyoffice.getpi.work/",
+      requiredReleaseIdentity: {
+        releaseId: releaseDescriptor.releaseManifest.releaseId,
+        manifestSha256: releaseDescriptor.releaseManifest.sha256,
+        packageVersion: releaseDescriptor.runtimeIdentity.packageVersion,
+        hostBuildId: releaseDescriptor.releaseManifest.hostBuildId,
+      },
     });
     expect(getOfficeResourceSnapshot().status).toBe("ready");
     expect(getVerifiedOfficeFontPaths()).toEqual(["fonts/dengxian.ttf"]);
+    expect(getTargetOfficeReleaseId()).toBe("release-v3");
+    expect(officeResourcesReadyForRelease("release-v3")).toBe(false);
+    unsubscribe();
+  });
+
+  it("publishes a structured error when manager initialization fails", async () => {
+    runtimeMock.create.mockRejectedValueOnce(new Error("manifest unavailable"));
+
+    await expect(ensureOfficeResources()).rejects.toThrow("manifest unavailable");
+    expect(getOfficeResourceSnapshot()).toEqual({
+      status: "error",
+      resources: null,
+      error: { code: "initialization-failed" },
+    });
   });
 
   it("fails closed when a stale optimized dependency returns an incomplete snapshot", async () => {
@@ -175,6 +221,72 @@ describe("Piwork Office resource state", () => {
       documentType: "slide",
     });
     expect(runtimeMock.manager.apply).toHaveBeenCalledTimes(3);
+  });
+
+  it("plans and applies one document plan and exposes the target release", async () => {
+    const plan = await planOfficeResourcesForFile("budget.ods");
+    await applyOfficeResourcePlan(plan);
+
+    expect(plan).toMatchObject({ releaseId: "release-v3", profiles: ["base", "cell"] });
+    expect(runtimeMock.manager.apply).toHaveBeenCalledWith(plan);
+
+    vi.mocked(runtimeMock.manager.getSnapshot).mockReturnValueOnce({
+      ...runtimeMock.resources,
+      targetRelease: "release-v3",
+    } as never);
+    expect(getTargetOfficeReleaseId()).toBe("release-v3");
+  });
+
+  it("routes resource actions to the manager and reports whether required packs need attention", async () => {
+    await installOfficeFontPreset("office-compatibility");
+    await checkAndRepairOfficeResources();
+    await uninstallOfficeFontFamily("microsoft yahei");
+    await pauseOfficeResources();
+    await resumeOfficeResources();
+
+    expect(runtimeMock.manager.installFontPreset).toHaveBeenCalledWith("office-compatibility");
+    expect(runtimeMock.manager.repair).toHaveBeenCalledWith({ scope: "installed" });
+    expect(runtimeMock.manager.uninstallFontFamily).toHaveBeenCalledWith("microsoft yahei");
+    expect(runtimeMock.manager.pause).toHaveBeenCalledOnce();
+    expect(runtimeMock.manager.resume).toHaveBeenCalledOnce();
+    expect(officeResourcesNeedAttention()).toBe(false);
+
+    const publishManagerSnapshot = runtimeMock.manager.subscribe.mock.calls.at(-1)?.[0] as (
+      resources: typeof runtimeMock.resources,
+    ) => void;
+    publishManagerSnapshot({
+      ...runtimeMock.resources,
+      packs: runtimeMock.resources.packs.map((pack) =>
+        pack.id === "core" ? { ...pack, ready: false } : pack,
+      ),
+    });
+    expect(officeResourcesNeedAttention()).toBe(true);
+  });
+
+  it("surfaces manager failures with operation-specific structured codes", async () => {
+    runtimeMock.manager.loadAll.mockRejectedValueOnce(new Error("download failed"));
+    await expect(loadAllOfficeResources()).rejects.toThrow("download failed");
+    expect(getOfficeResourceSnapshot().error).toEqual({ code: "network" });
+
+    resetOfficeResourcesForTests();
+    runtimeMock.manager.repair.mockRejectedValueOnce(new Error("repair failed"));
+    vi.mocked(runtimeMock.manager.getSnapshot).mockReturnValue({
+      ...runtimeMock.resources,
+      error: null,
+    });
+    vi.mocked(runtimeMock.manager.getSnapshot)
+      .mockReturnValueOnce(runtimeMock.resources)
+      .mockReturnValueOnce({
+        ...runtimeMock.resources,
+        error: { code: "integrity" },
+      } as never);
+    await expect(checkAndRepairOfficeResources()).rejects.toThrow("repair failed");
+    expect(getOfficeResourceSnapshot().error).toEqual({ code: "integrity" });
+
+    resetOfficeResourcesForTests();
+    runtimeMock.manager.uninstallFontFamily.mockRejectedValueOnce(new Error("remove failed"));
+    await expect(uninstallOfficeFontFamily("microsoft yahei")).rejects.toThrow("remove failed");
+    expect(getOfficeResourceSnapshot().error).toEqual({ code: "storage" });
   });
 
   it("opens the settings surface through the resource request channel", () => {

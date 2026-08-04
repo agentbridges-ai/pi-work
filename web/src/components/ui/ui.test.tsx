@@ -10,6 +10,7 @@ import {
   Alert,
   AppShell,
   Button,
+  ButtonLink,
   Dialog,
   DropdownMotion,
   EmptyState,
@@ -60,7 +61,7 @@ describe("Piwork UI primitives", () => {
         </DropdownMotion>,
       );
 
-      act(() => vi.advanceTimersByTime(100));
+      void act(() => vi.advanceTimersByTime(100));
       expect(screen.queryByTestId("dropdown")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -84,6 +85,21 @@ describe("Piwork UI primitives", () => {
     expect(loadingButton).toBeDisabled();
     expect(loadingButton).toHaveAttribute("data-pending", "true");
     expect(screen.getByRole("button", { name: "Open options" })).toBeEnabled();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("shares semantic button styling with navigational actions", async () => {
+    const { container } = render(
+      <ButtonLink href="/docs" variant="secondary">
+        Read docs
+      </ButtonLink>,
+    );
+
+    expect(screen.getByRole("link", { name: "Read docs" })).toHaveAttribute("href", "/docs");
+    expect(screen.getByRole("link", { name: "Read docs" })).toHaveClass(
+      "bg-card",
+      "text-foreground",
+    );
     expect(await axe(container)).toHaveNoViolations();
   });
 

@@ -61,6 +61,9 @@ function onlyOfficeBrowserDevModuleCacheGuardPlugin(): Plugin {
 
 export default defineConfig({
   publicDir: frontendPublicDir,
+  esbuild: {
+    jsx: "automatic",
+  },
   build: {
     manifest: true,
   },

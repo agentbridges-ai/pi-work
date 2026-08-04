@@ -321,6 +321,89 @@ API and pins the expected deployed runtime identity in the release manifest.
 `make dev`, `make build`, and `make status` neither require a local
 `onlyoffice-browser` checkout nor block on the remote deployment.
 
+`make verify` includes the default offline descriptor gate and therefore accepts
+only `lifecycle: supported`. For a release integration, run
+`make verify-onlyoffice-release` for the pinned descriptor alone, or
+`make verify-onlyoffice-release ONLYOFFICE_RELEASE_VERIFY_ARGS=--online` for the
+normal online gate. The online gate checks the npm
+registry integrity, `gitHead`, and the registry attestation record's decoded
+SLSA subject/source bindings (it does not independently verify Sigstore
+cryptography), observes the current no-store `stable-v5` pointer, and
+independently verifies the pinned immutable manifest digest plus the exact
+`/r/<releaseId>/office-host.html` embedding headers. The observed stable
+release is not required to equal Piwork's explicit pin. This check does not
+fetch or inspect Host bundles or fonts. The former
+`ensure-onlyoffice-browser.sh` and `prepare-onlyoffice-fonts.sh` commands are
+intentionally retired and fail closed.
+
+`repositories.Piwork.integrationBaseCommit` records the commit where the
+integration branch diverged; it is not a self-reference to an unknowable future
+merge SHA. The CLI requires it to be an ancestor of the checked-out `HEAD`. On a
+pull request, CI also supplies the event's base and head SHAs and requires this
+field to equal their Git merge base. A rebase that changes the branch point must
+update the descriptor in the same change.
+
+Schema 4 remains accepted only for the allowlisted current legacy supported
+release; it cannot be reused for a new candidate or release. Schema 5 candidates
+may omit promotion evidence while they are under integration, but a schema 5
+supported descriptor must include a versioned promotion receipt path beneath
+`/promotions/<releaseId>/<candidateCommit>-<receiptSha256>.json`. The path binds
+the release ID, browser runtime source commit, and receipt byte digest. The
+descriptor also records `piworkIntegrationCommit`, `deepVerifyRunId`,
+`deepVerifyRunAttempt`, `stagingRunId`, and `productionRunId`; the CLI requires
+the Piwork integration commit to remain an ancestor of `HEAD`. Online verification checks immutable
+caching, the byte digest, the protected-workflow/R2 trust root, stable channel,
+candidate identity, staging and Piwork runs, the exact Piwork run attempt and
+release-named candidate job, previous stable release, runtime manifest identities,
+and the `agentbridges-ai/onlyoffice-browser` production workflow run.
+
+The descriptor deliberately records two different browser commits: `npmPackage.sourceCommit`
+is the commit attested by npm for the Piwork-facing proxy API (`gitHead`), while
+`runtimeIdentity.sourceCommit` is the commit that produced the immutable Host/runtime
+release. They may differ for a Host-only release. The registry and npm SLSA checks bind
+only the former; the immutable runtime manifest, Host route, and descriptor bind the latter.
+Schema 5 browser release manifests must emit `sourceCommit`, and Piwork requires it to equal
+`runtimeIdentity.sourceCommit`. The allowlisted schema 4 release remains verifiable because
+its older immutable manifest did not emit that field.
+
+The cross-repository update train is:
+
+1. If conversion bytes change, release `onlyoffice-x2t-wasm` first and bind its
+   version, commit, and WASM digest into the browser release manifest.
+2. Build an immutable `onlyoffice-browser` candidate. Publish npm from a signed
+   tag only when the Piwork-facing proxy API changes; Host-only candidates keep
+   the already published exact npm version.
+3. On a same-repository Piwork integration branch, use schema 5 and temporarily
+   set the descriptor lifecycle to `candidate`. Dispatch `deep verify` on that exact ref with
+   `onlyoffice_candidate_integration=true` and
+   `onlyoffice_candidate_release_id=<releaseId>`. The dedicated job is named
+   `OnlyOffice candidate integration / <releaseId>` and runs
+   `--online --allow-candidate --candidate-integration`; it verifies the selected
+   checkout equals the workflow run's `head_sha`. Pull-request and normal CI
+   never pass `--allow-candidate`, so their required checks stay red until the
+   descriptor becomes supported.
+4. After browser production approval advances `stable-v5`, change the Piwork
+   descriptor lifecycle to `supported`, rerun the normal online gate, and merge
+   the exact npm integrity plus immutable runtime pin. Piwork never follows the
+   mutable stable pointer as authority.
+
+Browser promotion may consume only a successful `deep verify` run whose event is
+`workflow_dispatch`, whose candidate job and release ID match, and whose
+`head_sha` still identifies the head of an open same-repository PR targeting
+`main`. Resolve that PR through `commits/{head_sha}/pulls` and reject closed,
+cross-repository, wrong-base, or head-drifted PRs.
+
+All external GitHub Actions are pinned to immutable 40-character commits with
+their exact release tag retained in a comment. `make verify-actions-pinning`
+scans every workflow and composite action and is part of both normal verification
+paths. The `deep verify` and `verify` pull-request triggers are intentionally
+unfiltered so required checks are created even for documentation-only PRs; push
+filters may still avoid redundant post-merge runs.
+
+Rollback moves only the browser `stable-v5` pointer. Existing Piwork releases
+remain on their explicit immutable runtime; changing a supported Piwork pin is
+a separate reviewed integration change.
+
 ## OnlyOffice Save Chain
 
 `@agentbridges-ai/onlyoffice-browser` is a browser-only editor wrapper. It does
@@ -544,7 +627,7 @@ match to be unique and non-overlapping, and applies the full edit set atomically
 active browser directory. It cannot discover or execute host/container
 programs. `/` and `$HOME` both refer to the active User Space root.
 
-The canonical registry is `web/src/user-space-shell-contract.ts`; use
+The canonical registry is `web/shared/user-space-shell-contract.ts`; use
 `user-space bash --capabilities` to inspect it at runtime. Supported syntax is
 limited to the tested shell surface: pipelines, redirections, heredocs/here
 strings, `&&`/`||`, variables and `export`, command substitution, globs, and

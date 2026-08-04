@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const css = readFileSync(resolve(projectRoot, "src/index.css"), "utf8");
+const appCss = readFileSync(resolve(projectRoot, "src/index.css"), "utf8");
+const themeCss = readFileSync(
+  resolve(projectRoot, "../packages/design-tokens/src/theme.css"),
+  "utf8",
+);
+const css = `${themeCss}\n${appCss}`;
 const indexHtml = readFileSync(resolve(projectRoot, "index.html"), "utf8");
 const imageEditorSource = readFileSync(
   resolve(projectRoot, "src/components/ImageEditorSurface.tsx"),
@@ -37,6 +42,7 @@ const darkBlock = extractBlock(":root.dark,");
 
 describe("Piwork theme token contract", () => {
   it("uses the independent Piwork palette without design preset selectors", () => {
+    expect(appCss).toContain('@import "@piwork/design-tokens/theme.css";');
     expect(rootBlock).toContain("--background: oklch(0.9789 0.0013 106.42);");
     expect(rootBlock).toContain("--foreground: oklch(0.3174 0.0091 88.75);");
     expect(rootBlock).toContain("--accent: oklch(0.2103 0.0013 106.42);");
@@ -200,7 +206,7 @@ describe("Piwork theme token contract", () => {
 
   it("shares one text-selection background across Markdown and code previews and editors", () => {
     expect(rootBlock.replace(/\s+/g, " ")).toContain(
-      "--piwork-text-selection-background: color-mix( in oklab, var(--foreground) 18%, var(--background) );",
+      "--piwork-text-selection-background: color-mix(in oklab, var(--foreground) 18%, var(--background));",
     );
     expect(css).toContain("--crepe-color-selected: var(--piwork-text-selection-background);");
     expect(textEditorSource.match(/var\(--piwork-text-selection-background\)/g)).toHaveLength(2);

@@ -32,7 +32,7 @@ import { compileSrtPolicy, type DomainPolicyLayer } from "./srt-policy.js";
 import {
   USER_SPACE_BASH_BOUNDARY_SUMMARY,
   USER_SPACE_BASH_PUBLIC_COMMANDS,
-} from "../src/user-space-shell-contract.js";
+} from "../shared/user-space-shell-contract.js";
 
 export interface ManagedSkillFile {
   packageId: string;

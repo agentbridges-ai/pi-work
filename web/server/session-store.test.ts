@@ -218,6 +218,20 @@ describe("updates, debounce and discovery", () => {
     }
   });
 
+  it("logs and swallows a failed debounced persistence", () => {
+    vi.useFakeTimers();
+    const saveSync = vi.spyOn(store, "saveSync").mockImplementationOnce(() => {
+      throw new Error("disk full");
+    });
+    try {
+      store.save(makeSession("failed"));
+      expect(() => vi.advanceTimersByTime(150)).not.toThrow();
+      expect(saveSync).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("updates authority, Pi path and archive metadata", () => {
     store.saveSync(makeSession("updates"));
     expect(

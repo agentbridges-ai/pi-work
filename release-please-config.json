@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "package-name": "piwork",
+  "include-component-in-tag": false,
+  "tag-separator": "",
+  "changelog-path": "CHANGELOG.md",
+  "bump-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "piwork",
+      "extra-files": [
+        "web/package.json",
+        {
+          "type": "json",
+          "path": "release/onlyoffice-release-manifest.json",
+          "jsonpath": "$.repositories.Piwork.version"
+        }
+      ]
+    }
+  }
+}

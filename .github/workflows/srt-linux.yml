@@ -2,7 +2,9 @@ name: Linux SRT
 
 on:
   pull_request:
-    paths: &srt_paths
+  push:
+    branches: [main]
+    paths:
       - ".github/workflows/srt-linux.yml"
       - ".github/actions/setup-toolchain/action.yml"
       - "Makefile"
@@ -24,10 +26,7 @@ on:
       - "web/server/pi-*.ts"
       - "web/server/managed-mcp.ts"
       - "web/server/srt-policy.ts"
-      - "web/src/user-space-shell-contract.ts"
-  push:
-    branches: [main]
-    paths: *srt_paths
+      - "web/shared/user-space-shell-contract.ts"
   workflow_dispatch:
 
 concurrency:
@@ -42,16 +41,44 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: ./.github/actions/setup-toolchain
 
+      - name: Classify SRT diff
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          # The pull_request checkout is a shallow synthetic merge. The base
+          # commit is fetched explicitly, but its parent graph is not, so a
+          # three-dot diff can fail with "no merge base" even though the
+          # checked-out merge commit is valid. A two-endpoint tree diff keeps
+          # this classifier deterministic for the required no-op status.
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+          if printf '%s\n' "$changed" | grep -Eq '^(\.github/workflows/srt-linux\.yml|\.github/actions/setup-toolchain/action\.yml|Makefile|scripts/verify-(native-pi-dependencies\.mjs|pi-only-runtime\.sh|pi-rpc-contract\.ts|srt-)|web/(bin/user-space\.ts|bun\.lock|package\.json|shared/|scripts/(pi-rpc-probe|verify-pi-rpc-contract|verify-srt-)|server/(network-security|path-resolver|pi-|managed-mcp|srt-policy)|src/user-space-shell/))'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report controlled no-op
+        if: ${{ steps.scope.outputs.relevant != 'true' }}
+        run: echo "No SRT-sensitive paths changed; required srt-production-canaries status is a controlled no-op."
+
       - name: Install Linux SRT dependencies
+        if: ${{ steps.scope.outputs.relevant == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes bubblewrap ripgrep socat
 
       - name: Enable capability-bearing user namespaces for SRT
+        if: ${{ steps.scope.outputs.relevant == 'true' }}
         run: |
           if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -59,10 +86,13 @@ jobs:
           fi
 
       - name: Install frozen dependencies
+        if: ${{ steps.scope.outputs.relevant == 'true' }}
         run: make install
 
       - name: Verify exact native Pi dependencies
+        if: ${{ steps.scope.outputs.relevant == 'true' }}
         run: make verify-pi-versions verify-pi-only-runtime
 
       - name: Verify native Pi RPC and protected-file isolation
+        if: ${{ steps.scope.outputs.relevant == 'true' }}
         run: make test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport

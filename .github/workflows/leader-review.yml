@@ -1,0 +1,43 @@
+name: governance review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+  workflow_dispatch:
+
+concurrency:
+  group: governance-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  governance-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify Leader participation for high-risk paths
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # pull_request_target checks out the trusted base ref. During the
+          # governance bootstrap that ref predates this script, so report a
+          # controlled no-op instead of executing untrusted PR code or
+          # producing a missing-module failure. After the baseline merges,
+          # the same step executes the full read-only metadata check.
+          if [[ -f scripts/governance/leader-review.mjs ]]; then
+            node scripts/governance/leader-review.mjs
+          else
+            echo "Governance baseline is not present on the trusted base ref; controlled bootstrap no-op."
+          fi

@@ -82,6 +82,19 @@ vi.mock("../metrics-collector.js", () => {
 });
 
 describe("GET /metrics", () => {
+  it("requires the runtime:view authorization boundary when configured", async () => {
+    const app = new Hono();
+    registerMetricsRoutes(app, {
+      gaugeProvider: {
+        getSessionMemoryStats: vi.fn(() => []),
+        getSessionPhases: vi.fn(() => new Map()),
+      },
+      authorize: async () => false,
+    });
+    const res = await app.request("/metrics");
+    expect(res.status).toBe(403);
+  });
+
   let app: Hono;
 
   beforeEach(() => {
@@ -90,7 +103,7 @@ describe("GET /metrics", () => {
       getSessionMemoryStats: vi.fn(() => []),
       getSessionPhases: vi.fn(() => new Map()),
     };
-    registerMetricsRoutes(app, { gaugeProvider: mockGaugeProvider });
+    registerMetricsRoutes(app, { gaugeProvider: mockGaugeProvider, authorize: async () => true });
   });
 
   it("returns 200 with valid JSON", async () => {

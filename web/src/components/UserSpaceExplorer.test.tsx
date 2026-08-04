@@ -6,7 +6,7 @@ import "vitest-axe/extend-expect";
 import { useState } from "react";
 import releaseManifest from "../../../release/onlyoffice-release-manifest.json";
 import type { UserSpaceMount } from "../types.js";
-import { setUiCopyLanguage } from "../ui-copy.js";
+import { setUiCopyLanguage, uiCopy } from "../ui-copy.js";
 
 const mockExecuteUserSpaceOperation = vi.fn();
 const mockGetUserSpaceFile = vi.fn();
@@ -36,6 +36,7 @@ const {
   mockWtermFocus,
   mockPlanOfficeResourcesForFile,
   mockApplyOfficeResourcePlan,
+  mockOfficeResourcesReadyForRelease,
 } = vi.hoisted(() => ({
   mockCreateOfficeEditor: vi.fn(),
   mockOfficeEditorDestroy: vi.fn(),
@@ -44,6 +45,7 @@ const {
   mockWtermFocus: vi.fn(),
   mockPlanOfficeResourcesForFile: vi.fn(),
   mockApplyOfficeResourcePlan: vi.fn(),
+  mockOfficeResourcesReadyForRelease: vi.fn(),
 }));
 
 const mountedWorkspace = {
@@ -423,6 +425,8 @@ vi.mock("../office-runtime-resources.js", () => ({
   getTargetOfficeReleaseId: vi.fn(() => "test-release"),
   getVerifiedOfficeFontPaths: vi.fn(() => []),
   officeResourcesNeedAttention: vi.fn(() => false),
+  officeResourcesReadyForRelease: (...args: unknown[]) =>
+    mockOfficeResourcesReadyForRelease(...args),
   planOfficeResourcesForFile: (...args: unknown[]) => mockPlanOfficeResourcesForFile(...args),
   requestOfficeResourceSettings: vi.fn(),
 }));
@@ -920,6 +924,8 @@ beforeEach(() => {
   mockWtermFocus.mockReset();
   mockPlanOfficeResourcesForFile.mockReset();
   mockApplyOfficeResourcePlan.mockReset();
+  mockOfficeResourcesReadyForRelease.mockReset();
+  mockOfficeResourcesReadyForRelease.mockReturnValue(true);
   mockPlanOfficeResourcesForFile.mockResolvedValue({
     planId: "test-plan",
     releaseId: "test-release",
@@ -2760,7 +2766,7 @@ describe("UserSpaceExplorer", () => {
     const clickDetachedControl = (label: string) => {
       const button = popoutDocument.querySelector(`button[aria-label='${label}']`);
       expect(button).not.toBeNull();
-      act(() =>
+      void act(() =>
         button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
       );
     };
@@ -3930,6 +3936,7 @@ describe("UserSpaceExplorer", () => {
       downloadBytes: 24 * 1024 * 1024,
       reusedBytes: 0,
     });
+    mockOfficeResourcesReadyForRelease.mockReturnValueOnce(false).mockReturnValue(true);
 
     render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
     fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
@@ -3941,6 +3948,54 @@ describe("UserSpaceExplorer", () => {
 
     await waitFor(() => expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce());
     await waitFor(() => expect(mockCreateOfficeEditor).toHaveBeenCalledOnce());
+  });
+
+  it("activates and probes a zero-download release before mounting the Office editor", async () => {
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    mockOfficeResourcesReadyForRelease.mockReturnValueOnce(false).mockReturnValue(true);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+
+    await waitFor(() => expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockCreateOfficeEditor).toHaveBeenCalledOnce());
+    expect(mockApplyOfficeResourcePlan.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreateOfficeEditor.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps the editor unmounted when canonical resource readiness remains incomplete", async () => {
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    mockOfficeResourcesReadyForRelease.mockReturnValue(false);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+
+    expect(await screen.findByText(uiCopy.userSpace.office.resourcesNotReady)).toBeInTheDocument();
+    expect(mockApplyOfficeResourcePlan).toHaveBeenCalledOnce();
+    expect(mockCreateOfficeEditor).not.toHaveBeenCalled();
+  });
+
+  it("shows the localized 12-document limit when the constellation pool is exhausted", async () => {
+    setUiCopyLanguage("en-US");
+    mockFilePreviewDefaults = {
+      ...createDefaultFilePreviewDefaults(),
+      word: "alternate",
+    };
+    const capacityError = new Error("office-host-pool-exhausted");
+    capacityError.name = "OfficeHostPoolExhaustedError";
+    mockCreateOfficeEditor.mockRejectedValue(capacityError);
+
+    render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview report.docx" }));
+
+    expect(await screen.findByText(uiCopy.userSpace.office.openLimitReached)).toBeInTheDocument();
   });
 
   it("keeps Office previews readonly in the common viewer when the workspace is readonly", async () => {
@@ -4156,6 +4211,25 @@ describe("UserSpaceExplorer", () => {
     expect(screen.getByTitle("Office 本地编辑 report.docx")).toBe(reportPreview);
     expect(screen.getByTitle("Office 本地编辑 budget.xlsx")).toBe(budgetPreview);
     expect(mockCreateOfficeEditor).toHaveBeenCalledTimes(2);
+  });
+
+  it("handles a preview-body drop by requesting a detached window", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      render(<UserSpaceExplorer sessionId="s1" mounts={[mountedWorkspace]} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "预览 app.ts" }));
+      const bodyArea = screen.getByTestId("user-space-preview-body-area");
+      fireEvent.drop(bodyArea, {
+        dataTransfer: {
+          getData: vi.fn(() => "uw-mounted:app.ts"),
+        },
+      });
+
+      expect(openSpy).toHaveBeenCalledWith("", "_blank", expect.stringContaining("width=1180"));
+    } finally {
+      openSpy.mockRestore();
+    }
   });
 
   it("moves the OnlyOffice tab with single ownership, restores edit mode, and can dock it back", async () => {
@@ -10330,10 +10404,10 @@ describe("UserSpaceExplorer", () => {
         value: originalInnerWidth - 180,
       });
       fireEvent(window, new Event("resize"));
-      act(() => vi.advanceTimersByTime(179));
+      void act(() => vi.advanceTimersByTime(179));
       expect(officeHost).toHaveStyle({ width: "640px" });
 
-      act(() => vi.advanceTimersByTime(1));
+      void act(() => vi.advanceTimersByTime(1));
       expect(officeHost.style.width).toBe("");
       expect(officeHost.style.right).toBe("");
       expect(screen.queryByTestId("onlyoffice-browser-resize-mask")).not.toBeInTheDocument();

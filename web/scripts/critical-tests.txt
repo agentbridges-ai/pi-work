@@ -94,6 +94,8 @@ server/ws-bridge-persist.test.ts
 server/ws-bridge-replay.test.ts
 server/onlyoffice-prepare-script.test.ts
 server/onlyoffice-dev-health-script.test.ts
+server/verify-onlyoffice-release.test.ts
+server/github-actions-pinning.test.ts
 server/vite-config.test.ts
 server/vite-proxy-options.test.ts
 src/runtime-context.test.ts

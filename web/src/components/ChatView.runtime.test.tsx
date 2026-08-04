@@ -55,12 +55,14 @@ vi.mock("./UserSettingsDialog.js", () => ({
     onSetAllArchivedSessionSelection,
     onRestoreArchivedSession,
     onRestoreSelectedArchivedSessions,
+    onClose,
   }: {
     archivedSessions: PiSessionInfo[];
     selectedArchivedSessionIds: Set<string>;
     onSetAllArchivedSessionSelection: (checked: boolean) => void;
     onRestoreArchivedSession: (sessionId: string) => void | Promise<void>;
     onRestoreSelectedArchivedSessions: () => void | Promise<void>;
+    onClose: () => void;
   }) => (
     <div data-testid="user-settings-dialog">
       <span data-testid="selected-count">{selectedArchivedSessionIds.size}</span>
@@ -87,6 +89,9 @@ vi.mock("./UserSettingsDialog.js", () => ({
         onClick={() => void onRestoreSelectedArchivedSessions()}
       >
         restore selected
+      </button>
+      <button type="button" data-testid="close-settings" onClick={onClose}>
+        close
       </button>
     </div>
   ),
@@ -230,6 +235,18 @@ describe("ChatView native Pi runtime projections", () => {
         "archived-1",
         "session-live",
       ]);
+    });
+  });
+
+  it("closes settings and restores focus to the user menu trigger", async () => {
+    render(<ChatView sessionId="session-live" />);
+    await openArchivedSettings();
+
+    fireEvent.click(screen.getByTestId("close-settings"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("user-settings-dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("user-avatar-button")).toHaveFocus();
     });
   });
 });

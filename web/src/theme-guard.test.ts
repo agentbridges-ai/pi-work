@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const scannedRoots = [
+  resolve(projectRoot, "../packages/design-tokens/src/theme.css"),
+  resolve(projectRoot, "../packages/ui/src"),
+  resolve(projectRoot, "../packages/ui-patterns/src"),
   resolve(projectRoot, "src/components"),
   resolve(projectRoot, "src/App.tsx"),
   resolve(projectRoot, "src/index.css"),
@@ -158,6 +161,9 @@ describe("theme source guard", () => {
     expect(files.map((file) => relative(projectRoot, file))).toEqual(
       expect.arrayContaining([
         "index.html",
+        "../packages/design-tokens/src/theme.css",
+        "../packages/ui/src/button.tsx",
+        "../packages/ui-patterns/src/page-layout.tsx",
         "src/App.tsx",
         "src/index.css",
         "src/components/ChatView.tsx",
@@ -199,7 +205,7 @@ describe("theme source guard", () => {
       }))
       .filter(
         ({ path, source }) =>
-          !path.startsWith("src/components/ui/") && /["']@heroui\/react["']/.test(source),
+          !path.startsWith("../packages/ui/src/") && /["']@heroui\/react["']/.test(source),
       )
       .map(({ path }) => path);
 

@@ -21,9 +21,13 @@ export function registerDiagnosticsRoutes(
     gaugeProvider: GaugeDataProvider;
     recorder?: RecorderManager;
     runtimeStateProvider: { listRuntimeStates(): SessionRuntimeSnapshot[] };
+    authorize: () => Promise<boolean>;
   },
 ): void {
-  api.get("/diagnostics/runtime", (c) => {
+  api.get("/diagnostics/runtime", async (c) => {
+    if (!(await deps.authorize())) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
     const sessions = deps.launcher.listSessions();
     const lifecycle = sessions.reduce<Record<string, number>>((counts, session) => {
       counts[session.state] = (counts[session.state] || 0) + 1;

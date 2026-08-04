@@ -18,6 +18,7 @@ import { registerAppsRoutes } from "./routes/apps-routes.js";
 import { registerAppsCloudflareRoutes } from "./routes/apps-cloudflare-routes.js";
 import { registerAppsDeploymentLabRoutes } from "./routes/apps-deployment-lab-routes.js";
 import type { ControlPlaneService } from "./control-plane-service.js";
+import type { ControlPlanePermission } from "./control-plane-types.js";
 import type { TenantRuntimeDriver } from "./tenant-runtime-driver.js";
 import { isRecordingHubEnabled } from "./recording-hub/hub-config.js";
 import { registerHubRoutes } from "./recording-hub/hub-routes.js";
@@ -985,12 +986,25 @@ export function createRoutes(
     skillsDir,
     diskQuota: options.diskQuota,
   });
-  registerMetricsRoutes(api, { gaugeProvider: wsBridge });
+  const canViewRuntime = async (): Promise<boolean> => {
+    const user = getCurrentUserSnapshot(options);
+    if (options.controlPlane && user.tenantId) {
+      return options.controlPlane.can(
+        user.userId,
+        user.tenantId,
+        "runtime:view" satisfies ControlPlanePermission,
+      );
+    }
+    if (options.rbac) return options.rbac.can(user, "runtime:view");
+    return user.permissions?.includes("runtime:view") ?? false;
+  };
+  registerMetricsRoutes(api, { gaugeProvider: wsBridge, authorize: canViewRuntime });
   registerDiagnosticsRoutes(api, {
     launcher,
     gaugeProvider: wsBridge,
     recorder,
     runtimeStateProvider: orchestrator,
+    authorize: canViewRuntime,
   });
   registerAppsDeploymentLabRoutes(api);
 

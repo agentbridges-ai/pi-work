@@ -273,7 +273,7 @@ make test
   Agent to pipe `user-space read` through `sed`, `head`, or `tail`.
   Treat `user-space bash` as a bounded browser file shell, not a generic Bash:
   the canonical command registry and execution limits live in
-  `web/src/user-space-shell-contract.ts`, and `user-space bash --capabilities`
+  `web/shared/user-space-shell-contract.ts`, and `user-space bash --capabilities`
   must expose that same contract. Do not teach or attempt unregistered external
   executables, networking, sockets, package managers, VCS, compilers,
   databases, language runtimes, host process control, or host paths. Keep

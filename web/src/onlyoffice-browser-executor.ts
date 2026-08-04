@@ -8,6 +8,7 @@ import {
   type OnlyOfficeDocumentDescriptor,
   type OnlyOfficeDocumentType,
 } from "../shared/onlyoffice.js";
+import { uiCopy } from "./ui-copy.js";
 import { executeUserSpaceOperation, getUserSpaceFile, saveUserSpaceFile } from "./user-space.js";
 
 const COMPLETED_REQUEST_LIMIT = 512;
@@ -213,15 +214,27 @@ async function invokeOnTemporaryEditor(
   sessionId: string,
   request: OnlyOfficeBrowserRequest,
 ): Promise<unknown> {
-  const [{ officePreviewRuntimeManager }, { resolvePiworkOnlyOfficeHostUrl }] = await Promise.all([
+  const [
+    { officePreviewRuntimeManager },
+    { resolvePiworkOnlyOfficeHostUrl },
+    { applyOfficeResourcePlan, officeResourcesReadyForRelease, planOfficeResourcesForFile },
+  ] = await Promise.all([
     import("./office-host-adapter.js"),
     import("./onlyoffice-host-url.js"),
+    import("./office-runtime-resources.js"),
   ]);
   const target = request.target!;
   const file = await getUserSpaceFile(target.mountId, target.path);
   const fileType = target.path.split(".").pop()?.toLowerCase() || "";
   const documentType = documentTypeForFile(fileType);
   if (!documentType) throw new Error(`Unsupported Office file type: ${fileType || "unknown"}`);
+  const resourcePlan = await planOfficeResourcesForFile(target.path);
+  if (!officeResourcesReadyForRelease(resourcePlan.releaseId)) {
+    await applyOfficeResourcePlan(resourcePlan);
+  }
+  if (!officeResourcesReadyForRelease(resourcePlan.releaseId)) {
+    throw new Error(uiCopy.userSpace.office.resourcesNotReady);
+  }
   const writing = isOnlyOfficeWriteOperation(request.operation);
   const container = document.createElement("div");
   container.style.cssText =
@@ -238,7 +251,7 @@ async function invokeOnTemporaryEditor(
   const lease = officePreviewRuntimeManager.mount(container, {
     resourceKey,
     foreground: false,
-    hostUrl: resolvePiworkOnlyOfficeHostUrl,
+    hostUrl: (context) => resolvePiworkOnlyOfficeHostUrl(context, resourcePlan.releaseId),
     file,
     fileName: file.name || target.path.split("/").pop() || `document.${fileType}`,
     mode: writing ? "edit" : "readonly",

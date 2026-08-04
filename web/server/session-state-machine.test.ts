@@ -334,8 +334,9 @@ describe("SessionStateMachine", () => {
       expect(sm.phase).toBe("initializing");
       expect(goodListener).toHaveBeenCalledOnce();
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[state-machine] Listener error"),
-        expect.any(Error),
+        expect.stringContaining(
+          "[state-machine] Listener error | sessionId=test-session error=Error",
+        ),
       );
       errorSpy.mockRestore();
     });
