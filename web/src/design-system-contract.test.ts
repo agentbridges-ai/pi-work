@@ -60,6 +60,14 @@ describe("Piwork design system workspace contract", () => {
     expect(workflow).toContain("if: github.event_name != 'pull_request'");
   });
 
+  it("keeps the required Linux SRT check reachable for every pull request", () => {
+    const workflow = readFileSync(
+      resolve(repositoryRoot, ".github/workflows/srt-linux.yml"),
+      "utf8",
+    );
+    expect(workflow).toMatch(/on:\n {2}pull_request:\n {2}push:/);
+  });
+
   it("keeps the public token layers semantic and CSS-variable based", () => {
     expect(primitiveTokens.color.light.page).toMatch(/^oklch\(/);
     expect(semanticTokens.color.background).toBe("var(--background)");
