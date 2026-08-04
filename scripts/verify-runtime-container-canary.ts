@@ -48,7 +48,17 @@ const bwrap = spawnSync(
   { encoding: "utf8" },
 );
 if (bwrap.status !== 0) {
-  throw new Error(`Nested SRT canary failed (${bwrap.status ?? bwrap.signal ?? "unknown"})`);
+  const details = [
+    bwrap.error ? `error=${bwrap.error.message}` : "",
+    bwrap.signal ? `signal=${bwrap.signal}` : "",
+    bwrap.stdout?.trim() ? `stdout=${bwrap.stdout.trim().slice(0, 2_000)}` : "",
+    bwrap.stderr?.trim() ? `stderr=${bwrap.stderr.trim().slice(0, 4_000)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  throw new Error(
+    `Nested SRT canary failed (${bwrap.status ?? bwrap.signal ?? "unknown"})${details ? ` ${details}` : ""}`,
+  );
 }
 
 const dataRoot = realpathSync(process.env.PIWORK_DATA_ROOT || "/var/lib/piwork/data");
