@@ -71,6 +71,7 @@ help:
 # additionally resolve their peer dependencies through the independent Web tree.
 install:
 	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
+	cd landing-page && bun install --backend copyfile --linker isolated --frozen-lockfile
 	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
 	fi
