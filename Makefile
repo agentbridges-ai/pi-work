@@ -107,7 +107,7 @@ agent-browser-e2e: agent-browser
 
 .PHONY: dev dev-fast dev-native dev-compose require-compose-linux-runtime require-native-linux-runtime dev-fast-stop status stop
 dev: dev-compose
-dev-fast: dev-compose
+dev-fast: agent-browser dev-compose
 dev-native: require-native-linux-runtime
 	./scripts/ensure-agent-browser.sh
 	PIWORK_NATIVE_DEBUG=1 ./scripts/dev-local.sh
