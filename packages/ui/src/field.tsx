@@ -9,8 +9,8 @@ import {
   type TextAreaProps as HeroTextAreaProps,
   type TextFieldProps as HeroTextFieldProps,
 } from "@heroui/react";
-import { forwardRef, type ReactNode, type Ref } from "react";
-import { cn } from "./utils.js";
+import React, { forwardRef, type ReactNode, type Ref } from "react";
+import { cn } from "./utils";
 
 interface FieldPresentationProps {
   className?: string;

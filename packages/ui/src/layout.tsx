@@ -3,8 +3,8 @@ import {
   Toolbar as HeroToolbar,
   type ToolbarProps as HeroToolbarProps,
 } from "@heroui/react";
-import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
-import { cn } from "./utils.js";
+import React, { forwardRef, type HTMLAttributes, type ReactNode } from "react";
+import { cn } from "./utils";
 
 export interface SurfaceProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;

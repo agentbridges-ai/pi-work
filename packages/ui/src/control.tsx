@@ -1,6 +1,6 @@
 import { Switch as HeroSwitch, type SwitchProps as HeroSwitchProps } from "@heroui/react";
-import { forwardRef, useId, type ComponentRef, type ReactNode } from "react";
-import { cn } from "./utils.js";
+import React, { forwardRef, useId, type ComponentRef, type ReactNode } from "react";
+import { cn } from "./utils";
 
 export interface SwitchProps extends Omit<
   HeroSwitchProps,
