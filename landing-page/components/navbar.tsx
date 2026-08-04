@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, Kbd, Link, TextField, InputGroup } from "@heroui/react";
 import NextLink from "next/link";
+import Image from "next/image";
 import clsx from "clsx";
 
 import { siteConfig } from "@/config/site";
@@ -40,15 +41,19 @@ export const Navbar = () => {
       <header className="mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-4 px-6">
         <div className="flex items-center gap-4">
           <NextLink className="flex items-center gap-1" href="/">
-            <img
-              src="/piwork-light.svg"
+            <Image
               alt="piwork"
               className="h-7 w-auto dark:hidden"
+              height={28}
+              src="/piwork-light.svg"
+              width={112}
             />
-            <img
-              src="/piwork-dark.svg"
+            <Image
               alt="piwork"
               className="hidden h-7 w-auto dark:block"
+              height={28}
+              src="/piwork-dark.svg"
+              width={112}
             />
           </NextLink>
           <ul className="hidden lg:flex gap-4 ml-2">
@@ -123,12 +128,7 @@ export const Navbar = () => {
             className="p-2"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {isMenuOpen ? (
                 <path
                   d="M6 18L18 6M6 6l12 12"

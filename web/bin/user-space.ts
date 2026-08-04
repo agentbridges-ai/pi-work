@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { isAbsolute } from "node:path";
-import { formatUserSpaceBashCapabilities } from "../src/user-space-shell-contract.js";
+import { formatUserSpaceBashCapabilities } from "../shared/user-space-shell-contract.js";
 
 interface UserSpaceInfo {
   name: string;

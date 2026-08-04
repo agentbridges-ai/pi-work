@@ -6,12 +6,8 @@ export default function Home() {
   return (
     <section className="flex flex-col items-center justify-center gap-4 py-8 md:py-10">
       <div className="inline-block max-w-xl text-center justify-center">
-        <span className={title({ color: "blue" })}>
-          All-in-One Paperwork Agent Workspace
-        </span>
-        <div className={subtitle({ class: "mt-4" })}>
-          一站式Paperwork Agent工作台
-        </div>
+        <span className={title({ color: "blue" })}>All-in-One Paperwork Agent Workspace</span>
+        <div className={subtitle({ class: "mt-4" })}>一站式Paperwork Agent工作台</div>
       </div>
 
       <div className="flex gap-3">

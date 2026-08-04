@@ -520,7 +520,7 @@ match to be unique and non-overlapping, and applies the full edit set atomically
 active browser directory. It cannot discover or execute host/container
 programs. `/` and `$HOME` both refer to the active User Space root.
 
-The canonical registry is `web/src/user-space-shell-contract.ts`; use
+The canonical registry is `web/shared/user-space-shell-contract.ts`; use
 `user-space bash --capabilities` to inspect it at runtime. Supported syntax is
 limited to the tested shell surface: pipelines, redirections, heredocs/here
 strings, `&&`/`||`, variables and `export`, command substitution, globs, and

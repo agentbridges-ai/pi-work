@@ -2766,7 +2766,7 @@ describe("UserSpaceExplorer", () => {
     const clickDetachedControl = (label: string) => {
       const button = popoutDocument.querySelector(`button[aria-label='${label}']`);
       expect(button).not.toBeNull();
-      act(() =>
+      void act(() =>
         button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
       );
     };
@@ -10385,10 +10385,10 @@ describe("UserSpaceExplorer", () => {
         value: originalInnerWidth - 180,
       });
       fireEvent(window, new Event("resize"));
-      act(() => vi.advanceTimersByTime(179));
+      void act(() => vi.advanceTimersByTime(179));
       expect(officeHost).toHaveStyle({ width: "640px" });
 
-      act(() => vi.advanceTimersByTime(1));
+      void act(() => vi.advanceTimersByTime(1));
       expect(officeHost.style.width).toBe("");
       expect(officeHost.style.right).toBe("");
       expect(screen.queryByTestId("onlyoffice-browser-resize-mask")).not.toBeInTheDocument();

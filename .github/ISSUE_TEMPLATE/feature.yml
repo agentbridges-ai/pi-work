@@ -1,0 +1,19 @@
+name: Feature request
+description: 提议产品或工程改进
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案与风险

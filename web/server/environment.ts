@@ -156,6 +156,63 @@ export function envNumber(name: EnvironmentVariableName | string, fallback: numb
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+export function validateProductionEnvironment(source: EnvSource = process.env): void {
+  if (source[ENV.NODE_ENV] !== "production") return;
+
+  const required = [
+    ENV.DATABASE_URL,
+    ENV.BETTER_AUTH_SECRET,
+    ENV.BETTER_AUTH_URL,
+    ENV.PIWORK_MCP_MASTER_KEY,
+  ];
+  const missing = required.filter((name) => !readFrom(source, name)?.trim());
+  if (missing.length) throw new Error(`Production configuration is missing: ${missing.join(", ")}`);
+
+  const secret = readFrom(source, ENV.BETTER_AUTH_SECRET)?.trim() || "";
+  if (secret.length < 32)
+    throw new Error("BETTER_AUTH_SECRET must be at least 32 characters in production.");
+  const masterKey = readFrom(source, ENV.PIWORK_MCP_MASTER_KEY)?.trim() || "";
+  if (
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(masterKey) ||
+    masterKey.length !== 44 ||
+    Buffer.from(masterKey, "base64").length !== 32
+  ) {
+    throw new Error("PIWORK_MCP_MASTER_KEY must be a base64-encoded 32-byte key in production.");
+  }
+  const origin = readFrom(source, ENV.BETTER_AUTH_URL)?.trim() || "";
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    throw new Error("BETTER_AUTH_URL must be an absolute HTTP(S) origin in production.");
+  }
+  if (
+    !/^https?:$/.test(parsedOrigin.protocol) ||
+    parsedOrigin.pathname !== "/" ||
+    parsedOrigin.search ||
+    parsedOrigin.hash
+  ) {
+    throw new Error("BETTER_AUTH_URL must be an absolute HTTP(S) origin in production.");
+  }
+
+  const bounds: Array<[EnvironmentVariableName, number, number]> = [
+    [ENV.PORT, 1, 65_535],
+    [ENV.VITE_PORT, 1, 65_535],
+    [ENV.PIWORK_MAX_CONCURRENT_SESSIONS, 1, 10_000],
+    [ENV.PIWORK_MAX_MANAGED_PROCESSES, 1, 100_000],
+  ];
+  for (const [name, minimum, maximum] of bounds) {
+    const raw = readFrom(source, name)?.trim();
+    if (!raw) continue;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+      throw new Error(
+        `${name} must be an integer between ${minimum} and ${maximum} in production.`,
+      );
+    }
+  }
+}
+
 export function envBool(name: EnvironmentVariableName | string, fallback = false): boolean {
   const raw = envOptionalString(name)?.toLowerCase();
   if (!raw) return fallback;

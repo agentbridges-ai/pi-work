@@ -1,0 +1,43 @@
+name: dependency review
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "web/bun.lock"
+      - "web/package.json"
+      - "landing-page/bun.lock"
+      - "landing-page/package.json"
+      - ".github/dependabot.yml"
+      - ".github/workflows/dependency-review.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Dependency Review
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: always
+      - name: Dependency review no-op for non-PR refs
+        if: ${{ github.event_name != 'pull_request' }}
+        run: echo "Dependency Review runs only for pull requests; this ref is a deterministic no-op."
+      - name: Audit web dependencies
+        working-directory: web
+        run: bun audit --audit-level=high
+      - name: Audit Landing dependencies
+        working-directory: landing-page
+        run: bun audit --audit-level=high

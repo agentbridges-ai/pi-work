@@ -42,7 +42,7 @@ import {
   formatUserSpaceBashCapabilities,
   USER_SPACE_BASH_COMMANDS,
   USER_SPACE_BASH_PUBLIC_COMMANDS,
-} from "./user-space-shell-contract.js";
+} from "../shared/user-space-shell-contract.js";
 import type { IndexedWorkspaceEntry } from "./user-space-index.js";
 import type {
   PersistedUserSpaceRecord,

@@ -33,7 +33,8 @@ import { PiProviderVault } from "./pi-provider-vault.js";
 import { createPiRecordingObserver } from "./pi-recording-observer.js";
 import { OnlyOfficeBroker, registerOnlyOfficeInternalRoutes } from "./onlyoffice-broker.js";
 import { RecorderManager } from "./recorder.js";
-import { registerRequestContext } from "./request-context.js";
+import { anonymousUserHash, registerRequestContext } from "./request-context.js";
+import { log } from "./logger.js";
 import {
   DEFAULT_USER_RESOURCE_LIMITS,
   type ResourceLease,
@@ -339,11 +340,12 @@ export class LocalRuntimeRegistry {
     if (!resources) return Promise.resolve();
     if (resources.stoppingForQuota) return resources.stoppingForQuota;
     const runtimes = [...this.runtimes.values()].filter((runtime) => runtime.user.uuid === uuid);
-    console.error(
-      `[local-runtime] Disk quota exceeded for ${uuid} ` +
-        `(${snapshot.usedBytes + snapshot.reservedBytes}/${snapshot.maxBytes}); ` +
-        "stopping managed Pi processes.",
-    );
+    log.error("local-runtime", "Disk quota exceeded; stopping managed Pi processes", {
+      userHash: anonymousUserHash(uuid),
+      usedBytes: snapshot.usedBytes,
+      reservedBytes: snapshot.reservedBytes,
+      maxBytes: snapshot.maxBytes,
+    });
     const stopping = Promise.allSettled(
       runtimes.map((runtime) => runtime.launcher.killAll({ shutdown: false })),
     )
@@ -654,7 +656,7 @@ export class LocalRuntimeRegistry {
     };
     runtimeRef = runtime;
     this.runtimes.set(key, runtime);
-    console.log(`[local-runtime] Native Pi ready for ${fullUser.username} (${uuid})`);
+    log.info("local-runtime", "Native Pi ready", { tenantBound: Boolean(fullUser.tenantId) });
     return runtime;
   }
 

@@ -936,12 +936,18 @@ export function createRoutes(
     skillsDir,
     diskQuota: options.diskQuota,
   });
-  registerMetricsRoutes(api, { gaugeProvider: wsBridge });
+  const canViewRuntime = async (): Promise<boolean> => {
+    const user = getCurrentUserSnapshot(options);
+    if (options.rbac) return options.rbac.can(user, "runtime:view");
+    return user.permissions?.includes("runtime:view") ?? false;
+  };
+  registerMetricsRoutes(api, { gaugeProvider: wsBridge, authorize: canViewRuntime });
   registerDiagnosticsRoutes(api, {
     launcher,
     gaugeProvider: wsBridge,
     recorder,
     runtimeStateProvider: orchestrator,
+    authorize: canViewRuntime,
   });
 
   // ─── Recording Hub (hidden feature: PIWORK_RECORDING_HUB=1) ──────

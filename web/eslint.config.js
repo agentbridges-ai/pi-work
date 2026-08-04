@@ -12,6 +12,7 @@ const serverFiles = [
   "server/**/*.{ts,mjs}",
   "*.config.{js,mjs,ts}",
 ];
+const sharedFiles = ["shared/**/*.{ts,tsx}"];
 
 export default tseslint.config(
   {
@@ -53,6 +54,110 @@ export default tseslint.config(
       "no-useless-catch": "off",
       "no-useless-escape": "off",
       "prefer-const": "off",
+    },
+  },
+  {
+    files: ["server/**/*.{ts,tsx}", "src/**/*.{ts,tsx}", "shared/**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { arguments: false, attributes: false } },
+      ],
+    },
+  },
+  {
+    files: browserFiles,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["../server/**", "../../server/**", "../../../server/**"],
+              message:
+                "Browser code must use the API boundary and cannot import server runtime modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: serverFiles,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["../src/**", "../src/**/*"],
+              message:
+                "Server code must depend on web/shared, never on frontend implementation modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["server/**/*.{ts,mjs}"],
+    ignores: [
+      "server/**/*.test.ts",
+      "server/**/*.test.tsx",
+      "server/**/*.spec.ts",
+      "server/**/*.spec.tsx",
+      "server/service.ts",
+      "server/logger.ts",
+    ],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
+    // Integration tests may exercise the browser adapter directly; production
+    // server modules remain isolated from frontend implementation modules.
+    files: [
+      "server/**/*.test.ts",
+      "server/**/*.test.tsx",
+      "server/**/*.spec.ts",
+      "server/**/*.spec.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
+  {
+    files: sharedFiles,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["../server/**", "../server/**/*"],
+              message: "Shared contracts cannot import server runtime modules.",
+            },
+            {
+              group: ["../src/**", "../src/**/*"],
+              message: "Shared contracts cannot import frontend implementation modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["server/local-runtime-registry.ts"],
+    rules: {
+      "no-console": ["error", { allow: ["warn", "error"] }],
     },
   },
   {
