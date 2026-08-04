@@ -4,6 +4,10 @@ import {
   CLOUDFLARE_PRIVACY_POLICY_URL,
   CLOUDFLARE_TERMS_OF_SERVICE_URL,
   HttpAppCloudflareAccountClient,
+  UnconfiguredAppCloudflareAccountClient,
+  createPkceMaterial,
+  hashOAuthState,
+  normalizeConnectionScope,
   solvePreviewChallengeInWorker,
   validatePreviewChallenge,
 } from "./apps-cloudflare-account-client.js";
@@ -158,5 +162,107 @@ describe("Cloudflare temporary account client", () => {
         headers: { authorization: "Bearer user-oauth-secret" },
       }),
     );
+  });
+
+  it("covers disabled clients, PKCE material, and connection-scope validation", async () => {
+    const disabled = new UnconfiguredAppCloudflareAccountClient();
+    expect(disabled.oauthRedirectUri).toBe("");
+    expect(() => disabled.authorizationUrl()).toThrow(/not configured/);
+    expect(() => disabled.listZones()).toThrow(/not configured/);
+    expect(() => disabled.revokeToken()).toThrow(/not configured/);
+
+    const pkce = createPkceMaterial();
+    expect(pkce.state).toBeTruthy();
+    expect(pkce.verifier).toBeTruthy();
+    expect(pkce.challenge).toBeTruthy();
+    expect(pkce.stateHash).toBe(hashOAuthState(pkce.state));
+    expect(normalizeConnectionScope("user")).toBe("user");
+    expect(normalizeConnectionScope("tenant")).toBe("tenant");
+    expect(() => normalizeConnectionScope("invalid")).toThrow(/scope must be/);
+  });
+
+  it("refreshes tokens, resolves an account, lists zones, and revokes tokens", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "access-secret",
+            scope: ["workers.write", "workers.write"],
+            expires_in: 60,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ id: "account-1", name: "Account" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            result: [{ id: "zone-1", name: "example.com", status: "active" }],
+            result_info: { total_count: 1 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("", { status: 200 }));
+    const client = new HttpAppCloudflareAccountClient({
+      oauthClientId: "client-id",
+      oauthClientSecret: "client-secret",
+      fetch: request,
+    });
+
+    await expect(client.refreshAccessToken("old-refresh", ["account.read"])).resolves.toMatchObject({
+      accountId: "account-1",
+      accountName: "Account",
+      accessToken: "access-secret",
+      refreshToken: "old-refresh",
+      grantedScopes: ["workers.write"],
+    });
+    await expect(client.listZones("access-secret")).resolves.toEqual([
+      { id: "zone-1", name: "example.com", status: "active" },
+    ]);
+    await expect(client.revokeToken("access-secret")).resolves.toBeUndefined();
+    expect(String(request.mock.calls[0]?.[1]?.body)).toContain("grant_type=refresh_token");
+    expect(
+      (request.mock.calls[0]?.[1]?.headers as Headers).get("authorization"),
+    ).toMatch(/^Basic /u);
+  });
+
+  it("rejects unsafe redirect URLs and incomplete provider responses", async () => {
+    expect(
+      () =>
+        new HttpAppCloudflareAccountClient({
+          oauthRedirectUri: "http://localhost/callback",
+        }),
+    ).toThrow(/HTTPS/);
+    const client = new HttpAppCloudflareAccountClient({ oauthClientId: "client-id" });
+    expect(() =>
+      client.authorizationUrl({
+        state: "state",
+        codeChallenge: "challenge",
+        redirectUri: "https://piwork.example/callback",
+        scopes: [],
+      }),
+    ).not.toThrow();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ success: false }), { status: 200 }));
+    const failing = new HttpAppCloudflareAccountClient({ fetch: request });
+    await expect(
+      failing.provisionTemporaryAccount({
+        termsOfService: "invalid" as never,
+        privacyPolicy: CLOUDFLARE_PRIVACY_POLICY_URL,
+        acceptTermsOfService: "yes",
+      }),
+    ).rejects.toThrow(/policies/);
   });
 });
