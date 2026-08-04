@@ -39,8 +39,8 @@ describe("OnlyOffice dev health check", () => {
 
     expect(devScript).not.toContain("check-onlyoffice-dev-health.ts");
     expect(devScript).not.toContain("PIWORK_ONLYOFFICE_BROWSER_");
-    expect(makefile).toContain("dev-fast: agent-browser");
-    expect(makefile).not.toContain("dev-fast: agent-browser onlyoffice-browser");
+    expect(makefile).toContain("dev-fast: dev-compose");
+    expect(makefile).not.toContain("dev-fast: agent-browser");
     expect(makefile).not.toMatch(/^build:\n\t.*ensure-onlyoffice-browser/m);
     expect(makefile).not.toContain("check-onlyoffice-dev-health.ts");
     expect(viteConfig).not.toContain("onlyOfficeBrowserRuntimePlugin");
