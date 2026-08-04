@@ -602,6 +602,129 @@ describe("API request contracts", () => {
     });
   });
 
+  it("covers native file byte and share helpers with scoped request metadata", async () => {
+    runtimeContextCoordinator.activate({
+      userId: "user-a",
+      userScopeKey: userScopeKeyFromCurrentUser({ ...user, tenantId: "tenant-a" }),
+      agentId: "agent",
+      sessionId: "session-a",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { operation: { id: "operation-1" } },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Blob(["contents"], { type: "text/plain" }), {
+          status: 200,
+          headers: {
+            "X-Piwork-Native-Baseline-Sha256": "baseline",
+            "X-Piwork-Native-Managed-Sha256": "managed",
+            "X-Piwork-Native-Changed": "true",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { ok: true } }))
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { operations: [] } }))
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { ok: true, path: "shared/report.pdf", size: 7, mtime: 1, sha256: "digest" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: { operation: { id: "operation-2" } },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            supported: true,
+            installed: true,
+            connected: true,
+            compatible: true,
+            helperVersion: "1.0.0",
+            protocolVersion: 1,
+            platformVersion: "macOS",
+            capabilities: ["file.share"],
+            latestVersion: "1.0.0",
+            updateAvailable: false,
+            upgradeCommand: "",
+            lastError: null,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ok: true,
+          status: 200,
+          body: {
+            supported: false,
+            installed: false,
+            connected: false,
+            compatible: false,
+            helperVersion: null,
+            protocolVersion: null,
+            platformVersion: null,
+            capabilities: [],
+            latestVersion: null,
+            updateAvailable: false,
+            upgradeCommand: "",
+            lastError: null,
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["bytes"], "report.pdf", { type: "application/pdf" });
+    await api.createNativeFileAction("session/a", file, {
+      action: "file.share",
+      source: {
+        space: "user",
+        path: "shared/report.pdf",
+        mountId: "mount-1",
+        baselineSha256: "baseline",
+        baselineMtime: 42,
+      },
+      anchor: { x: 1, y: 2, width: 3, height: 4 },
+    });
+    const reclaimed = await api.reclaimNativeFileAction("session/a", "operation/1", "report.pdf");
+    expect(reclaimed.file.name).toBe("report.pdf");
+    expect(reclaimed.changed).toBe(true);
+    await api.cancelNativeFileAction("session/a", "operation/1");
+    await api.listNativeFileActions("session/a");
+    await api.writeAgentSpaceFileBytes(
+      "session/a",
+      "shared/report.pdf",
+      new Blob(["bytes"]),
+      "baseline",
+      true,
+    );
+    await api.shareNativeFile(
+      "session/a",
+      file,
+      { space: "agent", path: "shared/report.pdf" },
+      { x: 1, y: 2, width: 3, height: 4 },
+    );
+    await api.getNativeShareCapabilities();
+    await api.getNativeHelperStatus(true);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("mountId=mount-1");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("baselineMtime=42");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("x=1");
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
   it("loads browser-safe Cloudflare feature config inside the active runtime context", async () => {
     const lease = runtimeContextCoordinator.activate({
       userId: "user-a",
