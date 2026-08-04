@@ -141,7 +141,10 @@ for (const file of walk(join(root, "docs"))) {
   // The Pi source tree is a pinned read-only submodule. Its upstream
   // documentation and fixtures follow Pi's own governance contract, not
   // Piwork's local frontmatter/link policy.
-  if (file === join(root, "docs/upstream") || file.startsWith(`${join(root, "docs/upstream")}${sep}`)) {
+  if (
+    file === join(root, "docs/upstream") ||
+    file.startsWith(`${join(root, "docs/upstream")}${sep}`)
+  ) {
     continue;
   }
   if (!file.endsWith(".md") || file.endsWith("README.md")) continue;
