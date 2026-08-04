@@ -66,6 +66,7 @@
         "ftruncate",
         "futex",
         "futex_waitv",
+        "fork",
         "getcwd",
         "getdents",
         "getdents64",
