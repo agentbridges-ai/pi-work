@@ -11,6 +11,7 @@ on:
       - "scripts/release-manifest.mjs"
       - "scripts/selfhost.sh"
       - "scripts/verify-runtime-container-canary.ts"
+      - "web/scripts/apply-control-plane-migration.ts"
       - "web/package.json"
       - "web/bun.lock"
       - "web/scripts/compose-migrate.ts"
@@ -30,6 +31,7 @@ on:
       - "scripts/release-manifest.mjs"
       - "scripts/selfhost.sh"
       - "scripts/verify-runtime-container-canary.ts"
+      - "web/scripts/apply-control-plane-migration.ts"
       - "web/package.json"
       - "web/bun.lock"
       - "web/scripts/compose-migrate.ts"
@@ -67,7 +69,7 @@ jobs:
 
       - name: Verify container, SRT, RLS, and health contracts
         run: |
-          ./scripts/selfhost.sh doctor --require-verified
+          make test-compose-runtime
           curl --fail --silent --show-error http://127.0.0.1:3457/api/health/ready
 
       - name: Verify real Pi RPC inside the Compose nested SRT

@@ -430,6 +430,21 @@ describe("external coverage boundaries", () => {
     expect(() =>
       validateExternalCoverageRunner(
         {
+          path: "web/scripts/compose-migrate.ts",
+          reason: "Compose migration entrypoint.",
+          runner: { kind: "make-target", target: "test-compose-runtime" },
+          evidence: ["Makefile", ".github/workflows/compose-runtime.yml"],
+        },
+        {
+          ...inputs,
+          makefile: `${inputs.makefile}test-compose-runtime:\n\ttrue\n`,
+          workflow: "- run: make test-compose-runtime\n",
+        },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateExternalCoverageRunner(
+        {
           path: "web/scripts/srt.ts",
           reason: "SRT canary.",
           runner: { kind: "make-target", target: "test-srt-isolation" },

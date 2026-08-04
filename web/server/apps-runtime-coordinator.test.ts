@@ -243,6 +243,26 @@ describe("AppsRuntimeCoordinator", () => {
       targetKind: "byoc" as const,
       cloudflareConnectionId: "connection-1",
     };
+    const priorReceipt = {
+      id: "receipt-1",
+      appId: "app-1",
+      deploymentId: "deployment-0",
+      target: "byoc" as const,
+      connectionId: "connection-1",
+      temporaryAccountId: null,
+      logicalKey: "cache",
+      resourceKind: "kv" as const,
+      mode: "adopt" as const,
+      ownership: "adopted" as const,
+      externalId: "kv-1",
+      externalName: "cache",
+      stepStatus: "ready" as const,
+      metadata: { binding: "CACHE", jurisdiction: "eu" },
+      errorCode: null,
+      errorMessage: null,
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    };
     const controlPlane = {
       acquireLease: vi.fn().mockResolvedValue({ leaseToken: "lease-1" }),
       renewLease: vi.fn().mockResolvedValue(true),
@@ -265,7 +285,7 @@ describe("AppsRuntimeCoordinator", () => {
         expiresAt: null,
       }),
       transitionDeploymentPhase: vi.fn().mockResolvedValue(undefined),
-      listDeploymentReceipts: vi.fn().mockResolvedValue([]),
+      listDeploymentReceipts: vi.fn().mockResolvedValue([priorReceipt]),
       recordResourceReceipt: vi.fn().mockResolvedValue({}),
     };
     const driver = {
@@ -311,6 +331,17 @@ describe("AppsRuntimeCoordinator", () => {
         deploymentId: queued.id,
         targetKind: "byoc",
         credential: expect.objectContaining({ apiToken: "server-only-token" }),
+      }),
+    );
+    expect(driver.prepareResources).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingReceipts: [
+          expect.objectContaining({
+            logicalKey: "cache",
+            binding: "CACHE",
+            jurisdiction: "eu",
+          }),
+        ],
       }),
     );
     expect(controlPlane.completeDeployment).toHaveBeenCalledWith(

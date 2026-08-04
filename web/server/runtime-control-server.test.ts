@@ -56,6 +56,7 @@ describe("Piwork Runtime Unix control channel", () => {
       authenticator,
       handler: async (request, connection) => {
         await connection.sendEvent("runtime.warning", request.scope, { code: "canary" });
+        if (request.operation === "interrupt") throw new Error("handler rejected interrupt");
         return { operation: request.operation, generation: request.scope.generation };
       },
     });
@@ -70,6 +71,7 @@ describe("Piwork Runtime Unix control channel", () => {
     });
     expect(events).toEqual([{ code: "canary" }]);
     expect((await lstat(socketPath)).mode & 0o777).toBe(0o660);
+    await expect(client.request(scope, "interrupt")).rejects.toThrow("handler rejected interrupt");
 
     await client.close();
     await server.close();

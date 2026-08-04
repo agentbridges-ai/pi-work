@@ -350,6 +350,20 @@ describe("Pi Runtime service", () => {
         {
           version: 1,
           kind: "request",
+          id: "stale-status-active",
+          operation: "status",
+          scope: { ...scope, generation: 2 },
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).rejects.toThrow("status scope is stale");
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
           id: "interrupt",
           operation: "interrupt",
           scope,
@@ -484,5 +498,19 @@ describe("Pi Runtime service", () => {
         peer,
       ),
     ).rejects.toThrow(/task policy/);
+    await expect(
+      handle(
+        {
+          version: 1,
+          kind: "request",
+          id: "shutdown",
+          operation: "shutdown",
+          scope,
+          payload: {},
+          mac: "test",
+        },
+        peer,
+      ),
+    ).resolves.toEqual({ stopped: true });
   });
 });
