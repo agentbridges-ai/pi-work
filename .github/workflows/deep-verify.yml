@@ -2,11 +2,6 @@ name: deep verify
 
 on:
   pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   push:
     branches: [main]
     tags: ["v*"]
@@ -18,10 +13,9 @@ on:
       - "pnpm-lock.yaml"
       - "release/**"
       - "scripts/ensure-agent-browser.sh"
-      - "scripts/ensure-onlyoffice-browser.sh"
-      - "scripts/prepare-onlyoffice-fonts.sh"
       - "scripts/pi-reset-legacy-sessions.sh"
       - "scripts/verify-agent-browser-release.mjs"
+      - "scripts/verify-github-actions-pinning.mjs"
       - "scripts/verify-native-pi-dependencies.mjs"
       - "scripts/verify-onlyoffice-release.mjs"
       - "scripts/verify-pi-only-runtime.sh"
@@ -36,20 +30,35 @@ on:
   schedule:
     - cron: "20 18 * * *"
   workflow_dispatch:
+    inputs:
+      onlyoffice_candidate_integration:
+        description: Run the explicit candidate-only online integration gate on the selected ref
+        required: true
+        default: false
+        type: boolean
+      onlyoffice_candidate_release_id:
+        description: Exact immutable OnlyOffice releaseId expected on the selected ref
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
@@ -95,7 +104,18 @@ jobs:
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
       - name: Run the complete verification suite
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.onlyoffice_candidate_integration != true }}
         run: make verify
+
+      - name: Run the complete verification suite for an explicit candidate integration
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}
+        run: make verify ONLYOFFICE_RELEASE_VERIFY_ARGS=--allow-candidate
+
+      - name: Verify published OnlyOffice release descriptor
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.onlyoffice_candidate_integration != true }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make verify-onlyoffice-release ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
 
       - name: Enforce pull request diff coverage
         if: ${{ github.event_name == 'pull_request' }}
@@ -106,9 +126,36 @@ jobs:
 
       - name: Upload Vitest coverage
         if: ${{ always() && hashFiles('web/coverage/lcov.info') != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: vitest-coverage-${{ github.run_id }}
           path: web/coverage
           if-no-files-found: error
           retention-days: 14
+
+  onlyoffice-candidate-integration:
+    name: OnlyOffice candidate integration / ${{ inputs.onlyoffice_candidate_release_id }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Verify the selected candidate release and HEAD online
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONLYOFFICE_EXPECTED_RELEASE_ID: ${{ inputs.onlyoffice_candidate_release_id }}
+          EXPECTED_HEAD_SHA: ${{ github.sha }}
+        run: |
+          test -n "${ONLYOFFICE_EXPECTED_RELEASE_ID}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
+          candidate_base_sha="$(git rev-parse refs/remotes/origin/main)"
+          ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA="${candidate_base_sha}" \
+            ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA="${EXPECTED_HEAD_SHA}" \
+            make verify-onlyoffice-release \
+            ONLYOFFICE_RELEASE_VERIFY_ARGS="--online --allow-candidate --candidate-integration"
