@@ -75,9 +75,12 @@ beforeEach(() => {
 describe("user-space CLI public contract", () => {
   it("exposes only the four pi-aligned top-level tools", async () => {
     const help = await runCli(["--help"]);
+    const capabilities = await runCli(["bash", "--capabilities"]);
     const removed = await runCli(["grep", "needle"]);
 
     expect(help.code).toBe(0);
+    expect(capabilities).toMatchObject({ code: 0, stderr: "" });
+    expect(capabilities.stdout).toContain("The shell has only the virtual root /");
     expect(help.stdout).toContain("user-space read");
     expect(help.stdout).toContain("user-space write");
     expect(help.stdout).toContain("user-space edit");

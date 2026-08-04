@@ -61,7 +61,7 @@ describe("Piwork UI primitives", () => {
         </DropdownMotion>,
       );
 
-      act(() => vi.advanceTimersByTime(100));
+      void act(() => vi.advanceTimersByTime(100));
       expect(screen.queryByTestId("dropdown")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

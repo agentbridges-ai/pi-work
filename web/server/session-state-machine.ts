@@ -122,7 +122,10 @@ export class SessionStateMachine {
       try {
         listener(event);
       } catch (err) {
-        console.error(`[state-machine] Listener error for ${this._sessionId}:`, err);
+        log.error("state-machine", "Listener error", {
+          sessionId: this._sessionId,
+          error: err instanceof Error ? err.name : "UnknownError",
+        });
       }
     }
 

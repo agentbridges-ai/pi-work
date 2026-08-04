@@ -741,7 +741,7 @@ export const WorkspacePreviewPane = memo(function WorkspacePreviewPane({
       const target =
         typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null;
       if (isPointInPreviewBody(x, y) || (target && previewBodyRef.current?.contains(target))) {
-        openDetachedPreviewWindow(drag.tabId);
+        void openDetachedPreviewWindow(drag.tabId);
         return;
       }
       const insertionTarget = previewTabInsertionTargetAt(x, y, drag);
@@ -920,7 +920,7 @@ export const WorkspacePreviewPane = memo(function WorkspacePreviewPane({
       event.preventDefault();
       event.stopPropagation();
       clearPreviewTabDragState();
-      openDetachedPreviewWindow(tabId);
+      void openDetachedPreviewWindow(tabId);
     },
     [clearPreviewTabDragState, draggingTabId, openDetachedPreviewWindow, tabs],
   );

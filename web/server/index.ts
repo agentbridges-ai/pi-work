@@ -1,4 +1,4 @@
-import { ENV, environment } from "./environment.js";
+import { ENV, environment, validateProductionEnvironment } from "./environment.js";
 
 // Enrich process PATH at startup so binary resolution and `which` calls can find
 // binaries installed via version managers (nvm, volta, fnm, etc.).
@@ -77,6 +77,7 @@ const host = environment.host;
 const browserOriginAllowlist = trustedBrowserOrigins();
 const servesBundledFrontend = environment.value(ENV.PIWORK_SERVE_FRONTEND) !== "0";
 const dataRoot = getLocalDataRoot();
+validateProductionEnvironment();
 // This initializes only an empty/new root. A non-empty pre-Pi root fails
 // closed and requires the explicit, confirmed reset command.
 ensurePiRuntimeLayout(dataRoot);
@@ -395,7 +396,7 @@ if (process.platform === "darwin") {
   });
   const socketStat = lstatSync(userSpaceIpcPath);
   if (!socketStat.isSocket()) {
-    userSpaceIpcServer.stop(true);
+    await userSpaceIpcServer.stop(true);
     throw new Error("Protected User Space IPC endpoint is not a Unix socket");
   }
   chmodSync(userSpaceIpcPath, 0o600);
@@ -411,7 +412,7 @@ if (process.platform === "darwin") {
     fetch: protectedFetch,
   });
   if (typeof internalTlsServer.port !== "number") {
-    internalTlsServer.stop(true);
+    await internalTlsServer.stop(true);
     throw new Error("Internal file transport did not expose a TLS port");
   }
   internalConnectProxy = await startInternalFileConnectProxy(internalTlsServer.port);

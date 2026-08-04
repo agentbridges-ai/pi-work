@@ -6,6 +6,23 @@ import type { GaugeDataProvider } from "../metrics-collector.js";
 import type { RecorderManager } from "../recorder.js";
 
 describe("GET /diagnostics/runtime", () => {
+  it("requires the runtime:view authorization boundary when configured", async () => {
+    const app = new Hono();
+    const launcher = { listSessions: () => [] } as unknown as PiLauncher;
+    const gaugeProvider = {
+      getSessionMemoryStats: () => [],
+      getSessionPhases: () => new Map(),
+    } satisfies GaugeDataProvider;
+    registerDiagnosticsRoutes(app, {
+      launcher,
+      gaugeProvider,
+      runtimeStateProvider: { listRuntimeStates: () => [] },
+      authorize: async () => false,
+    });
+    const response = await app.request("/diagnostics/runtime");
+    expect(response.status).toBe(403);
+  });
+
   it("returns bounded local diagnostics without session paths or prompts", async () => {
     const app = new Hono();
     const launcher = {
@@ -45,7 +62,13 @@ describe("GET /diagnostics/runtime", () => {
         },
       ],
     };
-    registerDiagnosticsRoutes(app, { launcher, gaugeProvider, recorder, runtimeStateProvider });
+    registerDiagnosticsRoutes(app, {
+      launcher,
+      gaugeProvider,
+      recorder,
+      runtimeStateProvider,
+      authorize: async () => true,
+    });
 
     const response = await app.request("/diagnostics/runtime");
     const body = await response.json();

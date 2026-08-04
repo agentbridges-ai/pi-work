@@ -1,4 +1,4 @@
-import type { UserSpaceOperation } from "../server/session-types.js";
+import type { UserSpaceOperation } from "./pi-browser-protocol.js";
 
 /** Operations that can cross the browser File System Access API write boundary. */
 export const USER_SPACE_WRITE_OPERATIONS: ReadonlySet<UserSpaceOperation> = new Set([

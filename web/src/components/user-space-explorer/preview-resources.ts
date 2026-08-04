@@ -62,7 +62,7 @@ export function disposeOfficePreview(tabId: string): void {
 export async function handoffOfficePreview(tabId: string): Promise<void> {
   const disposers = officePreviewDisposers.get(tabId);
   if (!disposers) return;
-  await Promise.all(Array.from(disposers, (dispose) => dispose("handoff")));
+  for (const dispose of disposers) await Promise.resolve(dispose("handoff"));
 }
 
 export function revokePreviewStateUrl(state: PreviewState): void {

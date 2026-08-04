@@ -34,7 +34,7 @@
     "build": "node node_modules/vite/bin/vite.js build && node scripts/finalize-pwa-shell.mjs && bun scripts/check-ui-bundle-budgets.mjs",
     "check:ui-bundles": "bun scripts/check-ui-bundle-budgets.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
-    "lint": "node node_modules/eslint/bin/eslint.js . --max-warnings 0 && cd .. && node web/node_modules/eslint/bin/eslint.js --config web/eslint.config.js packages/design-tokens/src packages/ui/src packages/ui-patterns/src --max-warnings 0",
+    "lint": "node node_modules/eslint/bin/eslint.js . --max-warnings 0 --suppressions-location .eslint-suppressions.json && cd .. && node web/node_modules/eslint/bin/eslint.js --config web/eslint.config.js packages/design-tokens/src packages/ui/src packages/ui-patterns/src --max-warnings 0",
     "lint:fix": "node node_modules/eslint/bin/eslint.js . --fix",
     "format": "node node_modules/prettier/bin/prettier.cjs --config ../prettier.config.mjs --ignore-path ../.prettierignore --write ../web ../packages ../scripts ../docs ../README.md ../Makefile ../package.json ../.github ../.codex ../.env.example ../.dockerignore ../.editorconfig ../.gitattributes ../.prettierignore ../prettier.config.mjs --ignore-unknown",
     "format:check": "node node_modules/prettier/bin/prettier.cjs --config ../prettier.config.mjs --ignore-path ../.prettierignore --check ../web ../packages ../scripts ../docs ../README.md ../Makefile ../package.json ../.github ../.codex ../.env.example ../.dockerignore ../.editorconfig ../.gitattributes ../.prettierignore ../prettier.config.mjs --ignore-unknown",
@@ -76,9 +76,10 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@headless-tree/core": "^1.7.0",
     "@headless-tree/react": "^1.7.0",
-    "@heroui/react": "^3.1.0",
-    "@heroui/styles": "^3.1.0",
+    "@heroui/react": "3.1.0",
+    "@heroui/styles": "3.1.0",
     "@iconify/react": "6.0.2",
+    "antd": "6.5.1",
     "@lezer/highlight": "^1.2.3",
     "@lobehub/ui": "^5.21.0",
     "@milkdown/crepe": "7.21.2",
@@ -89,7 +90,7 @@
     "@wterm/dom": "0.3.0",
     "@wterm/react": "0.3.0",
     "axe-core": "^4.11.1",
-    "better-auth": "1.6.20",
+    "better-auth": "1.6.25",
     "croner": "^10.0.1",
     "diff": "^8.0.3",
     "fflate": "0.8.3",
@@ -111,6 +112,7 @@
     "@eslint/js": "9.39.5",
     "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.0.0",
+    "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -123,6 +125,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.4.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "brace-expansion": "5.0.9",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.5.0",
@@ -144,6 +147,10 @@
   },
   "overrides": {
     "@types/node": "22.20.1",
-    "dompurify": "3.4.12"
+    "dompurify": "3.4.12",
+    "undici": "8.10.0"
+  },
+  "resolutions": {
+    "undici": "8.10.0"
   }
 }

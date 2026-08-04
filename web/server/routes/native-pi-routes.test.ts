@@ -31,7 +31,7 @@ function session(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function currentUser(tenantId?: string): AuthenticatedUser {
+function currentUser(tenantId?: string, permissions: string[] = []): AuthenticatedUser {
   return {
     userId: "user-1",
     uuid: "user-uuid",
@@ -41,7 +41,7 @@ function currentUser(tenantId?: string): AuthenticatedUser {
     orgName: "Org",
     tenantId,
     roles: ["member"],
-    permissions: [],
+    permissions,
     departments: [],
   };
 }
@@ -49,6 +49,7 @@ function currentUser(tenantId?: string): AuthenticatedUser {
 function fixture(
   options: {
     tenantId?: string;
+    permissions?: string[];
     governed?: boolean;
     streamFailure?: boolean;
     withProbe?: boolean;
@@ -89,6 +90,7 @@ function fixture(
     pinSessionAuthority,
     getLifecycleState: vi.fn(() => "enabled"),
     getRuntimeState: vi.fn(() => ({ state: "ready" })),
+    listRuntimeStates: vi.fn(() => []),
     hasSessionData: vi.fn(() => false),
     getPersistedSession: vi.fn<(id: string) => unknown>(() => null),
     getSessionDirectory: vi.fn<(id: string) => string | null>(() => null),
@@ -108,6 +110,8 @@ function fixture(
   const wsBridge = {
     getSession: vi.fn(() => undefined),
     setUserSpaces: vi.fn(),
+    getSessionMemoryStats: vi.fn(() => []),
+    getSessionPhases: vi.fn(() => new Map()),
   };
   const workspaceState = {
     selectedAgentId: "agent-1",
@@ -126,7 +130,13 @@ function fixture(
     authority,
     launch: resolvedSandbox,
   }));
-  const controlPlane = { resolveSessionAuthority };
+  const controlPlane = {
+    resolveSessionAuthority,
+    can: vi.fn(
+      async (_userId: string, _tenantId: string, permission: string) =>
+        options.permissions?.includes(permission) ?? false,
+    ),
+  };
   const probeModels = vi.fn(async () => ({
     models: [
       {
@@ -174,7 +184,7 @@ function fixture(
       workspaceStateStore as never,
       undefined,
       {
-        getCurrentUser: () => currentUser(options.tenantId),
+        getCurrentUser: () => currentUser(options.tenantId, options.permissions),
         controlPlane: options.governed ? (controlPlane as never) : undefined,
         launchBuilder: options.withProbe ? (launchBuilder as never) : undefined,
         providerVault: providerVault as never,
@@ -199,6 +209,24 @@ function fixture(
 }
 
 describe("native Pi routes", () => {
+  it("protects runtime metrics and diagnostics with runtime:view", async () => {
+    const denied = fixture({ tenantId: "tenant-1" });
+    expect((await denied.app.request("/api/metrics")).status).toBe(403);
+    expect((await denied.app.request("/api/diagnostics/runtime")).status).toBe(403);
+
+    const allowed = fixture({ tenantId: "tenant-1", permissions: ["runtime:view"] });
+    expect((await allowed.app.request("/api/metrics")).status).toBe(200);
+    expect((await allowed.app.request("/api/diagnostics/runtime")).status).toBe(200);
+
+    const scoped = fixture({
+      tenantId: "tenant-1",
+      governed: true,
+      permissions: ["runtime:view"],
+    });
+    expect((await scoped.app.request("/api/metrics")).status).toBe(200);
+    expect((await scoped.app.request("/api/diagnostics/runtime")).status).toBe(200);
+  });
+
   it("rejects legacy backends before session creation", async () => {
     const value = fixture();
     for (const path of ["/api/sessions/create", "/api/sessions/create-stream"]) {

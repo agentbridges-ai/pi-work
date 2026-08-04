@@ -16,7 +16,7 @@ import {
   USER_SPACE_BASH_COMMANDS,
   USER_SPACE_BASH_EXECUTION_LIMITS,
   USER_SPACE_BASH_MOUNT_NAME,
-} from "../user-space-shell-contract.js";
+} from "../../shared/user-space-shell-contract.js";
 import {
   createRuokCleanupCase,
   createRuokCleanupScript,
