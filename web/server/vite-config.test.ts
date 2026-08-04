@@ -38,6 +38,7 @@ describe("Vite runtime configuration", () => {
 
   it("uses the installed OnlyOffice client package without local runtime plugins", () => {
     expect(viteConfig.publicDir).toBe(resolve(process.cwd(), "public"));
+    expect(viteConfig.esbuild).toMatchObject({ jsx: "automatic" });
     expect(viteConfig.optimizeDeps?.exclude).toContain("@agentbridges-ai/onlyoffice-browser");
     expect(pluginNames(viteConfig.plugins)).toContain(
       "piwork-onlyoffice-browser-dev-module-cache-guard",

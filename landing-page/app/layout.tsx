@@ -53,8 +53,8 @@ export default function RootLayout({
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                <span className="text-muted">Powered by</span>
-                <p className="text-accent">AgentBridges AI</p>
+                <span className="text-muted-foreground">Powered by</span>
+                <p className="text-foreground">AgentBridges AI</p>
               </a>
             </footer>
           </div>

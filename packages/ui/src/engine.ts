@@ -1,6 +1,6 @@
 // Low-level compound components for integrations that have not yet migrated to
-// the opinionated Piwork primitives. Business code must import these aliases
-// through components/ui so HeroUI remains an internal implementation detail.
+// the opinionated Piwork primitives. Product code must import these aliases
+// through @piwork/ui so HeroUI remains an internal implementation detail.
 export {
   Alert as AlertEngine,
   AlertDialog as AlertDialogEngine,
