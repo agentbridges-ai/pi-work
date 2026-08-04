@@ -68,8 +68,9 @@ help:
 # layout also gives the runtime, its transitive Pi modules, and TypeScript one
 # canonical dependency tree inside the SRT allow-read root.
 install:
-	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
-	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
+	bun install --backend copyfile --linker hoisted --frozen-lockfile
+	@if [ ! -L "$(WEB_DIR)/node_modules" ]; then \
+		rm -rf "$(WEB_DIR)/node_modules"; \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
 	fi
 
