@@ -158,7 +158,7 @@ doctor() {
   private_file_check "${PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST:-$POSTGRES_APP_PASSWORD_FILE}"
   command -v docker >/dev/null || { echo 'docker is required' >&2; exit 1; }
   select_mode
-  if rg -n -i 'privileged\s*:|SYS_ADMIN|seccomp=unconfined|network_mode:\s*host|/var/run/docker\.sock' "$ROOT_DIR/compose"; then
+  if grep -RniE 'privileged[[:space:]]*:|SYS_ADMIN|seccomp=unconfined|network_mode:[[:space:]]*host|/var/run/docker\.sock' "$ROOT_DIR/compose"; then
     echo 'Forbidden container boundary found in Compose files.' >&2
     exit 1
   fi
@@ -223,7 +223,7 @@ NODE
     fi
     local edge_headers
     edge_headers="$(curl -fsS -D - -o /dev/null "http://127.0.0.1:${PIWORK_HTTP_PORT:-3457}/build-info" || true)"
-    if ! printf '%s\n' "$edge_headers" | rg -qi '^X-Piwork-Edge:\s*piwork-caddy\r?$'; then
+    if ! printf '%s\n' "$edge_headers" | grep -Eqi '^X-Piwork-Edge:[[:space:]]*piwork-caddy[[:space:]]*$'; then
       echo 'Published selfhost port is not served by the fixed Piwork Caddy edge.' >&2
       exit 1
     fi
