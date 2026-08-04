@@ -400,7 +400,7 @@ describe("AppsRuntimeCoordinator", () => {
       releaseLease: vi.fn().mockResolvedValue(true),
       getApp: vi.fn().mockResolvedValue(appRecord),
       getDeployment: vi.fn().mockResolvedValue(queued),
-      failDeployment: vi.fn().mockResolvedValue(undefined),
+      failDeployment: vi.fn().mockRejectedValue(new Error("audit unavailable")),
       failOutboxByKey: vi.fn().mockResolvedValue(true),
     };
     const accounts = {
