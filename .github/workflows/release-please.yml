@@ -30,6 +30,16 @@ jobs:
             exit 1
           fi
 
+      - name: Verify release token can access this repository
+        env:
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh api "/repos/${GITHUB_REPOSITORY}" --silent >/dev/null; then
+            echo "::error::PIWORK_RELEASE_TOKEN exists but GitHub rejected it or it cannot access this repository. Use a valid, unexpired credential with the documented repository permissions."
+            exit 1
+          fi
+
       - name: Create or update the Piwork release PR
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
