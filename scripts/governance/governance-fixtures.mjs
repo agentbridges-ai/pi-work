@@ -35,6 +35,10 @@ assert.ok(
   policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test("web/shared/api-contracts.ts")),
 );
 assert.ok(!policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test("docs/README.md")));
+assert.ok(
+  policy.highRiskPaths.length <= 15,
+  "GitHub required reviewer rules allow at most 15 file patterns per reviewer",
+);
 
 function exceptionErrors(item, now = Date.parse("2026-08-04T00:00:00Z")) {
   const errors = [];
