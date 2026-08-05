@@ -45,6 +45,8 @@ for (const path of [".github/workflows/verify.yml", ".github/workflows/deep-veri
   assert.match(workflow, /GITHUB_EVENT_NAME.*pull_request/);
   assert.match(workflow, /GITHUB_EVENT_NAME.*merge_group/);
   assert.match(workflow, /GITHUB_EVENT_NAME.*push/);
+  assert.match(workflow, /github\.event_name == 'push' && github\.event\.before/);
+  assert.match(workflow, /github\.event_name == 'push' && github\.sha/);
   assert.match(workflow, /refs\/heads\/main/);
 }
 
