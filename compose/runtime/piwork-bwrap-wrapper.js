@@ -12,6 +12,18 @@ function isSrtNetworkSocketPath(value) {
 
 for (let index = 0; index < input.length; index += 1) {
   if (
+    input[index] === "--ro-bind" &&
+    input[index + 1] === input[index + 2] &&
+    /^\/dev\//u.test(input[index + 1])
+  ) {
+    // The replacement for SRT's --dev /dev already exposes these immutable
+    // device nodes. Rebinding /dev/null (and friends) to itself makes
+    // bwrap try to recreate a device inside the nested namespace, which is
+    // denied by the capability-free Compose boundary on some kernels.
+    index += 2;
+    continue;
+  }
+  if (
     input[index] === "--bind" &&
     isSrtNetworkSocketPath(input[index + 1]) &&
     input[index + 1] === input[index + 2]
