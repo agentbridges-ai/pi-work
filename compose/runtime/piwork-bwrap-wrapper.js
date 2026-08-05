@@ -154,7 +154,7 @@ function closeProxyDirectoryFds() {
   for (const fd of proxyDirectoryFds) closeSync(fd);
 }
 
-function disableSrtJobControl(args, commandIndex) {
+function isolateSrtSeccompShell(args, commandIndex) {
   const shellPath = args[commandIndex + 1];
   const shellFlag = args[commandIndex + 2];
   const script = args[commandIndex + 3];
@@ -167,21 +167,27 @@ function disableSrtJobControl(args, commandIndex) {
     return;
   }
   const generatedPrefix = `${shellPath} -c `;
-  if (!script.startsWith(generatedPrefix) || !script.includes("socat TCP-LISTEN:")) return;
-
-  // SRT owns this wrapper and apply-seccomp invocation. Disable Bash monitor
-  // mode only for those generated shells; the user command remains byte-for-
-  // byte unchanged inside the final nested `-c` payload.
-  args.splice(commandIndex + 2, 0, "+m");
-  const shiftedScriptIndex = commandIndex + 4;
   const applySeccompIndex = script.indexOf("apply-seccomp");
   const nestedShell = `${shellPath} -c `;
+  const firstShellIndex = script.indexOf(nestedShell);
+  const networkWrapper = script.startsWith(generatedPrefix) && script.includes("socat TCP-LISTEN:");
+  const directSeccomp =
+    !networkWrapper &&
+    applySeccompIndex >= 0 &&
+    firstShellIndex > applySeccompIndex &&
+    script.slice(0, firstShellIndex).includes("apply-seccomp");
+  if (!networkWrapper && !directSeccomp) return;
+
+  // apply-seccomp forks into the nested PID namespace. Start only that
+  // generated shell in a fresh session so Bash never inherits a process group
+  // that is invisible in the new namespace. The user's final `-c` payload is
+  // left byte-for-byte unchanged.
   const nestedShellIndex =
     applySeccompIndex >= 0 ? script.indexOf(nestedShell, applySeccompIndex) : -1;
   if (nestedShellIndex >= 0) {
-    args[shiftedScriptIndex] =
+    args[commandIndex + 3] =
       script.slice(0, nestedShellIndex) +
-      `${shellPath} +m -c ` +
+      `/usr/bin/setsid ${nestedShell}` +
       script.slice(nestedShellIndex + nestedShell.length);
   }
 }
@@ -268,7 +274,7 @@ try {
   throw error;
 }
 args.splice(commandIndex, 0, ...networkBindArgs);
-disableSrtJobControl(args, args.indexOf("--"));
+isolateSrtSeccompShell(args, args.indexOf("--"));
 
 let result;
 try {
