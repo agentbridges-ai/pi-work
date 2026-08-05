@@ -54,6 +54,7 @@ interface ParentContext {
 
 interface ActiveTask {
   taskId: string;
+  originToolCallId?: string;
   parent: ParentContext;
   sessionId: string;
   generation: number;
@@ -263,11 +264,14 @@ export class PiTaskManager {
       rootSessionId: task.parent.rootSessionId,
       generation: this.options.rootGeneration,
       taskId: task.taskId,
+      ...(task.originToolCallId ? { originToolCallId: task.originToolCallId } : {}),
       parentSessionId: task.parent.sessionId,
       status: task.status,
       background: task.background,
       depth: task.parent.depth + 1,
       ...(task.description ? { description: task.description } : {}),
+      durationMs: Math.max(0, Date.now() - task.startedAt),
+      ...(task.finalText ? { summary: task.finalText } : {}),
       ...(progress ? { progress } : {}),
     });
   }
@@ -524,6 +528,10 @@ export class PiTaskManager {
     }
     const prompt = requiredString(payload.prompt, "prompt");
     const description = optionalString(payload.description, "description", 160);
+    const originToolCallId =
+      typeof payload.originToolCallId === "string" && payload.originToolCallId.length > 0
+        ? requiredString(payload.originToolCallId, "originToolCallId", 256)
+        : undefined;
     const background = payload.background === true;
     const runTimeoutMs = taskRunTimeout(payload.timeoutMs);
     const readOnly = parent.mode === "plan" || payload.readOnly === true || payload.mode === "plan";
@@ -566,6 +574,7 @@ export class PiTaskManager {
     const startedAt = Date.now();
     const task: ActiveTask = {
       taskId,
+      originToolCallId,
       parent,
       sessionId,
       generation,
@@ -573,7 +582,7 @@ export class PiTaskManager {
       launcher,
       background,
       readOnly,
-      description,
+      description: description ?? prompt,
       status: "starting",
       finalText: "",
       startedAt,

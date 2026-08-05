@@ -39,7 +39,16 @@ function mergeToolExecutions(
   if (!previous?.length && !incoming?.length) return undefined;
   const byId = new Map<string, ToolExecutionEvent>();
   for (const event of [...(previous || []), ...(incoming || [])]) {
-    byId.set(event.toolCallId, { ...byId.get(event.toolCallId), ...event });
+    const prior = byId.get(event.toolCallId);
+    byId.set(event.toolCallId, {
+      ...prior,
+      ...event,
+      // Terminal task updates can omit this relation; retain the stable parent
+      // so child transcript messages remain grouped below the task tool call.
+      ...((event.parentToolCallId ?? prior?.parentToolCallId)
+        ? { parentToolCallId: event.parentToolCallId ?? prior?.parentToolCallId }
+        : {}),
+    });
   }
   return Array.from(byId.values()).sort((left, right) => left.timestamp - right.timestamp);
 }
@@ -57,6 +66,7 @@ export function mergeAgentMessage(previous: ChatMessage, incoming: ChatMessage):
     toolExecutions: mergeToolExecutions(previous.toolExecutions, incoming.toolExecutions),
     timestamp: previous.timestamp ?? incoming.timestamp,
     isStreaming: incoming.isStreaming,
+    error: incoming.error ?? previous.error,
   };
 }
 

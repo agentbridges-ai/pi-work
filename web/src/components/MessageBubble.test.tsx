@@ -58,4 +58,16 @@ describe("MessageBubble Pi projection", () => {
     expect(screen.getByText("contents")).toBeTruthy();
     expect(screen.queryByText(/已完成|Completed/)).toBeNull();
   });
+
+  it("renders a provider-reported assistant failure without synthetic content", () => {
+    const message: ChatMessage = {
+      id: "assistant-error",
+      role: "assistant",
+      content: "(no content)",
+      error: "Provider request failed",
+      timestamp: 1,
+    };
+    render(<MessageBubble message={message} />);
+    expect(screen.getByText("Provider request failed")).toBeTruthy();
+  });
 });

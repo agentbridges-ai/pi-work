@@ -168,6 +168,32 @@ afterEach(() => {
 });
 
 describe("AgentSessionSelector Pi lifecycle", () => {
+  it("surfaces review-ready attention in the session picker", async () => {
+    const store = useStore.getState();
+    store.setAgentActivityConnection("older", "connected");
+    store.projectAgentActivity("older", {
+      type: "run_state",
+      generation: 1,
+      state: "running",
+      timestamp: 1,
+    });
+    store.projectAgentActivity("older", {
+      type: "run_state",
+      generation: 1,
+      state: "ready",
+      timestamp: 2,
+    });
+
+    renderSelector();
+
+    expect(await screen.findByText(uiCopy.activity.status.reviewReady)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: `${uiCopy.chat.selectSession} Older topic · ${uiCopy.activity.status.reviewReady}`,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("loads, searches and activates an existing native Pi topic", async () => {
     renderSelector();
 

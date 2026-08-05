@@ -39,21 +39,38 @@ describe("Pi task and tool projections", () => {
     useStore.getState().upsertProcess("session-1", {
       taskId: "task-1",
       toolCallId: "tool-1",
+      originatingToolCallId: "tool-1",
       name: "Inspect",
       description: "",
       execution: "background",
       depth: 1,
       status: "running",
       startedAt: 1,
+      durationMs: 100,
     });
     useStore.getState().updateProcess("session-1", "task-1", {
       status: "completed",
       completedAt: 2,
+      durationMs: 200,
+    });
+    useStore.getState().upsertProcess("session-1", {
+      taskId: "task-1",
+      toolCallId: "replacement-tool",
+      name: "Inspect",
+      description: "updated",
+      execution: "background",
+      depth: 2,
+      status: "completed",
+      startedAt: 999,
+      durationMs: 250,
     });
     expect(useStore.getState().sessionProcesses.get("session-1")?.[0]).toMatchObject({
       taskId: "task-1",
       execution: "background",
       status: "completed",
+      originatingToolCallId: "tool-1",
+      durationMs: 250,
+      startedAt: 1,
     });
     useStore.getState().setProcesses("session-1", []);
     expect(useStore.getState().sessionProcesses.has("session-1")).toBe(false);

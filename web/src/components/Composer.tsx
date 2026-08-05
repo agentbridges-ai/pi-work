@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "./ui/heroui.js";
+import { ListChecks } from "lucide-react";
 import { useStore } from "../store.js";
 import { createClientMessageId, sendToSession } from "../ws.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { ModelSwitcher } from "./ModelSwitcher.js";
 import { CodexArrowIcon, CodexPlusIcon } from "./CodexIcons.js";
-import type { PiSessionInfo, SessionState } from "../types.js";
+import type { AgentMode } from "../types.js";
 import { normalizeAgentMode } from "../utils/backends.js";
 import {
   type UserSpaceFileReference,
@@ -405,6 +406,9 @@ export function Composer({
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [imageDragActive, setImageDragActive] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const [pendingMode, setPendingMode] = useState<{ sessionId: string; mode: AgentMode } | null>(
+    null,
+  );
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
@@ -438,11 +442,22 @@ export function Composer({
   const runtimeSession = runtimeSessions.find((session) => session.sessionId === sessionId);
   const agentMode = normalizeAgentMode(sessionData?.mode || runtimeSession?.mode);
   const planModeActive = agentMode === "plan";
+  const pendingModeForSession = pendingMode?.sessionId === sessionId ? pendingMode.mode : null;
   const promptSuggestions = promptSuggestionsRaw ?? emptyStringArray;
 
   useEffect(() => {
     textRef.current = text;
   }, [text]);
+
+  useEffect(() => {
+    if (!pendingModeForSession) return;
+    if (agentMode === pendingModeForSession) {
+      setPendingMode(null);
+      return;
+    }
+    const timeout = window.setTimeout(() => setPendingMode(null), 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [agentMode, pendingModeForSession]);
 
   useEffect(() => {
     inlineRefKeysRef.current = inlineRefKeys;
@@ -748,28 +763,19 @@ export function Composer({
     });
   }
 
-  function updateLocalAgentMode(mode: "agent" | "plan") {
-    const normalizedMode = normalizeAgentMode(mode);
-    const store = useStore.getState();
-    store.updateSession(sessionId, { mode: normalizedMode } as Partial<SessionState>);
-    store.setRuntimeSessions(
-      store.runtimeSessions.map((session: PiSessionInfo) =>
-        session.sessionId === sessionId ? { ...session, mode: normalizedMode } : session,
-      ),
-    );
-  }
-
   function togglePlanMode() {
+    if (pendingModeForSession) return;
     const nextMode = planModeActive ? "agent" : "plan";
-    updateLocalAgentMode(nextMode);
-    if (nextMode === "plan") {
-      useStore.getState().setPreviousAgentMode(sessionId, "agent");
-    }
-    sendToSession(sessionId, {
+    const accepted = sendToSession(sessionId, {
       type: "set_mode",
       mode: nextMode,
       clientMsgId: createClientMessageId(),
     });
+    if (!accepted) return;
+    if (nextMode === "plan") useStore.getState().setPreviousAgentMode(sessionId, "agent");
+    // The trusted extension's status event is the authority. Keep the visible
+    // mode unchanged until its session_update acknowledges this request.
+    setPendingMode({ sessionId, mode: nextMode });
   }
 
   async function addImageFiles(files: Iterable<File>) {
@@ -1019,14 +1025,35 @@ export function Composer({
                   >
                     <CodexPlusIcon className="h-5 w-5" />
                   </Button>
-                  {planModeActive && (
-                    <span
-                      data-testid="composer-plan-status"
-                      className="px-2 text-sm font-medium text-foreground"
-                    >
-                      {uiCopy.composer.planLabel}
+                  <Button
+                    onPress={togglePlanMode}
+                    isDisabled={!isConnected || showStopButton || pendingModeForSession !== null}
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={planModeActive}
+                    aria-label={
+                      pendingModeForSession === "plan"
+                        ? uiCopy.composer.switchingToPlan
+                        : pendingModeForSession === "agent"
+                          ? uiCopy.composer.switchingToAgent
+                          : planModeActive
+                            ? uiCopy.composer.exitPlanMode
+                            : uiCopy.composer.enterPlanMode
+                    }
+                    data-testid="composer-plan-toggle"
+                    className={`h-[var(--piwork-composer-control-size)] min-h-[var(--piwork-composer-control-size)] shrink-0 gap-1.5 rounded-[var(--piwork-control-radius)] px-2 text-xs font-semibold transition-colors ${
+                      planModeActive
+                        ? "bg-accent text-primary data-[hover=true]:bg-accent"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground data-[hover=true]:bg-muted"
+                    }`}
+                  >
+                    <ListChecks className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+                    <span data-testid="composer-plan-status">
+                      {pendingModeForSession
+                        ? uiCopy.composer.switchingMode
+                        : uiCopy.composer.planLabel}
                     </span>
-                  )}
+                  </Button>
                 </div>
 
                 <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5">

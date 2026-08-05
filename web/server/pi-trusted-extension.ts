@@ -518,7 +518,7 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
       ),
     }),
     executionMode: "parallel",
-    async execute(_id, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
       if (!state.taskEndpoint) return failTool("Managed task broker is unavailable.");
       if (params.action === "list") {
         const value = await requestPiBroker({
@@ -581,6 +581,7 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
         generation: state.payload.generation,
         operation: "task.start",
         payload: {
+          originToolCallId: toolCallId,
           prompt: params.prompt,
           ...(nonEmpty(params.description) ? { description: params.description.trim() } : {}),
           background: params.background === true,

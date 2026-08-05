@@ -14,6 +14,7 @@ import {
 } from "./ui-slice.js";
 import { createUpdatesSlice, type UpdatesSlice } from "./updates-slice.js";
 import { createPreferencesSlice, type PreferencesSlice } from "./preferences-slice.js";
+import { createActivitySlice, type ActivitySlice } from "./activity-slice.js";
 import { DEFAULT_AGENT_ID, AGENTS } from "../agents.js";
 import { DEFAULT_USER_PREFERENCES, setExpectedTenantRequestPrincipal } from "../api.js";
 
@@ -24,6 +25,7 @@ export type AppState = AuthSlice &
   TasksSlice &
   UiSlice &
   PreferencesSlice &
+  ActivitySlice &
   UpdatesSlice & {
     reset: () => void;
   };
@@ -36,6 +38,7 @@ export const useStore = create<AppState>((...args) => ({
   ...createTasksSlice(...args),
   ...createUiSlice(...args),
   ...createPreferencesSlice(...args),
+  ...createActivitySlice(...args),
   ...createUpdatesSlice(...args),
 
   reset: () => {
@@ -70,6 +73,7 @@ export const useStore = create<AppState>((...args) => ({
       promptSuggestions: new Map(),
       // Product interactions
       pendingInteractions: new Map(),
+      interactionSubmissions: new Map(),
       completedInteractions: new Map(),
       // Tasks
       sessionTasks: new Map(),
@@ -102,6 +106,7 @@ export const useStore = create<AppState>((...args) => ({
       preferencesLoaded: false,
       preferencesSaving: false,
       preferencesError: "",
+      agentActivity: new Map(),
     });
   },
 }));

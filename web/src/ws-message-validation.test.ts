@@ -260,6 +260,17 @@ describe("Pi browser message validation", () => {
     ).toBe(false);
   });
 
+  it("accepts the native settling run state", () => {
+    expect(
+      isBrowserIncomingMessage({
+        type: "run_state",
+        generation: 1,
+        state: "settling",
+        timestamp: 1,
+      }),
+    ).toBe(true);
+  });
+
   it("keeps the two-phase User Space mutation contract", () => {
     expect(
       isBrowserIncomingMessage({

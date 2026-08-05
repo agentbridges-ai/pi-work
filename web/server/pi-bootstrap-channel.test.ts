@@ -91,7 +91,9 @@ function payload(root: string): PiBootstrapPayload {
 }
 
 async function serverFixture(options: { ttlMs?: number } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "piwork-bootstrap-"));
+  // Keep Unix socket fixtures below the platform's 100-byte socket-path
+  // ceiling even on macOS temp roots with long randomized prefixes.
+  const root = await mkdtemp(join(tmpdir(), "p-"));
   roots.push(root);
   await mkdir(join(root, "workspace"), { recursive: true });
   await mkdir(join(root, "skills"), { recursive: true });
@@ -116,18 +118,26 @@ function rawRequest(socketPath: string, value: unknown): Promise<Record<string, 
   return new Promise((resolveResponse, rejectResponse) => {
     const socket = createConnection(socketPath);
     let output = "";
-    socket.once("error", rejectResponse);
-    socket.on("data", (chunk) => {
-      output += chunk.toString("utf8");
-    });
-    socket.once("end", () => {
+    let settled = false;
+    const resolveFrame = (): void => {
+      if (settled || !output.includes("\n")) return;
+      settled = true;
+      socket.destroy();
       try {
         resolveResponse(JSON.parse(output.trim()) as Record<string, unknown>);
       } catch (error) {
         rejectResponse(error);
       }
+    };
+    socket.once("error", rejectResponse);
+    socket.on("data", (chunk) => {
+      output += chunk.toString("utf8");
+      resolveFrame();
     });
-    socket.once("connect", () => socket.end(`${JSON.stringify(value)}\n`));
+    socket.once("end", resolveFrame);
+    // Keep the request side open until the server sends its framed response,
+    // matching the production bootstrap consumer on Bun and Node.
+    socket.once("connect", () => socket.write(`${JSON.stringify(value)}\n`));
   });
 }
 
@@ -221,7 +231,7 @@ describe("Pi one-shot bootstrap channel", () => {
   });
 
   it("rejects occupied paths and broad socket-parent permissions", async () => {
-    const root = await mkdtemp(join(tmpdir(), "piwork-bootstrap-invalid-"));
+    const root = await mkdtemp(join(tmpdir(), "p-"));
     roots.push(root);
     const broad = join(root, "broad");
     await mkdir(broad, { mode: 0o777 });
@@ -247,7 +257,7 @@ describe("Pi one-shot bootstrap channel", () => {
     await expect(waiting).rejects.toMatchObject({ code: "expired" });
     await expect(lstat(fixture.server.socketPath)).rejects.toMatchObject({ code: "ENOENT" });
 
-    const root = await mkdtemp(join(tmpdir(), "piwork-bootstrap-schema-"));
+    const root = await mkdtemp(join(tmpdir(), "p-"));
     roots.push(root);
     expect(
       () =>
@@ -484,7 +494,7 @@ describe("Pi one-shot bootstrap channel", () => {
   });
 
   it("enforces socket and timeout constructor bounds before opening a channel", async () => {
-    const root = await mkdtemp(join(tmpdir(), "piwork-bootstrap-bounds-"));
+    const root = await mkdtemp(join(tmpdir(), "p-"));
     roots.push(root);
     expect(
       () => new PiBootstrapServer({ socketPath: "relative.sock", payload: payload(root) }),
@@ -531,7 +541,7 @@ describe("Pi one-shot bootstrap channel", () => {
   });
 
   it("rejects untrusted socket parents and occupied socket paths before listen", async () => {
-    const root = await mkdtemp(join(tmpdir(), "piwork-bootstrap-parent-"));
+    const root = await mkdtemp(join(tmpdir(), "p-"));
     roots.push(root);
     const target = join(root, "target");
     const linked = join(root, "linked");
@@ -597,7 +607,7 @@ describe("Pi one-shot bootstrap channel", () => {
   });
 
   it("fails closed for invalid, oversized, coalesced, timed-out, and mismatched requests", () => {
-    const root = join(tmpdir(), "piwork-bootstrap-fail-closed");
+    const root = join(tmpdir(), "p-fail-closed");
     const cases: Array<{ chunks?: Buffer[]; event?: "timeout" | "end"; code: string }> = [
       { chunks: [Buffer.from("not-json\n")], code: "invalid_request" },
       { chunks: [Buffer.from("{}\n")], code: "invalid_request" },

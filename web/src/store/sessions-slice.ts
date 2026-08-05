@@ -58,11 +58,13 @@ function runtimeCleanup(state: AppState, sessionId: string) {
     streamingStartedAt: deleteFromMap(state.streamingStartedAt, sessionId),
     streamingOutputTokens: deleteFromMap(state.streamingOutputTokens, sessionId),
     pendingInteractions: deleteFromMap(state.pendingInteractions, sessionId),
+    interactionSubmissions: deleteFromMap(state.interactionSubmissions, sessionId),
     completedInteractions: deleteFromMap(state.completedInteractions, sessionId),
     sessionTasks: deleteFromMap(state.sessionTasks, sessionId),
     sessionProcesses: deleteFromMap(state.sessionProcesses, sessionId),
     toolProgress: deleteFromMap(state.toolProgress, sessionId),
     toolActivity: deleteFromMap(state.toolActivity, sessionId),
+    agentActivity: deleteFromMap(state.agentActivity, sessionId),
   };
 }
 

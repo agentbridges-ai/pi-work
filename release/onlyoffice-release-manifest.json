@@ -17,7 +17,7 @@
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
       "version": "0.95.0",
-      "integrationBaseCommit": "1e2bcdc0e5f7c1aeab797cc9748efea0a23ddd02"
+      "integrationBaseCommit": "f1a407956f3368026f47206ab0284cd6053f7666"
     }
   },
   "npmPackage": {
@@ -50,7 +50,7 @@
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "0f18bcc35e9f67c2ea9551a65b9946dd06ccd471cf2f4544d49bb93b54f934b1"
+      "sha256": "0e16c9b10c98945578ab2d11103b81a29e317914820bd45f2234bdaaec11df19"
     },
     {
       "repository": "onlyoffice-browser",
