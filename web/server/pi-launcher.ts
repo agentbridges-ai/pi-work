@@ -291,9 +291,9 @@ function childEnvironment(
   return {
     HOME: layout.homeDir,
     // Keep SRT's host-side manager sockets in a short, launch-private
-    // directory. The child sandbox still receives SRT's explicit
-    // TMPDIR=/tmp/claude setting; the short host path stays below Unix's
-    // socket limit and is rebound as one directory by the Compose wrapper.
+    // directory. The child sandbox still receives SRT's explicit temporary
+    // directory setting; the short host path stays below Unix's socket limit
+    // and is rebound as one directory by the Compose wrapper.
     TMPDIR: runtimeMode === "compose-nested" ? srtProxyDir || "/tmp" : "/tmp",
     XDG_CACHE_HOME: join(layout.homeDir, ".cache"),
     PATH: [sessionBinDir, "/usr/bin", "/bin"].filter(Boolean).join(":"),
