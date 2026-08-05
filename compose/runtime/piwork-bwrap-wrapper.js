@@ -5,13 +5,23 @@ const { spawnSync } = require("node:child_process");
 const input = process.argv.slice(2);
 const args = [];
 const deferredNetworkBinds = [];
+const srtRuntimeEtcSelfBindPaths = new Set([
+  "/etc/hosts",
+  "/etc/resolv.conf",
+  "/etc/nsswitch.conf",
+  "/etc/gai.conf",
+  "/etc/passwd",
+  "/etc/group",
+  "/etc/localtime",
+  "/etc/ld.so.cache",
+]);
 
 function isSrtNetworkSocketPath(value) {
   return /^\/tmp\/claude-(?:http|socks)-[^/]+\.sock$/u.test(value);
 }
 
 function isRedundantSelfBindPath(value) {
-  return /^\/dev\//u.test(value) || value === "/etc/hosts" || value === "/etc/resolv.conf";
+  return /^\/dev\//u.test(value) || srtRuntimeEtcSelfBindPaths.has(value);
 }
 
 for (let index = 0; index < input.length; index += 1) {
@@ -21,12 +31,11 @@ for (let index = 0; index < input.length; index += 1) {
     isRedundantSelfBindPath(input[index + 1])
   ) {
     // The replacement for SRT's --dev /dev already exposes immutable device
-    // nodes. The outer read-only root also exposes Docker-managed
-    // /etc/hosts and /etc/resolv.conf. Rebinding any of these paths to itself
-    // makes bwrap recreate a mount point inside the nested namespace, which
-    // is denied by the capability-free Compose boundary on some kernels. Keep
-    // ordinary masks (for example --ro-bind /dev/null <workspace-file>)
-    // untouched.
+    // nodes. SRT's system runtime allow-read list contains these exact /etc
+    // paths; rebinding any of them to itself makes bwrap recreate a mount point
+    // inside the nested namespace, which is denied by the capability-free
+    // Compose boundary on some kernels. Keep ordinary masks (for example
+    // --ro-bind /dev/null <workspace-file>) untouched.
     index += 2;
     continue;
   }
