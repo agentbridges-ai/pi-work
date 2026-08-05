@@ -39,8 +39,9 @@ import {
 import {
   type CreateOfficeEditorOptions,
   type OfficeEditorInstance,
+  type ResourcePlan,
 } from "@agentbridges-ai/onlyoffice-browser";
-import { ProgressCircleEngine as ProgressCircle } from "../ui/index.js";
+import { Button, Dialog, ProgressCircleEngine as ProgressCircle } from "../ui/index.js";
 import { useStore } from "../../store.js";
 import type { UserSpaceMount } from "../../types.js";
 import {
@@ -55,6 +56,16 @@ import {
   type OnlyOfficeEditorRegistration,
 } from "../../onlyoffice-browser-executor.js";
 import { resolvePiworkOnlyOfficeHostUrl } from "../../onlyoffice-host-url.js";
+import {
+  applyOfficeResourcePlan,
+  ensureOfficeResources,
+  getTargetOfficeReleaseId,
+  getVerifiedOfficeFontPaths,
+  officeResourcesReadyForRelease,
+  officeResourcesNeedAttention,
+  planOfficeResourcesForFile,
+  requestOfficeResourceSettings,
+} from "../../office-runtime-resources.js";
 import { runtimeContextCoordinator } from "../../runtime-context.js";
 import type { OfficePreviewLease, OfficePreviewRuntimeManager } from "../../office-host-adapter.js";
 import type { UiLanguage } from "../../store/ui-slice.js";
@@ -730,7 +741,7 @@ export const WorkspacePreviewPane = memo(function WorkspacePreviewPane({
       const target =
         typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null;
       if (isPointInPreviewBody(x, y) || (target && previewBodyRef.current?.contains(target))) {
-        openDetachedPreviewWindow(drag.tabId);
+        void openDetachedPreviewWindow(drag.tabId);
         return;
       }
       const insertionTarget = previewTabInsertionTargetAt(x, y, drag);
@@ -909,7 +920,7 @@ export const WorkspacePreviewPane = memo(function WorkspacePreviewPane({
       event.preventDefault();
       event.stopPropagation();
       clearPreviewTabDragState();
-      openDetachedPreviewWindow(tabId);
+      void openDetachedPreviewWindow(tabId);
     },
     [clearPreviewTabDragState, draggingTabId, openDetachedPreviewWindow, tabs],
   );
@@ -2201,6 +2212,7 @@ const WorkspacePreviewBody = memo(function WorkspacePreviewBody({
         onOfficeFileMigration={onOfficeFileMigration}
         onOfficeFileCreated={onOfficeFileCreated}
         onOfficeFileSaved={onOfficeFileSaved}
+        onUnsavedChange={onUnsavedChange}
       />
     );
   }
@@ -2999,6 +3011,7 @@ const OfficePreview = memo(function OfficePreview({
   onOfficeFileMigration,
   onOfficeFileCreated,
   onOfficeFileSaved,
+  onUnsavedChange,
 }: {
   tabId: string;
   mount?: UserSpaceMount;
@@ -3009,6 +3022,7 @@ const OfficePreview = memo(function OfficePreview({
   onOfficeFileMigration?: (migration: OfficeFileMigration) => void;
   onOfficeFileCreated?: (created: OfficeFileCreated) => void;
   onOfficeFileSaved?: (saved: OfficeFileSaved) => void;
+  onUnsavedChange?: (tabId: string, hasUnsavedChanges: boolean) => void;
 }) {
   if (!preview.officeFile) {
     return <PanelNotice>{workspaceCopy.office.localPreviewFailed}</PanelNotice>;
@@ -3031,6 +3045,7 @@ const OfficePreview = memo(function OfficePreview({
       onOfficeFileMigration={onOfficeFileMigration}
       onOfficeFileCreated={onOfficeFileCreated}
       onOfficeFileSaved={onOfficeFileSaved}
+      onUnsavedChange={onUnsavedChange}
     />
   );
 });
@@ -3052,6 +3067,7 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
   onOfficeFileMigration,
   onOfficeFileCreated,
   onOfficeFileSaved,
+  onUnsavedChange,
 }: {
   tabId: string;
   mountId: string;
@@ -3065,6 +3081,7 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
   onOfficeFileMigration?: (migration: OfficeFileMigration) => void;
   onOfficeFileCreated?: (created: OfficeFileCreated) => void;
   onOfficeFileSaved?: (saved: OfficeFileSaved) => void;
+  onUnsavedChange?: (tabId: string, hasUnsavedChanges: boolean) => void;
 }) {
   const previewRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -3097,6 +3114,9 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
   const [error, setError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [browserResizeActive, setBrowserResizeActive] = useState(false);
+  const [pendingResourcePlan, setPendingResourcePlan] = useState<ResourcePlan | null>(null);
+  const [preparingResources, setPreparingResources] = useState(false);
+  const resourcePlanResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const editorMode = canWrite ? "edit" : "preview";
   const readonly = !canWrite;
   foregroundRef.current = foreground;
@@ -3236,6 +3256,21 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
     setSaveMessage("");
   }, []);
 
+  const requestResourcePreparation = useCallback((plan: ResourcePlan) => {
+    return new Promise<boolean>((resolve) => {
+      resourcePlanResolverRef.current?.(false);
+      resourcePlanResolverRef.current = resolve;
+      setPendingResourcePlan(plan);
+    });
+  }, []);
+
+  const resolveResourcePreparation = useCallback((approved: boolean) => {
+    const resolve = resourcePlanResolverRef.current;
+    resourcePlanResolverRef.current = null;
+    if (!approved) setPendingResourcePlan(null);
+    resolve?.(approved);
+  }, []);
+
   useEffect(() => {
     if (!saveMessage || saveMessage === workspaceCopy.office.saving) return undefined;
     const timeoutId = window.setTimeout(() => {
@@ -3373,7 +3408,7 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
     const officeEditorOptions: CreateOfficeEditorOptions & {
       interfaceTheme?: OfficeInterfaceTheme;
     } = {
-      hostUrl: resolvePiworkOnlyOfficeHostUrl,
+      hostUrl: (context) => resolvePiworkOnlyOfficeHostUrl(context, getTargetOfficeReleaseId()),
       ...(emptyOfficeType ? { emptyType: emptyOfficeType } : { file: mountFile }),
       fileName: initialRuntimeFileNameRef.current,
       mode: editorMode,
@@ -3418,7 +3453,9 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
         setOpening(false);
       },
       onDirtyChange(nextDirty) {
-        if (!disposed && nextDirty) setSaveMessage("");
+        if (disposed) return;
+        onUnsavedChange?.(tabId, nextDirty);
+        if (nextDirty) setSaveMessage("");
       },
       onSave: handleOfficeSave,
       onSaveAs: handleOfficeSaveAs,
@@ -3426,12 +3463,35 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
 
     let lease: OfficePreviewLease | null = null;
     let disposePromise: Promise<void> | null = null;
-    const leasePromise = officePreviewRuntimeManagerPromise.then((manager) => {
+    const leasePromise = Promise.all([
+      officePreviewRuntimeManagerPromise,
+      ensureOfficeResources().catch(() => null),
+    ]).then(async ([manager]) => {
       if (disposed) {
         throw new DOMException("Office preview mount was cancelled", "AbortError");
       }
+      const plan = await planOfficeResourcesForFile(initialRuntimeFileNameRef.current);
+      if (plan.downloadBytes > 0) {
+        const approved = await requestResourcePreparation(plan);
+        if (!approved || disposed) {
+          throw new DOMException("Office resource preparation was cancelled", "AbortError");
+        }
+      }
+      if (!officeResourcesReadyForRelease(plan.releaseId)) {
+        setPreparingResources(true);
+        try {
+          await applyOfficeResourcePlan(plan);
+        } finally {
+          setPreparingResources(false);
+          setPendingResourcePlan(null);
+        }
+      }
+      if (!officeResourcesReadyForRelease(plan.releaseId)) {
+        throw new Error(workspaceCopy.office.resourcesNotReady);
+      }
       lease = manager.mount(container, {
         ...officeEditorOptions,
+        downloadedFonts: getVerifiedOfficeFontPaths(),
         resourceKey: officeResourceKey,
         foreground: initialForegroundRef.current,
       });
@@ -3464,6 +3524,7 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
         aiRegistrationRef.current = null;
         aiRegistrationEditorIdRef.current = null;
         editorRef.current = null;
+        onUnsavedChange?.(tabId, false);
         await activeLease.dispose();
       })();
       disposePromise = pending.catch((nextError) => {
@@ -3483,12 +3544,19 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
       .catch((nextError: unknown) => {
         if (disposed) return;
         setError(
-          nextError instanceof Error ? nextError.message : workspaceCopy.office.localPreviewFailed,
+          nextError instanceof Error &&
+            (nextError.name === "OfficeHostPoolExhaustedError" ||
+              nextError.name === "OfficePreviewLimitError")
+            ? workspaceCopy.office.openLimitReached
+            : nextError instanceof Error
+              ? nextError.message
+              : workspaceCopy.office.localPreviewFailed,
         );
         setOpening(false);
       });
 
     return () => {
+      resolveResourcePreparation(false);
       unregisterDispose();
       void dispose();
     };
@@ -3498,61 +3566,106 @@ const OnlyOfficeBrowserPreview = memo(function OnlyOfficeBrowserPreview({
     handleOfficeSave,
     handleOfficeSaveAs,
     officeResourceKey,
+    onUnsavedChange,
     readonly,
+    requestResourcePreparation,
+    resolveResourcePreparation,
     tabId,
   ]);
 
   return (
-    <div
-      ref={previewRef}
-      data-testid="onlyoffice-browser-preview"
-      className="relative h-full min-h-0 w-full overflow-hidden bg-background"
-    >
+    <>
       <div
-        ref={containerRef}
-        title={workspaceCopy.office.title(editorMode === "edit" ? "edit" : "preview", name)}
-        data-piwork-office-preview-path={path}
-        className="piwork-onlyoffice-browser-host absolute inset-0 block h-full min-h-0 w-full border-0 bg-background"
-      />
-      {browserResizeActive && (
+        ref={previewRef}
+        data-testid="onlyoffice-browser-preview"
+        className="relative h-full min-h-0 w-full overflow-hidden bg-background"
+      >
         <div
-          aria-hidden="true"
-          data-testid="onlyoffice-browser-resize-mask"
-          className={`pointer-events-none z-30 ${PREVIEW_BLUR_MASK_CLASS}`}
+          ref={containerRef}
+          title={workspaceCopy.office.title(editorMode === "edit" ? "edit" : "preview", name)}
+          data-piwork-office-preview-path={path}
+          className="piwork-onlyoffice-browser-host absolute inset-0 block h-full min-h-0 w-full border-0 bg-background"
         />
-      )}
-      {opening && (
-        <div className="pointer-events-none absolute inset-0 z-10 bg-background" aria-busy="true">
-          <OfficeLoadingState overlay />
-        </div>
-      )}
-      {saveMessage && saveMessage !== workspaceCopy.office.saving && (
-        <div
-          className={`absolute inset-x-3 top-3 z-20 flex min-h-11 items-center gap-2 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning`}
-          role="status"
-          data-testid="onlyoffice-save-tip"
-        >
-          <span className="min-w-0 flex-1 truncate" title={saveMessage}>
-            {saveMessage}
-          </span>
-          <button
-            type="button"
-            onClick={dismissSaveMessage}
-            className={`flex h-6 w-6 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-warning transition-colors hover:bg-warning-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning`}
-            aria-label={workspaceCopy.closeOfficeSaveAlert}
+        {browserResizeActive && (
+          <div
+            aria-hidden="true"
+            data-testid="onlyoffice-browser-resize-mask"
+            className={`pointer-events-none z-30 ${PREVIEW_BLUR_MASK_CLASS}`}
+          />
+        )}
+        {opening && (
+          <div className="pointer-events-none absolute inset-0 z-10 bg-background" aria-busy="true">
+            <OfficeLoadingState overlay />
+          </div>
+        )}
+        {saveMessage && saveMessage !== workspaceCopy.office.saving && (
+          <div
+            className={`absolute inset-x-3 top-3 z-20 flex min-h-11 items-center gap-2 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning`}
+            role="status"
+            data-testid="onlyoffice-save-tip"
           >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+            <span className="min-w-0 flex-1 truncate" title={saveMessage}>
+              {saveMessage}
+            </span>
+            <button
+              type="button"
+              onClick={dismissSaveMessage}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-warning transition-colors hover:bg-warning-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning`}
+              aria-label={workspaceCopy.closeOfficeSaveAlert}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        {error && (
+          <div
+            className={`absolute inset-x-3 top-3 flex items-center gap-3 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/35 bg-warning-muted px-3 py-2 text-xs text-warning`}
+          >
+            <span className="min-w-0 flex-1">{error}</span>
+            {officeResourcesNeedAttention() && (
+              <button
+                type="button"
+                className="shrink-0 font-semibold underline underline-offset-2"
+                onClick={requestOfficeResourceSettings}
+              >
+                {workspaceCopy.office.manageResources}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <Dialog
+        isOpen={Boolean(pendingResourcePlan)}
+        onOpenChange={(open) => {
+          if (!open && !preparingResources) resolveResourcePreparation(false);
+        }}
+        title={workspaceCopy.office.resourcePreparationTitle}
+        closeLabel={workspaceCopy.office.resourcePreparationClose}
+      >
+        <p className="text-sm leading-6 text-muted-foreground">
+          {workspaceCopy.office.resourcePreparationDescription(
+            formatBytes(pendingResourcePlan?.downloadBytes ?? 0),
+          )}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            isDisabled={preparingResources}
+            onPress={() => resolveResourcePreparation(false)}
+          >
+            {uiCopy.common.cancel}
+          </Button>
+          <Button
+            size="sm"
+            loading={preparingResources}
+            onPress={() => resolveResourcePreparation(true)}
+          >
+            {workspaceCopy.office.prepareResources}
+          </Button>
         </div>
-      )}
-      {error && (
-        <div
-          className={`absolute inset-x-3 top-3 ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-warning/35 bg-warning-muted px-3 py-2 text-xs text-warning`}
-        >
-          {error}
-        </div>
-      )}
-    </div>
+      </Dialog>
+    </>
   );
 });
 

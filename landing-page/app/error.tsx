@@ -1,14 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { Button } from "@piwork/ui";
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
+export default function Error({ error, reset }: { error: Error; reset: () => void }) {
   useEffect(() => {
     // Log the error to an error reporting service
     /* eslint-disable no-console */
@@ -18,14 +13,15 @@ export default function Error({
   return (
     <div>
       <h2>Something went wrong!</h2>
-      <button
-        onClick={
+      <Button
+        variant="secondary"
+        onPress={
           // Attempt to recover by trying to re-render the segment
           () => reset()
         }
       >
         Try again
-      </button>
+      </Button>
     </div>
   );
 }

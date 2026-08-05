@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OfficeEditorInstance } from "@agentbridges-ai/onlyoffice-browser";
 import { ONLYOFFICE_PLUGIN_GUID } from "../shared/onlyoffice.js";
+import { setUiCopyLanguage, uiCopy } from "./ui-copy.js";
 
 const temporaryRuntime = vi.hoisted(() => ({
   executeUserSpaceOperation: vi.fn(),
   getUserSpaceFile: vi.fn(),
   saveUserSpaceFile: vi.fn(),
   mount: vi.fn(),
+  planOfficeResourcesForFile: vi.fn(),
+  applyOfficeResourcePlan: vi.fn(),
+  officeResourcesReadyForRelease: vi.fn(),
 }));
 
 vi.mock("./user-space.js", () => ({
@@ -21,8 +25,17 @@ vi.mock("./office-host-adapter.js", () => ({
   officePreviewRuntimeManager: { mount: temporaryRuntime.mount },
 }));
 
+vi.mock("./office-runtime-resources.js", () => ({
+  planOfficeResourcesForFile: temporaryRuntime.planOfficeResourcesForFile,
+  applyOfficeResourcePlan: temporaryRuntime.applyOfficeResourcePlan,
+  officeResourcesReadyForRelease: temporaryRuntime.officeResourcesReadyForRelease,
+}));
+
 vi.mock("./onlyoffice-host-url.js", () => ({
-  resolvePiworkOnlyOfficeHostUrl: vi.fn(() => "http://office.localhost/office-host.html"),
+  resolvePiworkOnlyOfficeHostUrl: vi.fn(
+    (context: { hostSlot: string }, releaseId?: string) =>
+      `https://${context.hostSlot}.getpi.work${releaseId ? `/r/${releaseId}` : ""}/office-host.html`,
+  ),
 }));
 
 import {
@@ -34,9 +47,24 @@ import { executeUserSpaceOperation } from "./user-space.js";
 
 const cleanups: Array<() => void> = [];
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  setUiCopyLanguage("zh-CN");
+  temporaryRuntime.planOfficeResourcesForFile.mockResolvedValue({
+    planId: "plan-test-release",
+    releaseId: "test-release",
+    scope: "document",
+    profiles: ["base", "word"],
+    totalBytes: 100,
+    downloadBytes: 0,
+    reusedBytes: 100,
+  });
+  temporaryRuntime.applyOfficeResourcePlan.mockResolvedValue(undefined);
+  temporaryRuntime.officeResourcesReadyForRelease.mockReturnValue(true);
+});
+
 afterEach(() => {
   while (cleanups.length) cleanups.pop()?.();
-  vi.clearAllMocks();
 });
 
 function editor(): OfficeEditorInstance {
@@ -214,12 +242,75 @@ describe("ONLYOFFICE browser executor", () => {
         },
       }),
     );
+    const hostUrl = temporaryRuntime.mount.mock.calls[0]?.[1]?.hostUrl as
+      ((context: { hostSlot: string }) => string) | undefined;
+    expect(hostUrl?.({ hostSlot: "aries" })).toBe(
+      "https://aries.getpi.work/r/test-release/office-host.html",
+    );
     expect(instance.invokePlugin).toHaveBeenCalledWith(ONLYOFFICE_PLUGIN_GUID, {
       type: "get_document_text",
     });
     expect(responses).toEqual([expect.objectContaining({ ok: true, result: { text: "hello" } })]);
     expect(dispose).toHaveBeenCalledOnce();
     expect(document.querySelector('[style*="-100000px"]')).toBeNull();
+  });
+
+  it("activates a zero-download resource plan before mounting a temporary editor", async () => {
+    const instance = editor();
+    temporaryRuntime.getUserSpaceFile.mockResolvedValue(new File(["source"], "Ready.docx"));
+    temporaryRuntime.officeResourcesReadyForRelease
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    temporaryRuntime.mount.mockImplementation(
+      (_container: HTMLElement, options: Record<string, unknown>) => {
+        queueMicrotask(() => {
+          const onPluginReady = options.onPluginReady as
+            ((guid: string, editorType: string, editor: OfficeEditorInstance) => void) | undefined;
+          onPluginReady?.(ONLYOFFICE_PLUGIN_GUID, "word", instance);
+        });
+        return { ready: Promise.resolve(instance), dispose: vi.fn(async () => undefined) };
+      },
+    );
+
+    await handleOnlyOfficeBrowserRequest(
+      "session-activation",
+      {
+        type: "onlyoffice_request",
+        request_id: "activate-before-mount",
+        target: { mountId: "mount-1", path: "Ready.docx" },
+        operation: { type: "get_document_text" },
+      },
+      () => undefined,
+    );
+
+    expect(temporaryRuntime.applyOfficeResourcePlan).toHaveBeenCalledOnce();
+    expect(temporaryRuntime.applyOfficeResourcePlan.mock.invocationCallOrder[0]).toBeLessThan(
+      temporaryRuntime.mount.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("fails closed when resource activation does not make the release ready", async () => {
+    setUiCopyLanguage("en-US");
+    temporaryRuntime.getUserSpaceFile.mockResolvedValue(new File(["source"], "Blocked.docx"));
+    temporaryRuntime.officeResourcesReadyForRelease.mockReturnValue(false);
+    const responses: unknown[] = [];
+
+    await handleOnlyOfficeBrowserRequest(
+      "session-blocked",
+      {
+        type: "onlyoffice_request",
+        request_id: "blocked-before-mount",
+        target: { mountId: "mount-1", path: "Blocked.docx" },
+        operation: { type: "get_document_text" },
+      },
+      (response) => responses.push(response),
+    );
+
+    expect(temporaryRuntime.applyOfficeResourcePlan).toHaveBeenCalledOnce();
+    expect(temporaryRuntime.mount).not.toHaveBeenCalled();
+    expect(responses).toEqual([
+      expect.objectContaining({ ok: false, error: uiCopy.userSpace.office.resourcesNotReady }),
+    ]);
   });
 
   it("migrates legacy temporary targets before deleting the source", async () => {

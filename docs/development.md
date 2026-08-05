@@ -1,52 +1,128 @@
 # Development Workflow
 
-Piwork runs as a single local Bun server plus Vite. Better Auth + Postgres
-provides authentication; Piwork product state stays in `data/`.
+Piwork's default local deployment is a fixed single-node Compose stack. Bun
+runs Web/Hono and Vite, while a separate non-root Runtime container launches
+the pinned Node + native Pi process inside one SRT per session. Better Auth +
+Postgres provides authentication; Piwork product state stays in tenant-scoped
+`data/`.
 
 ```bash
 make install
-install -m 600 .env.example .env
-# edit DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
-make auth-migrate
+make selfhost-init
 make dev
 ```
 
 Open the Frontend URL printed by `make dev`.
 
+## Linux execution host
+
+Piwork's complete local runtime must run on Linux. The SRT policy can enforce
+filesystem and network rules on macOS, but only Linux provides the PID namespace
+needed to contain every Pi descendant process. Keep the entire local runtime in
+one Linux environment so session paths, one-use Unix sockets, process signals,
+and the protected User Space transport never cross a host/guest boundary.
+
+| Host OS | Linux development runtime | Host responsibilities          |
+| ------- | ------------------------- | ------------------------------ |
+| macOS   | OrbStack Linux machine    | IDE, browser, Chrome extension |
+| Windows | WSL2 Linux distribution   | IDE, browser, Chrome extension |
+| Linux   | Native Linux              | IDE, browser, Chrome extension |
+
+Inside Linux, run Bun, Node, SRT, Pi, Postgres, `make install`, `make migrate`,
+`make dev`, and the SRT canaries. Keep the checkout and `data/` on the Linux
+filesystem rather than a host-mounted path where possible; this avoids VM/WSL
+filesystem performance and path-identity surprises. The browser can still use
+the host's Chrome and File System Access API through the forwarded API/Vite
+ports.
+
+Do not reuse a host `node_modules` directory inside Linux. Run `make install`
+inside the Linux runtime so Bun installs private package metadata with the
+repository's SRT trust settings.
+
+On macOS, open the checkout from an OrbStack Linux shell and run the commands
+there. On Windows, verify the distribution is WSL2 with `wsl -l -v`, then open a
+WSL2 shell and run the commands there. WSL2 forwards Linux listening ports to
+Windows `localhost` on supported Windows versions; OrbStack should expose the
+configured API/Vite ports to the host as part of its Linux machine networking.
+
+For a new Windows host, the Microsoft-documented starting point is
+`wsl --install -d Ubuntu`; confirm the result with `wsl -l -v` and convert the
+distribution with `wsl --set-version <Distro> 2` when necessary. For a new
+macOS host, create/start an OrbStack Linux machine and use its Linux shell for
+the checkout and all commands below.
+
+The Chrome extension bridge is also a host/guest boundary: keep
+`PIWORK_AGENT_BROWSER_BRIDGE_PORT` stable and verify that the Linux bridge port
+is reachable from host Chrome. Do not weaken the bridge or SRT policy by binding
+internal capability transports to a public interface. macOS Keychain is not
+available inside the Linux runtime, so use the documented one-use provider
+bootstrap from inside Linux rather than forwarding Keychain credentials.
+
+Useful host references: [OrbStack](https://orbstack.dev/) and Microsoft's
+[WSL installation guide](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+## Official Pi development guide
+
+The only normative Agent/runtime guide is the official `earendil-works/pi`
+repository pinned at [`docs/upstream/pi`](upstream/pi). Initialize it after
+cloning Piwork:
+
+```bash
+git submodule update --init docs/upstream/pi
+make verify-pi-upstream
+```
+
+Use `make sync-pi-upstream` to advance the gitlink to the latest official
+`main`, then review that dependency-pin diff before adapting Piwork. For RPC
+work, begin with
+[`packages/coding-agent/docs/rpc.md`](upstream/pi/packages/coding-agent/docs/rpc.md),
+but use the rest of the same upstream repository when the behavior crosses
+extensions, Skills, packages, sessions, compaction, providers, or tools.
+Community projects may identify cases worth testing; they are not protocol or
+product authorities.
+
 ## Service Split
 
 ```text
 Browser
-  -> Vite dev server
-  -> /api/* and /ws/* to local Bun server
+  -> Caddy (only published port)
+  -> Vite source frontend / Web API
 
-Local Bun server
+Web container (Bun/Hono, OrbStack/WSL2 on non-Linux hosts)
   -> Better Auth routes at /api/auth/*
   -> /api/auth/mode and /api/me app routes
   -> per-user runtime registry keyed by Better Auth user.id
   -> Pi-shaped browser WebSocket
-  -> PiAdapter and strict LF JSONL RPC
-  -> one SRT-contained Node + Pi rpc-entry per session
+  -> private HMAC Unix JSONL Runtime socket
+
+Runtime container (Node >=22.19 + Pi + SRT)
+  -> one Pi rpc-entry generation per session
+  -> tenant/user/membership/org/session/generation scope
+  -> no Postgres, TCP listener, or Docker Socket
 
 Postgres
-  -> Better Auth users/accounts/sessions
+  -> Better Auth users/accounts/sessions and tenant control plane
+  -> RLS through the non-owner Web role
 
 Filesystem state
-  -> data/<betterAuthUserId>/...
-  -> data/<betterAuthUserId>/<sessionId>/...
+  -> data/tenants/<tenantId>/users/<userId>/...
+  -> data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/...
 ```
 
 ## Commands
 
 ```bash
-make dev           # local API + Vite
+make dev           # verified Compose source stack
 make dev-fast      # alias for make dev
 make dev-fast-stop # stop local dev processes
+make dev-native    # explicit in-process native Pi debug path
+make selfhost-doctor
+make selfhost-up
+make selfhost-down
+make selfhost-backup
+make selfhost-upgrade
 make status        # check local API and frontend
 make agent-browser-e2e # real Mac Chrome extension bridge smoke test
-make prepare-onlyoffice-fonts # collect local fonts and generate Office assets
-make onlyoffice-save-e2e # run OnlyOffice save-flow E2E
-make onlyoffice-print-e2e # run OnlyOffice print-flow E2E
 
 make auth-generate # generate Better Auth SQL schema
 make auth-migrate  # apply Better Auth schema to Postgres
@@ -57,6 +133,7 @@ make format-check
 make deadcode
 make dry-check
 make test-targeted
+make verify-pi-upstream
 make verify-pi-only-runtime
 make test-pi-rpc-contract
 make test-srt-pi
@@ -67,7 +144,8 @@ make check        # quality gates + targeted tests + production build
 make verify       # frozen install + all gates + full release verification
 ```
 
-All CI jobs use the same checked-in Node.js `26.5.0` and Bun `1.3.9` setup.
+All CI and development Linux runtimes use the same checked-in Node.js `26.5.0`
+and Bun `1.3.9` setup.
 The supported Node.js runtime floor remains `>=22.19.0`, matching the pinned Pi
 package. `make verify-pi-versions` rejects dependency or `rpc-entry` drift
 before the RPC and SRT probes run. `make verify-pi-only-runtime` rejects
@@ -78,7 +156,29 @@ Run `make format` to apply the repository Prettier configuration. Generated,
 vendored, runtime, and policy-owned files are excluded explicitly; CI and the
 pre-commit hook use `make format-check` and never rewrite files.
 
-`make dev` writes process ids and logs under `.runtime/`:
+`make dev-native` writes process ids and logs under `.runtime/`. Compose state is
+managed by `scripts/selfhost.sh`; use `selfhost status` rather than treating
+container PIDs as application authority.
+
+## Compose release and security gate
+
+Source mode builds only the fixed Web and Runtime images and keeps Vite HMR
+inside the stack. Release mode reads `release/piwork-compose-release-manifest.json`
+(or `PIWORK_RELEASE_MANIFEST`) as its single image source and requires every
+image reference to be an immutable `@sha256:` digest. Run
+`make selfhost-release-validate` before a release deployment. Caddy
+is the only service with a host port; Runtime is non-root, read-only-rootfs,
+`cap_drop: ALL`, `no-new-privileges`, bounded by PID/memory limits, and uses the
+checked-in seccomp profile. `doctor --require-verified` rejects privileged mode,
+host networking, extra capabilities, writable rootfs, unconfined seccomp, and
+Docker Socket mounts, then runs the nested-SRT and per-session isolation canary.
+
+`selfhost backup` stops Web/Runtime before writing a pg_dump and data snapshot;
+the manifest and SHA-256 file never include the Runtime control key, database
+application password, or other secret files. `selfhost restore` verifies both
+before replacing the fixed data volume and restoring the database.
+
+The old native process files are still used by `make dev-native`:
 
 - `.runtime/server.log`
 - `.runtime/vite.log`
@@ -93,11 +193,13 @@ Start from `.env.example` and copy only the values you need.
 Important variables:
 
 - `DATABASE_URL` - required Postgres connection string for Better Auth.
-- `PIWORK_POSTGRES_DATA_DIR` - explicit local Postgres data directory used by
-  `make dev` auto-start.
+- `PIWORK_POSTGRES_DATA_DIR` - explicit local Postgres data directory used only
+  by the optional `make dev-native` auto-start path; Compose uses its Postgres
+  service volume.
 - `PIWORK_PG_CTL_BIN` - explicit absolute path to the matching `pg_ctl`
-  executable. Both Postgres path variables are required for auto-start; the
-  launcher does not infer `PGDATA`, `PATH`, or a package-manager installation.
+  executable. Both Postgres path variables are required for the native path;
+  the launcher does not infer `PGDATA`, `PATH`, or a package-manager
+  installation.
 - `BETTER_AUTH_SECRET` - required in shared/dev-like environments; generate with `openssl rand -base64 32`.
 - `BETTER_AUTH_URL` - API base URL, usually `http://127.0.0.1:3457`.
 - `PORT` - Bun API port, default `3457`.
@@ -108,7 +210,8 @@ Important variables:
 - `PIWORK_AGENT_BROWSER_BRIDGE_PORT` - loopback bridge port; defaults to `19826`.
 - `PIWORK_SESSION_SANDBOX` - defaults to `srt`; the launcher accepts only the
   repo-local pinned package and a server-generated principal policy. Enforced
-  session launch currently requires Linux.
+  session launch requires Linux. Native macOS and Windows entrypoints fail
+  closed and direct development must move into OrbStack Linux or WSL2 Linux.
 - `PIWORK_PI_MODEL_ALLOWLIST` - platform-level `provider/model` glob
   allowlist. The final visible set is its intersection with Agent policy,
   injectable providers, and the Agent network policy.
@@ -126,12 +229,12 @@ kernel-owned lifetime boundary for every descendant. Pinned SRT 0.0.65 on
 macOS provides Seatbelt filesystem/network rules but no equivalent descendant
 process boundary: a process can create a new session and survive the SRT CLI.
 Piwork therefore refuses macOS and Windows SRT session launches before the
-Pi process is spawned. The server and frontend can still be developed on
-macOS, but a security-enforced Pi session needs a Linux host until a trusted
-macOS supervisor is available.
+Pi process is spawned. The server, frontend, and Pi session are developed
+together inside OrbStack Linux or WSL2 Linux on those host operating systems.
 
 There is no unsandboxed Agent runtime escape hatch. Development that needs to
-execute a Pi session uses the supported Linux SRT path.
+execute a Pi session uses the supported Linux SRT path inside the host's Linux
+VM or WSL2 distribution.
 
 The browser ownership state machine, page boundary, dual dispatch fences, and
 real-browser verification obligations are defined in
@@ -145,16 +248,17 @@ provider or carries model traffic. The generation-scoped User Space capability
 remains mandatory, and the ordinary browser listener does not serve
 `/internal/*`.
 
-`make dev` sources root `.env` if present, validates `DATABASE_URL` with
-`select 1`, then starts detached local API and Vite processes. When that check
-fails for a loopback/localhost URL, it starts `pg_ctl` using the explicitly
-configured `PIWORK_POSTGRES_DATA_DIR` and
-`PIWORK_PG_CTL_BIN`, then waits up to 10 seconds for the connection. There is
-no `PGDATA`, `PATH`, or Homebrew fallback. A failed start can recover a stale
-`postmaster.pid` only after confirming its PID is not Postgres and the configured
-endpoint is not accepting connections; the lock is moved to `.runtime/` rather
-than deleted. It never installs Postgres or attempts to start a service for a
-remote database URL.
+`make dev` and `make dev-compose` run the fixed Compose source stack through
+`scripts/selfhost.sh`; Caddy is the only published port and the Web/Runtime/
+Postgres services stay on the Compose networks. `make dev-native` is the
+explicit Linux-only debug path: it sources root `.env`, validates
+`DATABASE_URL`, and may start local Postgres with the explicitly configured
+`PIWORK_POSTGRES_DATA_DIR` and `PIWORK_PG_CTL_BIN`. There is no `PGDATA`,
+`PATH`, or Homebrew fallback. A failed native start can recover a stale
+`postmaster.pid` only after confirming its PID is not Postgres and the
+configured endpoint is not accepting connections; the lock is moved to
+`.runtime/` rather than deleted. It never installs Postgres or attempts to
+start a service for a remote database URL.
 
 ## Agent browser bridge
 
@@ -204,26 +308,101 @@ Runtime ownership is split intentionally:
 - The UI reports artifact, daemon, and extension state without exposing tab
   URLs or page content.
 
-## OnlyOffice Fonts
+## OnlyOffice Deployment Boundary
 
-OnlyOffice browser preview needs generated font assets before Office documents
-are opened. The project default is:
+Piwork does not build or serve the OnlyOffice Host, SDK, WASM, dictionaries, or
+font assets. Each editor uses an isolated
+`https://office-editor-<session>.getpi.work/office-host.html` Host and loads
+shared resources from `https://onlyoffice.getpi.work/`.
 
-```text
-fonts/onlyoffice-browser/
-```
+OnlyOffice runtime and font changes are developed, tested, and deployed from
+the `onlyoffice-browser` repository. Piwork consumes its published npm client
+API and pins the expected deployed runtime identity in the release manifest.
+`make dev`, `make build`, and `make status` neither require a local
+`onlyoffice-browser` checkout nor block on the remote deployment.
 
-Maintainers can refresh this directory with:
+`make verify` includes the default offline descriptor gate and therefore accepts
+only `lifecycle: supported`. For a release integration, run
+`make verify-onlyoffice-release` for the pinned descriptor alone, or
+`make verify-onlyoffice-release ONLYOFFICE_RELEASE_VERIFY_ARGS=--online` for the
+normal online gate. The online gate checks the npm
+registry integrity, `gitHead`, and the registry attestation record's decoded
+SLSA subject/source bindings (it does not independently verify Sigstore
+cryptography), observes the current no-store `stable-v5` pointer, and
+independently verifies the pinned immutable manifest digest plus the exact
+`/r/<releaseId>/office-host.html` embedding headers. The observed stable
+release is not required to equal Piwork's explicit pin. This check does not
+fetch or inspect Host bundles or fonts. The former
+`ensure-onlyoffice-browser.sh` and `prepare-onlyoffice-fonts.sh` commands are
+intentionally retired and fail closed.
 
-```bash
-make prepare-onlyoffice-fonts
-```
+`repositories.Piwork.integrationBaseCommit` records the commit where the
+integration branch diverged; it is not a self-reference to an unknowable future
+merge SHA. The CLI requires it to be an ancestor of the checked-out `HEAD`. On a
+pull request, CI also supplies the event's base and head SHAs and requires this
+field to equal their Git merge base. A rebase that changes the branch point must
+update the descriptor in the same change.
 
-`make dev` and `make build` validate `fonts/onlyoffice-browser/` automatically.
-They do not implicitly regenerate fonts when the checked-in assets are missing or
-invalid; refresh them intentionally with the command above.
-See [../fonts/README.md](../fonts/README.md) for the target Office font list,
-fallback behavior, and licensing notes.
+Schema 4 remains accepted only for the allowlisted current legacy supported
+release; it cannot be reused for a new candidate or release. Schema 5 candidates
+may omit promotion evidence while they are under integration, but a schema 5
+supported descriptor must include a versioned promotion receipt path beneath
+`/promotions/<releaseId>/<candidateCommit>-<receiptSha256>.json`. The path binds
+the release ID, browser runtime source commit, and receipt byte digest. The
+descriptor also records `piworkIntegrationCommit`, `deepVerifyRunId`,
+`deepVerifyRunAttempt`, `stagingRunId`, and `productionRunId`; the CLI requires
+the Piwork integration commit to remain an ancestor of `HEAD`. Online verification checks immutable
+caching, the byte digest, the protected-workflow/R2 trust root, stable channel,
+candidate identity, staging and Piwork runs, the exact Piwork run attempt and
+release-named candidate job, previous stable release, runtime manifest identities,
+and the `agentbridges-ai/onlyoffice-browser` production workflow run.
+
+The descriptor deliberately records two different browser commits: `npmPackage.sourceCommit`
+is the commit attested by npm for the Piwork-facing proxy API (`gitHead`), while
+`runtimeIdentity.sourceCommit` is the commit that produced the immutable Host/runtime
+release. They may differ for a Host-only release. The registry and npm SLSA checks bind
+only the former; the immutable runtime manifest, Host route, and descriptor bind the latter.
+Schema 5 browser release manifests must emit `sourceCommit`, and Piwork requires it to equal
+`runtimeIdentity.sourceCommit`. The allowlisted schema 4 release remains verifiable because
+its older immutable manifest did not emit that field.
+
+The cross-repository update train is:
+
+1. If conversion bytes change, release `onlyoffice-x2t-wasm` first and bind its
+   version, commit, and WASM digest into the browser release manifest.
+2. Build an immutable `onlyoffice-browser` candidate. Publish npm from a signed
+   tag only when the Piwork-facing proxy API changes; Host-only candidates keep
+   the already published exact npm version.
+3. On a same-repository Piwork integration branch, use schema 5 and temporarily
+   set the descriptor lifecycle to `candidate`. Dispatch `deep verify` on that exact ref with
+   `onlyoffice_candidate_integration=true` and
+   `onlyoffice_candidate_release_id=<releaseId>`. The dedicated job is named
+   `OnlyOffice candidate integration / <releaseId>` and runs
+   `--online --allow-candidate --candidate-integration`; it verifies the selected
+   checkout equals the workflow run's `head_sha`. Pull-request and normal CI
+   never pass `--allow-candidate`, so their required checks stay red until the
+   descriptor becomes supported.
+4. After browser production approval advances `stable-v5`, change the Piwork
+   descriptor lifecycle to `supported`, rerun the normal online gate, and merge
+   the exact npm integrity plus immutable runtime pin. Piwork never follows the
+   mutable stable pointer as authority.
+
+Browser promotion may consume only a successful `deep verify` run whose event is
+`workflow_dispatch`, whose candidate job and release ID match, and whose
+`head_sha` still identifies the head of an open same-repository PR targeting
+`main`. Resolve that PR through `commits/{head_sha}/pulls` and reject closed,
+cross-repository, wrong-base, or head-drifted PRs.
+
+All external GitHub Actions are pinned to immutable 40-character commits with
+their exact release tag retained in a comment. `make verify-actions-pinning`
+scans every workflow and composite action and is part of both normal verification
+paths. The `deep verify` and `verify` pull-request triggers are intentionally
+unfiltered so required checks are created even for documentation-only PRs; push
+filters may still avoid redundant post-merge runs.
+
+Rollback moves only the browser `stable-v5` pointer. Existing Piwork releases
+remain on their explicit immutable runtime; changing a supported Piwork pin is
+a separate reviewed integration change.
 
 ## OnlyOffice Save Chain
 
@@ -287,62 +466,40 @@ viewer can also use the PDF Title metadata. The browser runtime therefore adds
 the filename to the temporary URL and writes a UTF-16BE `/Title` into generated
 print PDFs.
 
-## OnlyOffice Dev Cache And Iframe Isolation
+## OnlyOffice Package Cache And Iframe Isolation
 
-OnlyOffice runs inside a per-editor `host-*.localhost` iframe. The outer host
+OnlyOffice runs inside a per-editor
+`office-editor-<session>.getpi.work` iframe. The outer host
 iframe must not have a `sandbox` attribute: the editor's native print flow loads
 a generated PDF into its own `#id-print-frame` and then calls
 `iframe.contentWindow.print()`, which requires script access inside the same
 editor host origin. Reintroducing a sandbox can make Chrome report the nested
 print frame as cross-origin even when the URL looks correct.
 
-During local development, `make dev` prepares the repo-local
-`onlyoffice-browser/` checkout, overlays its `dist/npm` bundle into
-`web/node_modules/@agentbridges-ai/onlyoffice-browser`, clears
-`web/node_modules/.vite`, and starts Vite with `--force`. In addition,
-`web/vite.config.ts` excludes `@agentbridges-ai/onlyoffice-browser` from
-`optimizeDeps` and sends `no-store` headers for any remaining dev module URL
-for that package. This is intentional. Vite optimized dependencies use
+During local development, Piwork imports the published
+`@agentbridges-ai/onlyoffice-browser` package installed under `web/node_modules`.
+`web/vite.config.ts` excludes it from `optimizeDeps` and sends `no-store`
+headers for its module URLs. Vite optimized dependencies use
 immutable `?v=` URLs, and Chrome can keep executing an older prebundled
-`@agentbridges-ai/onlyoffice-browser` module even after the files on disk are
-correct. If real Chrome shows `iframe.office-editor-host-frame[sandbox]`, treat
-it as a stale-dev-cache regression, restart through `make dev`, and do not debug
-the PDF conversion path until the outer iframe has no `sandbox` attribute.
+module after the installed package changes. If real Chrome shows
+`iframe.office-editor-host-frame[sandbox]`, confirm the published npm version,
+restart `make dev`, and reopen the Office iframe.
 
 `onlyoffice-browser` has two build outputs that must stay in sync. `dist/npm`
 is the package API imported by Piwork, while `dist/assets/officeHost-*.js`
 and `dist/assets/converter-*.js` are the code that actually runs inside the
 editor host iframe. Save, Print, Download as, and document resource fixes are
-usually in the host runtime path. `scripts/ensure-onlyoffice-browser.sh` must
-rebuild runtime assets when `onlyoffice-browser/src`, `pages`, or runtime build
-configuration changes; `web/server/onlyoffice-prepare-script.test.ts` protects
-this stale-runtime check. Do not treat `pnpm run build:lib`, unit tests against
-`office-editor-runtime.ts`, or a synced `web/node_modules/.../dist/npm` bundle
-as proof that Piwork is running the new editor behavior. After changing the
-host runtime, run `./scripts/ensure-onlyoffice-browser.sh`, check the relevant
-signature in `onlyoffice-browser/dist/assets/officeHost-*.js`, then reload or
-reopen the Office iframe in Chrome before real-browser verification. An already
-open editor iframe can keep executing the previous host bundle even after the
-new files exist on disk.
-
-The editor runtime served by Piwork must also be the compact OnlyOffice
-profile, not a full upstream `dist`. `onlyoffice-browser/bin/build.sh` runs
-`scripts/build-onlyoffice-runtime-assets.mjs --prune-root`, writes
-`onlyoffice-browser/dist/onlyoffice-runtime-assets.json`, and removes low-use
-runtime files from the served tree. `scripts/ensure-onlyoffice-browser.sh`
-treats the runtime as stale unless that manifest exists and the served `dist`
-contains only the Word, Spreadsheet, Presentation, shared core, x2t, libs, and
-`en_US` dictionary profile. The guard rejects bundled PDF/Visio SDKs, bundled
-font directories, FileConverter font assets, non-selected dictionaries, and
-bundled help image trees. Generated development fonts still live under
-`fonts/onlyoffice-browser/` and are served as an overlay; they are not copied
-from the upstream package runtime.
+usually in the Host runtime path. Build and verify both outputs in the
+`onlyoffice-browser` repository, deploy the Host and shared assets to
+`onlyoffice.getpi.work`, publish the npm package when its public API changes,
+then update Piwork's package and release-manifest pins. An already open editor
+iframe can keep executing the previous Host bundle, so reopen it after a
+deployment.
 
 The OnlyOffice service worker is registered at the editor host root so the
 native print iframe can fetch the generated PDF as a same-origin URL. It must
-only handle Office runtime files and `/__onlyoffice-browser-print__/`; it must
-not intercept Piwork app routes, Vite dev routes, `/node_modules/.vite/`,
-`/src/`, or API/WebSocket paths.
+only handle Office runtime files and `/__onlyoffice-browser-print__/` on the
+Office Host origin; Piwork never serves or registers that service worker.
 
 Authoritative references for this behavior:
 
@@ -470,7 +627,7 @@ match to be unique and non-overlapping, and applies the full edit set atomically
 active browser directory. It cannot discover or execute host/container
 programs. `/` and `$HOME` both refer to the active User Space root.
 
-The canonical registry is `web/src/user-space-shell-contract.ts`; use
+The canonical registry is `web/shared/user-space-shell-contract.ts`; use
 `user-space bash --capabilities` to inspect it at runtime. Supported syntax is
 limited to the tested shell surface: pipelines, redirections, heredocs/here
 strings, `&&`/`||`, variables and `export`, command substitution, globs, and

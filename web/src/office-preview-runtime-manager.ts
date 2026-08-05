@@ -38,6 +38,8 @@ export interface OfficePreviewRuntimeManagerOptions {
   retryLimit?: number;
 }
 
+export const MAX_ACTIVE_OFFICE_PREVIEWS = 12;
+
 type EditorTrackingState = {
   dirty: boolean;
   lastSaveError: Error | null;
@@ -87,6 +89,15 @@ export class OfficeContextSwitchBlockedError extends Error {
   }
 }
 
+export class OfficePreviewLimitError extends Error {
+  readonly capacity = MAX_ACTIVE_OFFICE_PREVIEWS;
+
+  constructor() {
+    super("office-preview-capacity");
+    this.name = "OfficePreviewLimitError";
+  }
+}
+
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
@@ -104,10 +115,7 @@ function identitiesEqual(left: OfficeHostIdentity, right: OfficeHostIdentity): b
 }
 
 function expectedReleaseIdentity(): OfficeHostIdentity {
-  const identity =
-    typeof __PIWORK_ONLYOFFICE_DEVELOPMENT_IDENTITY__ === "undefined"
-      ? releaseManifest.runtimeIdentity
-      : __PIWORK_ONLYOFFICE_DEVELOPMENT_IDENTITY__;
+  const identity = releaseManifest.runtimeIdentity;
   if (
     !identity ||
     typeof identity.packageVersion !== "string" ||
@@ -180,6 +188,10 @@ export class OfficePreviewRuntimeManager {
     if (this.records.has(resourceKey)) {
       throw new Error(`Office preview ${resourceKey} is already mounted`);
     }
+    const activeCount = [...this.records.values()].filter(
+      (record) => record.status !== "error" && record.status !== "disposed",
+    ).length;
+    if (activeCount >= MAX_ACTIVE_OFFICE_PREVIEWS) throw new OfficePreviewLimitError();
 
     let resolveReady!: (instance: OfficeEditorInstance) => void;
     let rejectReady!: (error: Error) => void;

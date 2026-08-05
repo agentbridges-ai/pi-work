@@ -20,7 +20,6 @@ import { Composer } from "./Composer.js";
 import { InteractionCard } from "./InteractionCard.js";
 import { AgentActivityBar } from "./AgentActivityBar.js";
 import { BrowserBridgePanel } from "./BrowserBridgePanel.js";
-import { UserSettingsDialog } from "./UserSettingsDialog.js";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog.js";
 import { getAgentIdForSession, isAgentDisplayName, type AgentId } from "../agents.js";
 import { navigateHome, navigateRbacAdmin } from "../utils/routing.js";
@@ -37,6 +36,7 @@ import { persistWorkspaceSessionStateNow } from "../workspace-session-state.js";
 import { savePreferencesLatest } from "../preferences-persistence.js";
 import { uiCopy } from "../ui-copy.js";
 import { isAbortError, runtimeContextCoordinator } from "../runtime-context.js";
+import { subscribeOfficeResourceSettingsRequests } from "../office-resource-settings-channel.js";
 import { userScopeKeyFromCurrentUser } from "../store/user-scoped-storage.js";
 import {
   captureUserSpaceConfigurationContext,
@@ -71,6 +71,11 @@ const WORKSPACE_PANEL_BG_CLASS = "bg-background";
 const UserSpaceExplorer = lazy(async () => {
   const module = await import("./UserSpaceExplorer.js");
   return { default: module.UserSpaceExplorer };
+});
+
+const UserSettingsDialog = lazy(async () => {
+  const module = await import("./UserSettingsDialog.js");
+  return { default: module.UserSettingsDialog };
 });
 
 export function ChatView({ sessionId }: { sessionId: string }) {
@@ -111,6 +116,8 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   const [messageFeedBottomInsetPx, setMessageFeedBottomInsetPx] = useState(
     DEFAULT_MESSAGE_FEED_BOTTOM_INSET_PX,
   );
+
+  useEffect(() => subscribeOfficeResourceSettingsRequests(() => setUserSettingsOpen(true)), []);
   const sessionInteractions = useStore((s) => s.pendingInteractions.get(sessionId));
   const selectedAgentId = useStore((s) => s.selectedAgentId);
   const agentSessionIds = useStore((s) => s.agentSessionIds);
@@ -1042,32 +1049,34 @@ export function ChatView({ sessionId }: { sessionId: string }) {
         </div>
       </div>
       {currentUser && userSettingsOpen && (
-        <UserSettingsDialog
-          user={currentUser}
-          archivedSessions={archivedSessions}
-          selectedArchivedSessionIds={selectedArchivedSessionIds}
-          archivedLoading={archivedLoading}
-          archivedError={archivedError}
-          archivedActionId={archivedActionId}
-          preferences={preferences}
-          preferencesError={preferencesError}
-          uiLanguage={uiLanguage}
-          agentSessionIds={agentSessionIds}
-          agentSessionHistoryIds={agentSessionHistoryIds}
-          getSessionTitle={getSessionTitle}
-          onUserSpacePreferenceChange={handleUserSpacePreferenceChange}
-          onOfficeFileDefaultChange={handleOfficeFileDefaultChange}
-          onToggleArchivedSessionSelection={toggleArchivedSessionSelection}
-          onSetAllArchivedSessionSelection={setAllArchivedSessionSelection}
-          onRestoreArchivedSession={restoreArchivedSession}
-          onHardDeleteArchivedSession={hardDeleteArchivedSession}
-          onRestoreSelectedArchivedSessions={restoreSelectedArchivedSessions}
-          onHardDeleteSelectedArchivedSessions={hardDeleteSelectedArchivedSessions}
-          onClose={() => {
-            setUserSettingsOpen(false);
-            requestAnimationFrame(() => userAvatarButtonRef.current?.focus());
-          }}
-        />
+        <Suspense fallback={null}>
+          <UserSettingsDialog
+            user={currentUser}
+            archivedSessions={archivedSessions}
+            selectedArchivedSessionIds={selectedArchivedSessionIds}
+            archivedLoading={archivedLoading}
+            archivedError={archivedError}
+            archivedActionId={archivedActionId}
+            preferences={preferences}
+            preferencesError={preferencesError}
+            uiLanguage={uiLanguage}
+            agentSessionIds={agentSessionIds}
+            agentSessionHistoryIds={agentSessionHistoryIds}
+            getSessionTitle={getSessionTitle}
+            onUserSpacePreferenceChange={handleUserSpacePreferenceChange}
+            onOfficeFileDefaultChange={handleOfficeFileDefaultChange}
+            onToggleArchivedSessionSelection={toggleArchivedSessionSelection}
+            onSetAllArchivedSessionSelection={setAllArchivedSessionSelection}
+            onRestoreArchivedSession={restoreArchivedSession}
+            onHardDeleteArchivedSession={hardDeleteArchivedSession}
+            onRestoreSelectedArchivedSessions={restoreSelectedArchivedSessions}
+            onHardDeleteSelectedArchivedSessions={hardDeleteSelectedArchivedSessions}
+            onClose={() => {
+              setUserSettingsOpen(false);
+              requestAnimationFrame(() => userAvatarButtonRef.current?.focus());
+            }}
+          />
+        </Suspense>
       )}
       <KeyboardShortcutsDialog
         isOpen={keyboardShortcutsOpen}

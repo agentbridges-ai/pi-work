@@ -1,5 +1,6 @@
 const CACHE_PREFIX = "piwork-pwa-";
-const SHELL_CACHE = `${CACHE_PREFIX}offline-v1`;
+const SHELL_REVISION = "__PIWORK_SHELL_REVISION__";
+const SHELL_CACHE = `${CACHE_PREFIX}shell-${SHELL_REVISION}`;
 const OFFLINE_URL = "/offline.html";
 const SHELL_ASSETS = [
   OFFLINE_URL,
@@ -81,6 +82,9 @@ self.addEventListener("message", (event) => {
   const type = event.data?.type;
   if (type === "SKIP_WAITING") {
     void self.skipWaiting();
+  }
+  if (type === "GET_VERSION") {
+    event.ports?.[0]?.postMessage({ revision: SHELL_REVISION });
   }
 });
 

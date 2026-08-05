@@ -1,0 +1,129 @@
+name: release please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Verify release token configured
+        env:
+          PIWORK_RELEASE_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${PIWORK_RELEASE_TOKEN:-}" ]; then
+            echo "::error::Repository secret PIWORK_RELEASE_TOKEN is missing; configure the scoped release credential before retrying."
+            exit 1
+          fi
+
+      - name: Verify release token can access this repository
+        env:
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh api "/repos/${GITHUB_REPOSITORY}" --silent >/dev/null; then
+            echo "::error::PIWORK_RELEASE_TOKEN exists but GitHub rejected it or it cannot access this repository. Use a valid, unexpired credential with the documented repository permissions."
+            exit 1
+          fi
+
+      - name: Create or update the Piwork release PR
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # Generate evidence in this same trusted run so releases do not depend on
+      # a separately triggered release-created event.
+      - name: Checkout the published release tag
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+          fetch-depth: 1
+
+      - name: Collect required check URLs for the release commit
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        id: required-checks
+        env:
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha || github.sha }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls?per_page=20" --jq '.[].head.sha' > release-evidence-shas.txt
+          printf '%s\n' "${RELEASE_SHA}" >> release-evidence-shas.txt
+          sort -u release-evidence-shas.txt | while read -r sha; do
+            gh api "/repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?per_page=100" > "release-check-runs-${sha}.json"
+            gh api "/repos/${GITHUB_REPOSITORY}/commits/${sha}/status?per_page=100" > "release-statuses-${sha}.json"
+          done
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const policy = JSON.parse(readFileSync(".governance/github-policy.json", "utf8"));
+          const required = new Map(policy.requiredChecks.map((name) => [name, new Set()]));
+          const shas = readFileSync("release-evidence-shas.txt", "utf8")
+            .split(/\r?\n/)
+            .map((sha) => sha.trim())
+            .filter(Boolean);
+          const add = (context, url) => {
+            if (required.has(context) && url) required.get(context).add(url);
+          };
+          for (const sha of shas) {
+            const checkRuns = JSON.parse(readFileSync(`release-check-runs-${sha}.json`, "utf8"))
+              .check_runs || [];
+            for (const run of checkRuns) {
+              if (run.conclusion === "success") add(run.name, run.html_url);
+            }
+            const statuses = JSON.parse(readFileSync(`release-statuses-${sha}.json`, "utf8"))
+              .statuses || [];
+            for (const status of statuses) {
+              if (status.state === "success") add(status.context, status.target_url);
+            }
+          }
+          const missing = [...required]
+            .filter(([, urls]) => urls.size === 0)
+            .map(([context]) => context);
+          if (missing.length) {
+            throw new Error(`Missing successful required-check URLs: ${missing.join(", ")}`);
+          }
+          const urls = [...new Set([...required.values()].flatMap((values) => [...values]))];
+          appendFileSync(process.env.GITHUB_OUTPUT, `urls=${urls.join(",")}\n`);
+          NODE
+
+      - name: Generate release evidence
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ steps.release.outputs.sha || github.sha }}
+          REQUIRED_CHECK_URLS: ${{ steps.required-checks.outputs.urls }}
+        run: node scripts/governance/release-evidence.mjs --output release-evidence.json
+
+      - name: Export SPDX dependency graph
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        run: gh api "/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" > sbom.spdx.json
+
+      - name: Upload release evidence and SBOM
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: piwork-release-evidence-${{ steps.release.outputs.tag_name }}
+          path: |
+            release-evidence.json
+            sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 365

@@ -111,7 +111,7 @@ export interface AgentMessage {
   model?: PiModelRef;
   parentToolCallId?: string | null;
   stopReason?: string | null;
-  /** Provider-reported assistant failure retained from the native Pi message. */
+  /** Provider/runtime error attached to a terminal assistant message. */
   error?: string;
 }
 
@@ -119,6 +119,12 @@ export interface AgentMessageEvent {
   type: "agent_message";
   generation: number;
   message: AgentMessage;
+}
+
+export interface AgentMessageAcceptedEvent {
+  type: "agent_message_accepted";
+  generation: number;
+  clientMsgId: string;
 }
 
 export interface MessageDeltaEvent {
@@ -217,6 +223,12 @@ export interface InteractionRequestEvent {
   generation: number;
   request: InteractionRequest;
   timestamp: number;
+}
+
+export interface InteractionSnapshotEvent {
+  type: "interaction_snapshot";
+  generation: number;
+  requests: InteractionRequest[];
 }
 
 export interface AskInteractionResponse {
@@ -418,9 +430,11 @@ export type BrowserIncomingMessageBase =
   | { type: "session_init"; session: SessionState }
   | { type: "session_update"; session: Partial<SessionState> }
   | AgentMessageEvent
+  | AgentMessageAcceptedEvent
   | MessageDeltaEvent
   | ToolExecutionEvent
   | InteractionRequestEvent
+  | InteractionSnapshotEvent
   | InteractionResponseEvent
   | RunStateEvent
   | HistorySnapshotEvent

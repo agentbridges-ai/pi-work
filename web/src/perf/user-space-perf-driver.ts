@@ -84,18 +84,18 @@ async function runIndexScenario(count: number): Promise<Record<string, unknown>>
   }
 
   const importStarted = performance.now();
-  await index.begin();
-  await index.addBatch(batch);
-  const committed = await index.commit();
+  index.begin();
+  index.addBatch(batch);
+  const committed = index.commit();
   const importMs = performance.now() - importStarted;
-  const firstPage = await index.listChildren("bucket-000", 80);
-  const search = await index.searchPaths("needle-", 100);
+  const firstPage = index.listChildren("bucket-000", 80);
+  const search = index.searchPaths("needle-", 100);
 
-  await index.begin();
-  await index.addBatch([fileEntry("aborted/new.txt", 12)]);
-  await index.abort();
-  const abortedVisible = (await index.searchPaths("aborted", 10)).entries.length;
-  await index.clear();
+  index.begin();
+  index.addBatch([fileEntry("aborted/new.txt", 12)]);
+  index.abort();
+  const abortedVisible = index.searchPaths("aborted", 10).entries.length;
+  index.clear();
 
   return {
     count,
@@ -105,7 +105,7 @@ async function runIndexScenario(count: number): Promise<Record<string, unknown>>
     nextCursor: firstPage.nextCursor,
     searchMatches: search.entries.length,
     abortedVisible,
-    afterClear: await index.stats(),
+    afterClear: index.stats(),
   };
 }
 

@@ -22,8 +22,22 @@ interface BeforeInstallPromptEvent extends Event {
 
 type PwaListener = () => void;
 type UpdateGuard = () => boolean | Promise<boolean>;
+type PwaUpdateMessage =
+  | { protocol: 1; type: "HELLO"; tabId: string }
+  | { protocol: 1; type: "HELLO_ACK"; tabId: string }
+  | { protocol: 1; type: "PREPARE_UPDATE"; tabId: string; requestId: string }
+  | {
+      protocol: 1;
+      type: "PREPARE_RESULT";
+      tabId: string;
+      requestId: string;
+      safe: boolean;
+    };
 
-const UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+const UPDATE_INTERVAL_MS = 10 * 60 * 1000;
+const UPDATE_CHANNEL_NAME = "piwork-pwa-update-v1";
+const UPDATE_PEER_MAX_AGE_MS = 30_000;
+const UPDATE_PREPARE_TIMEOUT_MS = 500;
 const listeners = new Set<PwaListener>();
 const updateGuards = new Set<UpdateGuard>();
 let registration: ServiceWorkerRegistration | null = null;
@@ -31,6 +45,11 @@ let installPrompt: BeforeInstallPromptEvent | null = null;
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
 let lastUpdateCheck = 0;
+let updateChannel: BroadcastChannel | null = null;
+let updatePeerInterval: ReturnType<typeof setInterval> | null = null;
+const updateTabId = crypto.randomUUID();
+const updatePeers = new Map<string, number>();
+const prepareResponses = new Map<string, Map<string, boolean>>();
 
 function isStandalone(windowObject: Window, navigatorObject: Navigator): boolean {
   return (
@@ -76,6 +95,66 @@ export function registerPwaUpdateGuard(guard: UpdateGuard): () => void {
   return () => updateGuards.delete(guard);
 }
 
+async function localUpdateIsSafe(): Promise<boolean> {
+  for (const guard of updateGuards) {
+    if (!(await guard())) return false;
+  }
+  return true;
+}
+
+function broadcastUpdateMessage(message: PwaUpdateMessage): void {
+  updateChannel?.postMessage(message);
+}
+
+function initializeUpdateChannel(windowObject: Window): void {
+  const Channel = (windowObject as Window & { BroadcastChannel?: typeof BroadcastChannel })
+    .BroadcastChannel;
+  if (!Channel || updateChannel) return;
+  updateChannel = new Channel(UPDATE_CHANNEL_NAME);
+  updateChannel.addEventListener("message", (event: MessageEvent<PwaUpdateMessage>) => {
+    const message = event.data;
+    if (!message || message.protocol !== 1 || message.tabId === updateTabId) return;
+    updatePeers.set(message.tabId, Date.now());
+    if (message.type === "HELLO") {
+      broadcastUpdateMessage({ protocol: 1, type: "HELLO_ACK", tabId: updateTabId });
+      return;
+    }
+    if (message.type === "HELLO_ACK") return;
+    if (message.type === "PREPARE_UPDATE") {
+      void localUpdateIsSafe().then((safe) => {
+        broadcastUpdateMessage({
+          protocol: 1,
+          type: "PREPARE_RESULT",
+          tabId: updateTabId,
+          requestId: message.requestId,
+          safe,
+        });
+      });
+      return;
+    }
+    prepareResponses.get(message.requestId)?.set(message.tabId, message.safe);
+  });
+  const announce = () => broadcastUpdateMessage({ protocol: 1, type: "HELLO", tabId: updateTabId });
+  announce();
+  updatePeerInterval = setInterval(announce, 10_000);
+}
+
+async function allUpdatePeersAreSafe(): Promise<boolean> {
+  if (!updateChannel) return true;
+  const now = Date.now();
+  const expected = [...updatePeers.entries()]
+    .filter(([, seenAt]) => now - seenAt <= UPDATE_PEER_MAX_AGE_MS)
+    .map(([tabId]) => tabId);
+  if (!expected.length) return true;
+  const requestId = crypto.randomUUID();
+  const responses = new Map<string, boolean>();
+  prepareResponses.set(requestId, responses);
+  broadcastUpdateMessage({ protocol: 1, type: "PREPARE_UPDATE", tabId: updateTabId, requestId });
+  await new Promise((resolve) => setTimeout(resolve, UPDATE_PREPARE_TIMEOUT_MS));
+  prepareResponses.delete(requestId);
+  return expected.every((tabId) => responses.get(tabId) === true);
+}
+
 function observeInstallingWorker(worker: ServiceWorker, navigatorObject: Navigator): void {
   worker.addEventListener("statechange", () => {
     if (worker.state !== "installed") return;
@@ -115,7 +194,10 @@ export async function initializePwaLifecycle(
     });
   };
   displayMode?.addEventListener?.("change", refreshDisplayMode);
-  windowObject.addEventListener("online", () => updateState({ online: true }));
+  windowObject.addEventListener("online", () => {
+    updateState({ online: true });
+    void checkForUpdate();
+  });
   windowObject.addEventListener("offline", () => updateState({ online: false }));
   windowObject.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
@@ -132,6 +214,7 @@ export async function initializePwaLifecycle(
     return;
   }
 
+  initializeUpdateChannel(windowObject);
   updateState({ registrationStatus: "registering", error: null });
   try {
     // Keep this production URL literal so static PWA audits can verify that
@@ -147,6 +230,15 @@ export async function initializePwaLifecycle(
             updateViaCache: "none",
           });
 
+    if (!registration.waiting) {
+      const storage = windowObject.sessionStorage;
+      if (storage) {
+        const keys = Array.from({ length: storage.length }, (_, index) =>
+          storage.key(index),
+        ).filter((key): key is string => Boolean(key?.startsWith("piwork-pwa-refresh:")));
+        keys.forEach((key) => storage.removeItem(key));
+      }
+    }
     if (registration.waiting && navigatorObject.serviceWorker.controller) {
       updateState({ updateAvailable: true });
     }
@@ -162,7 +254,7 @@ export async function initializePwaLifecycle(
       if (Date.now() - lastUpdateCheck < UPDATE_INTERVAL_MS) return;
       void checkForUpdate();
     });
-    lastUpdateCheck = Date.now();
+    void checkForUpdate();
     updateState({ registrationStatus: "ready" });
   } catch (error) {
     updateState({
@@ -201,12 +293,19 @@ export async function activatePwaUpdate(
   windowObject: Window = window,
 ): Promise<"activated" | "blocked" | "unavailable" | "failed"> {
   if (!registration?.waiting || state.updateActivating) return "unavailable";
-  for (const guard of updateGuards) {
-    if (!(await guard())) return "blocked";
-  }
+  if (!(await localUpdateIsSafe()) || !(await allUpdatePeersAreSafe())) return "blocked";
 
   updateState({ updateActivating: true, error: null });
   const waitingWorker = registration.waiting;
+  const refreshKey = `piwork-pwa-refresh:${waitingWorker.scriptURL || "waiting"}`;
+  const refreshStorage = windowObject.sessionStorage;
+  if (refreshStorage?.getItem(refreshKey) === "1") {
+    updateState({
+      updateActivating: false,
+      error: "This app update already refreshed once and still did not activate",
+    });
+    return "failed";
+  }
   const activated = new Promise<void>((resolve) => {
     if (waitingWorker.state === "activated") {
       resolve();
@@ -226,6 +325,7 @@ export async function activatePwaUpdate(
       ),
     ]);
     updateState({ updateAvailable: false, updateActivating: false });
+    refreshStorage?.setItem(refreshKey, "1");
     windowObject.location.reload();
     return "activated";
   } catch (error) {
@@ -239,7 +339,13 @@ export async function activatePwaUpdate(
 
 export function disposePwaLifecycleForTests(): void {
   if (updateInterval) clearInterval(updateInterval);
+  if (updatePeerInterval) clearInterval(updatePeerInterval);
   updateInterval = null;
+  updatePeerInterval = null;
+  updateChannel?.close();
+  updateChannel = null;
+  updatePeers.clear();
+  prepareResponses.clear();
   registration = null;
   installPrompt = null;
   initialized = false;

@@ -1,6 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getUiCopyCatalog, setUiCopyLanguage, uiCopy } from "./ui-copy.js";
 
+function exerciseCopyFunctions(value: unknown, path: string[] = []): void {
+  if (typeof value === "function") {
+    const args: unknown[] = Array.from({ length: value.length }, (_item, index) =>
+      index === 0 ? 2 : "sample",
+    );
+    if (path.at(-1) === "additionalOAuthPermissionsRequired") {
+      args[0] = ["sample"];
+    }
+    if (path.at(-1) === "notFound") args[0] = "sample";
+    expect(() => (value as (...input: unknown[]) => unknown)(...args)).not.toThrow();
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    exerciseCopyFunctions(child, [...path, key]);
+  }
+}
+
 describe("uiCopy", () => {
   beforeEach(() => {
     setUiCopyLanguage("zh-CN");
@@ -89,5 +107,48 @@ describe("uiCopy", () => {
     expect(uiCopy.interaction.continuePlanning).toBe("Continue planning");
     expect(uiCopy.interaction.freeTextOption).toBe("Enter a free-text answer");
     expect(uiCopy.interaction.finishSelection).toBe("Finish selection");
+  });
+
+  it("formats Office resource status in both languages", () => {
+    const zh = getUiCopyCatalog("zh-CN");
+    expect(zh.chat.preferencesPanel.officeResources.summary(2, 3)).toBe("2 / 3 个文件已缓存");
+    expect(zh.chat.preferencesPanel.officeResources.failedFiles(1)).toBe("1 个文件加载失败");
+    expect(zh.chat.preferencesPanel.officeResources.downloadProgress("1 MB", "2 MB")).toBe(
+      "正在下载 1 MB / 2 MB",
+    );
+    expect(zh.chat.preferencesPanel.officeResources.verifyProgress("1 MB", "2 MB")).toBe(
+      "正在校验 1 MB / 2 MB",
+    );
+    expect(zh.chat.preferencesPanel.officeResources.categoryProgressLabel("字体")).toBe(
+      "字体缓存进度",
+    );
+    expect(
+      zh.chat.preferencesPanel.officeResources.errors.insufficientStorage("1 MB", "2 MB"),
+    ).toBe("浏览器存储空间不足：可用 1 MB，需要 2 MB。请释放空间或退出无痕模式。");
+
+    const en = getUiCopyCatalog("en-US");
+    expect(en.chat.preferencesPanel.officeResources.summary(2, 3)).toBe("2 / 3 files cached");
+    expect(en.chat.preferencesPanel.officeResources.failedFiles(1)).toBe("1 file failed to load");
+    expect(en.chat.preferencesPanel.officeResources.failedFiles(2)).toBe("2 files failed to load");
+    expect(en.chat.preferencesPanel.officeResources.downloadProgress("1 MB", "2 MB")).toBe(
+      "Downloading 1 MB / 2 MB",
+    );
+    expect(en.chat.preferencesPanel.officeResources.verifyProgress("1 MB", "2 MB")).toBe(
+      "Verifying 1 MB / 2 MB",
+    );
+    expect(en.chat.preferencesPanel.officeResources.categoryProgressLabel("Fonts")).toBe(
+      "Fonts cache progress",
+    );
+    expect(
+      en.chat.preferencesPanel.officeResources.errors.insufficientStorage("1 MB", "2 MB"),
+    ).toBe(
+      "Not enough browser storage: 1 MB available, 2 MB required. Free space or leave private browsing.",
+    );
+    expect(en.userSpace.office.resourcePreparationDescription("24 MB")).toContain("24 MB");
+  });
+
+  it("executes every catalog formatter in both locales", () => {
+    exerciseCopyFunctions(getUiCopyCatalog("zh-CN"));
+    exerciseCopyFunctions(getUiCopyCatalog("en-US"));
   });
 });

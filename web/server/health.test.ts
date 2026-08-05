@@ -52,4 +52,29 @@ describe("health responses", () => {
     expect(result.status).toBe("not_ready");
     expect(JSON.stringify(result)).not.toContain(tmpdir());
   });
+
+  it("distinguishes configured from verified Compose Runtime capability", async () => {
+    const dataRoot = join(tmpdir(), `health-${crypto.randomUUID()}`);
+    dirs.push(dataRoot);
+    mkdirSync(dataRoot, { recursive: true });
+    const result = await readinessResponse({
+      dataRoot,
+      databaseReady: async () => true,
+      piRuntimeAvailable: true,
+      internalFileTransportAvailable: true,
+      runtimeCapabilities: {
+        version: 1,
+        mode: "compose-nested",
+        configured: true,
+        verified: false,
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.capabilityContract).toEqual({
+      version: 1,
+      mode: "compose-nested",
+      configured: true,
+      verified: false,
+    });
+  });
 });

@@ -3,7 +3,8 @@ import type { ServerWebSocket } from "bun";
 import { streamSSE } from "hono/streaming";
 import { join } from "node:path";
 import type { SessionOrchestrator } from "./session-orchestrator.js";
-import type { PiLauncher, PiSessionInfo } from "./pi-launcher.js";
+import type { PiSessionInfo } from "./pi-launcher.js";
+import type { PiRuntimeBackend } from "./pi-runtime-backend.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { SocketData } from "./ws-bridge.js";
 import { SessionNameStore } from "./session-names.js";
@@ -13,7 +14,11 @@ import { registerMetricsRoutes } from "./routes/metrics-routes.js";
 import { registerDiagnosticsRoutes } from "./routes/diagnostics-routes.js";
 import { registerRbacRoutes } from "./routes/rbac-routes.js";
 import { registerControlPlaneRoutes } from "./routes/control-plane-routes.js";
+import { registerAppsRoutes } from "./routes/apps-routes.js";
+import { registerAppsCloudflareRoutes } from "./routes/apps-cloudflare-routes.js";
+import { registerAppsDeploymentLabRoutes } from "./routes/apps-deployment-lab-routes.js";
 import type { ControlPlaneService } from "./control-plane-service.js";
+import type { ControlPlanePermission } from "./control-plane-types.js";
 import type { TenantRuntimeDriver } from "./tenant-runtime-driver.js";
 import { isRecordingHubEnabled } from "./recording-hub/hub-config.js";
 import { registerHubRoutes } from "./recording-hub/hub-routes.js";
@@ -36,10 +41,17 @@ import { sanitizePublicSessionCreateRequest } from "./public-session-create.js";
 import type { UserDiskQuota } from "./user-disk-quota.js";
 import { isRuntimeContextId } from "../shared/api-contracts.js";
 import { registerAgentBrowserRoutes } from "./routes/agent-browser-routes.js";
+import { registerNativeHelperRoutes } from "./routes/native-helper-routes.js";
 import type { AgentBrowserBridgeService } from "./agent-browser-bridge-service.js";
 import type { BrowserControlCoordinator } from "./browser-control-session.js";
 import type { PiProviderVault } from "./pi-provider-vault.js";
 import type { PiLaunchOptionsBuilder } from "./pi-launch-options-builder.js";
+import type { AppsRuntimeUiOperations } from "./apps-runtime-coordinator.js";
+import type {
+  AppCloudflareAccountContext,
+  AppCloudflareQueuedDeployment,
+} from "./apps-cloudflare-account-types.js";
+import type { AppContinueDevelopmentResponse } from "./apps-types.js";
 import { PiSessionHistoryError, readPiSessionHistoryPage } from "./pi-session-history.js";
 import type { PiModelCandidate } from "./pi-model-policy.js";
 import { PI_THINKING_LEVELS, type PiThinkingLevel } from "./pi-rpc-contract.js";
@@ -48,7 +60,7 @@ function supportedThinkingLevels(candidate: PiModelCandidate): PiThinkingLevel[]
   if (!candidate.reasoning) return ["off"];
   const map = candidate.thinkingLevelMap;
   return PI_THINKING_LEVELS.filter((level) => {
-    if (level === "off") return true;
+    if (level === "off") return map?.off !== null;
     if (level === "xhigh" || level === "max") {
       return map?.[level] !== undefined && map[level] !== null;
     }
@@ -164,6 +176,15 @@ interface CreateRoutesOptions {
   browserControl?: BrowserControlCoordinator;
   providerVault?: PiProviderVault;
   launchBuilder?: PiLaunchOptionsBuilder;
+  appsRuntime?: AppsRuntimeUiOperations;
+  onAppDeploymentTargetQueued?: (
+    context: AppCloudflareAccountContext,
+    deployment: AppCloudflareQueuedDeployment,
+  ) => Promise<void>;
+  continueAppDevelopment?: (
+    source: AppContinueDevelopmentResponse,
+    user: AuthenticatedUser,
+  ) => Promise<{ sessionId: string; restoredFromSnapshot: boolean }>;
   onSessionBound?: (sessionId: string) => void;
 }
 
@@ -248,7 +269,7 @@ function sortSessionsNewestFirst(sessions: PiSessionInfo[]): PiSessionInfo[] {
 
 function getEnrichedSessions(
   orchestrator: SessionOrchestrator,
-  launcher: PiLauncher,
+  launcher: PiRuntimeBackend,
   sessionNameStore: SessionNameStore,
 ) {
   const sessions = launcher.listSessions();
@@ -415,7 +436,7 @@ function validateUserSpaceBrowserContext(
 
 export function createRoutes(
   orchestrator: SessionOrchestrator,
-  launcher: PiLauncher,
+  launcher: PiRuntimeBackend,
   wsBridge: WsBridge,
   recorder?: import("./recorder.js").RecorderManager,
   port?: number,
@@ -465,6 +486,9 @@ export function createRoutes(
     userSpaceBroker,
     diskQuota: options.diskQuota,
   });
+  registerNativeHelperRoutes(api, {
+    getOwnerKey: () => getCurrentUserSnapshot(options).uuid,
+  });
 
   api.get("/me", (c) => {
     const runtimeMode = environment.runtimeMode;
@@ -482,6 +506,21 @@ export function createRoutes(
       service: options.controlPlane,
       getCurrentUser: options.getCurrentUser,
       runtimeDriver: options.runtimeDriver,
+    });
+    registerAppsRoutes(api, {
+      service: options.controlPlane.apps,
+      getCurrentUser: options.getCurrentUser,
+      ...(options.appsRuntime ? { runtime: options.appsRuntime } : {}),
+      ...(options.continueAppDevelopment
+        ? { continueDevelopment: options.continueAppDevelopment }
+        : {}),
+    });
+    registerAppsCloudflareRoutes(api, {
+      service: options.controlPlane.appCloudflareAccounts,
+      getCurrentUser: options.getCurrentUser,
+      ...(options.onAppDeploymentTargetQueued
+        ? { onDeploymentTargetQueued: options.onAppDeploymentTargetQueued }
+        : {}),
     });
   }
 
@@ -909,8 +948,19 @@ export function createRoutes(
         resolved.launch,
         c.req.raw.signal,
       );
+      const models = [...probe.models];
+      const defaultIndex = models.findIndex(
+        (candidate) =>
+          candidate.key === probe.defaultModel.key &&
+          candidate.provider === probe.defaultModel.provider &&
+          candidate.modelId === probe.defaultModel.modelId,
+      );
+      if (defaultIndex > 0) {
+        const [defaultModel] = models.splice(defaultIndex, 1);
+        if (defaultModel) models.unshift(defaultModel);
+      }
       return c.json(
-        probe.models.map((candidate) => ({
+        models.map((candidate) => ({
           model: {
             key: candidate.key,
             provider: candidate.provider,
@@ -936,13 +986,27 @@ export function createRoutes(
     skillsDir,
     diskQuota: options.diskQuota,
   });
-  registerMetricsRoutes(api, { gaugeProvider: wsBridge });
+  const canViewRuntime = async (): Promise<boolean> => {
+    const user = getCurrentUserSnapshot(options);
+    if (options.controlPlane && user.tenantId) {
+      return options.controlPlane.can(
+        user.userId,
+        user.tenantId,
+        "runtime:view" satisfies ControlPlanePermission,
+      );
+    }
+    if (options.rbac) return options.rbac.can(user, "runtime:view");
+    return user.permissions?.includes("runtime:view") ?? false;
+  };
+  registerMetricsRoutes(api, { gaugeProvider: wsBridge, authorize: canViewRuntime });
   registerDiagnosticsRoutes(api, {
     launcher,
     gaugeProvider: wsBridge,
     recorder,
     runtimeStateProvider: orchestrator,
+    authorize: canViewRuntime,
   });
+  registerAppsDeploymentLabRoutes(api);
 
   // ─── Recording Hub (hidden feature: PIWORK_RECORDING_HUB=1) ──────
   if (isRecordingHubEnabled()) {

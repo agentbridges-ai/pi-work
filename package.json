@@ -4,10 +4,6 @@
   "private": true,
   "packageManager": "bun@1.3.9",
   "description": "Pi-native agent workbench",
-  "workspaces": [
-    "web",
-    "landing-page"
-  ],
   "scripts": {
     "dev": "make dev",
     "build": "make build",
@@ -17,6 +13,7 @@
     "lint": "make lint",
     "test": "make test",
     "typecheck": "make typecheck",
+    "design-system:check": "cd web && bun node_modules/vitest/vitest.mjs run src/design-system-contract.test.ts src/theme-guard.test.ts src/theme-contract.test.ts src/utils/color-contrast.test.ts src/components/ui/ui.test.tsx src/ui-patterns.test.tsx",
     "landing:dev": "cd landing-page && bun run dev",
     "landing:build": "cd landing-page && bun run build",
     "landing:lint": "cd landing-page && bun run lint",

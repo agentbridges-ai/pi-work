@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 export const RUNTIME_MODES = {
   local: "local",
+  native: "native",
+  compose: "compose",
 } as const;
 
 export const ENV = {
@@ -30,6 +32,22 @@ export const ENV = {
   HTTP_PROXY: "HTTP_PROXY",
   HTTPS_PROXY: "HTTPS_PROXY",
   PIWORK_API_CONTRACT_VERSION: "PIWORK_API_CONTRACT_VERSION",
+  PIWORK_APPS_BYOC_ENABLED: "PIWORK_APPS_BYOC_ENABLED",
+  PIWORK_APPS_CLOUDFLARE_CREDENTIAL_KEY: "PIWORK_APPS_CLOUDFLARE_CREDENTIAL_KEY",
+  PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_ID: "PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_ID",
+  PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_SECRET: "PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_SECRET",
+  PIWORK_APPS_CLOUDFLARE_OAUTH_REDIRECT_URI: "PIWORK_APPS_CLOUDFLARE_OAUTH_REDIRECT_URI",
+  PIWORK_APPS_CLOUDFLARE_OAUTH_SCOPE_CATALOG: "PIWORK_APPS_CLOUDFLARE_OAUTH_SCOPE_CATALOG",
+  PIWORK_APPS_KILL_SWITCH: "PIWORK_APPS_KILL_SWITCH",
+  PIWORK_APPS_LAB_ENABLED: "PIWORK_APPS_LAB_ENABLED",
+  PIWORK_APPS_TEMPORARY_ENABLED: "PIWORK_APPS_TEMPORARY_ENABLED",
+  PIWORK_APPS_TEMPORARY_MAX_ACTIVE_PER_APP: "PIWORK_APPS_TEMPORARY_MAX_ACTIVE_PER_APP",
+  PIWORK_APPS_TEMPORARY_MAX_PER_DAY: "PIWORK_APPS_TEMPORARY_MAX_PER_DAY",
+  PIWORK_APPS_TEMPORARY_MAX_PER_HOUR: "PIWORK_APPS_TEMPORARY_MAX_PER_HOUR",
+  PIWORK_APPS_TEMPORARY_MAX_POW_CONCURRENCY: "PIWORK_APPS_TEMPORARY_MAX_POW_CONCURRENCY",
+  PIWORK_APPS_TURNSTILE_ENABLED: "PIWORK_APPS_TURNSTILE_ENABLED",
+  PIWORK_APPS_TURNSTILE_SECRET_KEY: "PIWORK_APPS_TURNSTILE_SECRET_KEY",
+  PIWORK_APPS_TURNSTILE_SITE_KEY: "PIWORK_APPS_TURNSTILE_SITE_KEY",
   PIWORK_AGENT_BROWSER_BRIDGE_PORT: "PIWORK_AGENT_BROWSER_BRIDGE_PORT",
   PIWORK_AGENT_BROWSER_CLI: "PIWORK_AGENT_BROWSER_CLI",
   PIWORK_AGENT_BROWSER_CONTROL_FILE: "PIWORK_AGENT_BROWSER_CONTROL_FILE",
@@ -48,6 +66,7 @@ export const ENV = {
   PIWORK_ENABLE_TOOL_SEARCH: "PIWORK_ENABLE_TOOL_SEARCH",
   PIWORK_HOME: "PIWORK_HOME",
   PIWORK_HUB_MAX_UPLOAD_MB: "PIWORK_HUB_MAX_UPLOAD_MB",
+  PIWORK_INTERNAL_PROXY_ONLY: "PIWORK_INTERNAL_PROXY_ONLY",
   PIWORK_IDLE_KILL_MINUTES: "PIWORK_IDLE_KILL_MINUTES",
   PIWORK_IMAGE_TAG: "PIWORK_IMAGE_TAG",
   PIWORK_INIT_SCRIPT_TIMEOUT: "PIWORK_INIT_SCRIPT_TIMEOUT",
@@ -59,10 +78,6 @@ export const ENV = {
   PIWORK_MAX_MANAGED_PROCESSES: "PIWORK_MAX_MANAGED_PROCESSES",
   PIWORK_MAINTENANCE_LOCK_DIR: "PIWORK_MAINTENANCE_LOCK_DIR",
   PIWORK_OFFICE_PREVIEW_MAX_BYTES: "PIWORK_OFFICE_PREVIEW_MAX_BYTES",
-  PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE: "PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE",
-  PIWORK_ONLYOFFICE_BROWSER_DIR: "PIWORK_ONLYOFFICE_BROWSER_DIR",
-  PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR: "PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR",
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR: "PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR",
   PIWORK_ORG_ID: "PIWORK_ORG_ID",
   PIWORK_ORG_NAME: "PIWORK_ORG_NAME",
   PIWORK_PI_MODEL_ALLOWLIST: "PIWORK_PI_MODEL_ALLOWLIST",
@@ -79,7 +94,15 @@ export const ENV = {
   PIWORK_RUNNER_LOCK_PATH: "PIWORK_RUNNER_LOCK_PATH",
   PIWORK_RUNNER_LOCK_STALE_MS: "PIWORK_RUNNER_LOCK_STALE_MS",
   PIWORK_RUNTIME_GID: "PIWORK_RUNTIME_GID",
+  PIWORK_RUNTIME_SOCKET: "PIWORK_RUNTIME_SOCKET",
+  PIWORK_RUNTIME_CONTROL_KEY_FILE: "PIWORK_RUNTIME_CONTROL_KEY_FILE",
+  PIWORK_RUNTIME_DEPLOYMENT_MODE: "PIWORK_RUNTIME_DEPLOYMENT_MODE",
+  PIWORK_RUNTIME_SECURITY_GATE: "PIWORK_RUNTIME_SECURITY_GATE",
+  PIWORK_RUNTIME_SECURITY_MARKER: "PIWORK_RUNTIME_SECURITY_MARKER",
   PIWORK_RUNTIME_MODE: "PIWORK_RUNTIME_MODE",
+  PIWORK_POSTGRES_APP_USER: "PIWORK_POSTGRES_APP_USER",
+  PIWORK_POSTGRES_APP_PASSWORD_FILE: "PIWORK_POSTGRES_APP_PASSWORD_FILE",
+  PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST: "PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST",
   PIWORK_RUNTIME_UID: "PIWORK_RUNTIME_UID",
   PIWORK_MCP_MASTER_KEY: "PIWORK_MCP_MASTER_KEY",
   PIWORK_SERVE_FRONTEND: "PIWORK_SERVE_FRONTEND",
@@ -107,7 +130,6 @@ export const ENV = {
   NO_PROXY: "NO_PROXY",
   NPM_CONFIG_CACHE: "NPM_CONFIG_CACHE",
   NVM_DIR: "NVM_DIR",
-  ONLYOFFICE_BROWSER_FONT_ASSETS_DIR: "ONLYOFFICE_BROWSER_FONT_ASSETS_DIR",
   PATH: "PATH",
   PIP_CACHE_DIR: "PIP_CACHE_DIR",
   PORT: "PORT",
@@ -159,6 +181,63 @@ export function envNumber(name: EnvironmentVariableName | string, fallback: numb
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+export function validateProductionEnvironment(source: EnvSource = process.env): void {
+  if (source[ENV.NODE_ENV] !== "production") return;
+
+  const required = [
+    ENV.DATABASE_URL,
+    ENV.BETTER_AUTH_SECRET,
+    ENV.BETTER_AUTH_URL,
+    ENV.PIWORK_MCP_MASTER_KEY,
+  ];
+  const missing = required.filter((name) => !readFrom(source, name)?.trim());
+  if (missing.length) throw new Error(`Production configuration is missing: ${missing.join(", ")}`);
+
+  const secret = readFrom(source, ENV.BETTER_AUTH_SECRET)?.trim() || "";
+  if (secret.length < 32)
+    throw new Error("BETTER_AUTH_SECRET must be at least 32 characters in production.");
+  const masterKey = readFrom(source, ENV.PIWORK_MCP_MASTER_KEY)?.trim() || "";
+  if (
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(masterKey) ||
+    masterKey.length !== 44 ||
+    Buffer.from(masterKey, "base64").length !== 32
+  ) {
+    throw new Error("PIWORK_MCP_MASTER_KEY must be a base64-encoded 32-byte key in production.");
+  }
+  const origin = readFrom(source, ENV.BETTER_AUTH_URL)?.trim() || "";
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    throw new Error("BETTER_AUTH_URL must be an absolute HTTP(S) origin in production.");
+  }
+  if (
+    !/^https?:$/.test(parsedOrigin.protocol) ||
+    parsedOrigin.pathname !== "/" ||
+    parsedOrigin.search ||
+    parsedOrigin.hash
+  ) {
+    throw new Error("BETTER_AUTH_URL must be an absolute HTTP(S) origin in production.");
+  }
+
+  const bounds: Array<[EnvironmentVariableName, number, number]> = [
+    [ENV.PORT, 1, 65_535],
+    [ENV.VITE_PORT, 1, 65_535],
+    [ENV.PIWORK_MAX_CONCURRENT_SESSIONS, 1, 10_000],
+    [ENV.PIWORK_MAX_MANAGED_PROCESSES, 1, 100_000],
+  ];
+  for (const [name, minimum, maximum] of bounds) {
+    const raw = readFrom(source, name)?.trim();
+    if (!raw) continue;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+      throw new Error(
+        `${name} must be an integer between ${minimum} and ${maximum} in production.`,
+      );
+    }
+  }
 }
 
 export function envBool(name: EnvironmentVariableName | string, fallback = false): boolean {

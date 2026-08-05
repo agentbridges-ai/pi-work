@@ -22,12 +22,9 @@ check_exact() {
 
 command -v bun >/dev/null 2>&1 || { echo '[toolchain] bun is required' >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo '[toolchain] node is required' >&2; exit 1; }
-command -v pnpm >/dev/null 2>&1 || { echo '[toolchain] pnpm is required' >&2; exit 1; }
 command -v pg_dump >/dev/null 2>&1 || { echo '[toolchain] PostgreSQL client tools are required' >&2; exit 1; }
-[[ -f "$ROOT_DIR/onlyoffice-browser/package.json" ]] || { echo '[toolchain] prepared onlyoffice-browser checkout is required' >&2; exit 1; }
 
 check_exact bun "$(expected_version bun)" "$(bun --version)"
-check_exact pnpm "$(expected_version pnpm)" "$(cd "$ROOT_DIR/onlyoffice-browser" && pnpm --version)"
 
 version_at_least() {
   awk -v actual="$1" -v minimum="$2" 'BEGIN {

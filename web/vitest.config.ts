@@ -1,6 +1,21 @@
+import { realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { defineConfig } from "vitest/config";
 
+// macOS exposes /var (and sometimes TMPDIR) through a system alias to
+// /private/var. Production Pi paths intentionally reject redirected roots;
+// keep fixtures on the canonical side of that boundary as well.
+const canonicalTestTempDir = realpathSync(
+  process.platform === "darwin" ? "/private/tmp" : tmpdir(),
+);
+process.env.TMPDIR = canonicalTestTempDir;
+process.env.TMP = canonicalTestTempDir;
+process.env.TEMP = canonicalTestTempDir;
+
 export default defineConfig({
+  esbuild: {
+    jsx: "automatic",
+  },
   test: {
     globals: true,
     environment: "node",
@@ -10,6 +25,7 @@ export default defineConfig({
       reportsDirectory: "coverage",
       include: [
         "bin/**/*.ts",
+        "scripts/**/*.mjs",
         "scripts/**/*.ts",
         "server/**/*.ts",
         "shared/**/*.ts",

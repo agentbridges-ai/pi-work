@@ -45,4 +45,11 @@ describe("User Space preview loading boundaries", () => {
       /@milkdown\//,
     );
   });
+
+  it("passes verified Office fonts at mount time and exposes resource recovery", () => {
+    expect(workspacePreviewSource).toContain("ensureOfficeResources().catch(() => null)");
+    expect(workspacePreviewSource).toContain("downloadedFonts: getVerifiedOfficeFontPaths()");
+    expect(workspacePreviewSource).toContain("officeResourcesNeedAttention()");
+    expect(workspacePreviewSource).toContain("onClick={requestOfficeResourceSettings}");
+  });
 });

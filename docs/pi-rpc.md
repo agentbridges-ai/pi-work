@@ -6,9 +6,61 @@ alternate Agent transport, SDK proxy, CLI WebSocket fallback, Pi fork, or
 provider-specific fallback. `@modelcontextprotocol/sdk` is pinned to `1.29.0`
 for schemas and protocol types; Piwork owns all MCP transports.
 
+## Reference authority
+
+The sole normative guide for Pi Agent and RPC development is the official
+`earendil-works/pi` repository pinned as the read-only Git submodule at
+[`docs/upstream/pi`](upstream/pi). It includes the complete upstream
+documentation and the implementation context needed to interpret it; do not
+copy only one page into a second Piwork authority. Start RPC work from
+[`packages/coding-agent/docs/rpc.md`](upstream/pi/packages/coding-agent/docs/rpc.md).
+The [published Pi RPC page](https://pi.dev/docs/latest/rpc) is a convenient
+rendering of that upstream documentation.
+
+Initialize, update, and verify the reference with:
+
+```bash
+git submodule update --init docs/upstream/pi
+make sync-pi-upstream
+make verify-pi-upstream
+```
+
+Do not edit the submodule from Piwork. An upstream update changes the
+superproject gitlink and is reviewed like a dependency pin. The exact
+`@earendil-works/pi-coding-agent@0.82.1` package installed by Piwork is used to
+test compatibility with the pinned guide, not as a competing product-design
+authority. A documented feature that is absent from 0.82.1 remains unavailable
+until the runtime dependency is deliberately upgraded.
+
+PiDeck, `ygncode/pi-web`, `agegr/pi-web`, Oh My Pi, OMP, Claude Code, and other
+community products are idea and failure-mode references only. They may suggest
+a case worth testing, but they do not define Piwork's wire protocol, lifecycle,
+session authority, product surface, or UI. A community pattern is adopted only
+after it is reduced to a stock-Pi RPC or Extension API behavior and verified
+against the pinned official guide and runtime. Community renderer queues,
+optimistic transcript state, session-file edits, Git/PTY surfaces, and runtime
+forks must not become Piwork authority.
+
 `can1357/oh-my-pi` is a design reference for ask, plan, todo, subagent, MCP, and
 background-task behavior. It is not a runtime or build dependency. Any future
 substantial source port must retain the upstream MIT attribution.
+
+The same boundary applies to the [Pi package ecosystem](https://pi.dev/packages).
+Piwork does not run `pi install`, enable package discovery, or load third-party
+extension code directly. A reviewed package may contribute `SKILL.md` and its
+supporting references to Piwork's governed managed-Skill store; Piwork
+materializes the reviewed files under the session's immutable `pi-resources/`
+and loads them only through explicit stock-Pi `--skill` arguments. Executable
+capability remains in the trusted Extension API or Piwork-owned managed MCP
+broker. This keeps Pi unmodified and avoids importing package credentials,
+filesystem authority, or secondary state stores.
+
+Claude Code and coding-first Pi derivatives are method references, not product
+templates. Piwork adopts useful ideas such as isolated context, evidence-backed
+completion, structured questions, and deterministic permission hooks. It does
+not copy private prompts, tool names, Git/worktree/PR flows, host PTYs, LSP, or
+debugger surfaces. The user-facing product remains paper-work, and the existing
+Piwork conversation panel remains the browser projection of native Pi state.
 
 ## Process topology
 
@@ -64,6 +116,32 @@ transport must:
 - reject all pending work on exit, protocol corruption, or generation change;
 - forward abort, retry cancellation, compaction, and history commands;
 - terminate cleanly without accepting a non-LF trailing frame.
+
+The official interoperability guidance permits clients to strip a trailing CR
+from CRLF input. Piwork intentionally exposes a narrower harness contract for
+its pinned local child: generated input is LF-only, and child output containing
+CRLF or an unterminated final frame is rejected. This is a documented
+hardening constraint for Piwork's controlled transport, not a redefinition of
+general Pi RPC.
+
+Prompt and lifecycle handling follows the official semantics:
+
+- a correlated `prompt` response with `success: true` means stock Pi accepted,
+  queued, or handled the input; subsequent work remains asynchronous;
+- `success: false` is a pre-acceptance rejection, while a transport failure
+  after write is not proof that Pi rejected the prompt;
+- a prompt sent while Pi is streaming needs the native
+  `streamingBehavior: "steer" | "followUp"` contract; Piwork does not emulate a
+  second steering/follow-up queue in the browser;
+- `agent_end` is only one low-level run boundary. `agent_settled` is the final
+  boundary after automatic retry, automatic compaction, and queued
+  continuations;
+- manual compaction is a separate RPC operation whose `compaction_end` and
+  command response terminate that operation. Automatic compaction inside an
+  agent run does not make the run settled;
+- extension dialog requests are correlated by their exact request ID and
+  generation. Reconnect snapshots only mirror still-live requests; Pi remains
+  the request owner and applies its own timeout.
 
 Browser `seq/ack/replay` is independent of child request IDs. It protects the
 authenticated browser connection; child IDs protect the Pi transport.
@@ -160,14 +238,28 @@ Product tools are:
 - `ask`: single-select, multi-select, free input, cancel, and timeout over Pi's
   RPC extension UI request/response channel;
 - `todo_write`: replaces the complete list and appends a Pi custom entry;
-- `task`: foreground/background execution, stop, and live progress; at most
-  four parallel child tasks per parent and depth two;
+- `todo_read`: reconstructs the current list after resume, branch, or
+  compaction from the same Pi session entries;
+- `task`: foreground/background execution plus `list`, `status`, `wait`,
+  `steer`, and `stop`; at most four parallel child tasks per root session and
+  depth two;
 - `propose_plan`: execute, continue planning, or refine; only explicit execute
   confirmation changes the mode to Agent;
 - `mcp__<server>__<tool>`: only tools from Piwork's managed MCP registry.
 
 Child tasks inherit model, SRT, Skills, MCP policy, network policy, and mode.
-They receive an independent bootstrap channel and process generation.
+They receive an independent bootstrap channel and process generation. A task
+does not become terminal at `agent_end`: Piwork waits for Pi's
+`agent_settled`, after retries, compaction, and queued continuation. Background
+results are bounded, retained in memory for task queries, and queued into the
+owning parent through Pi's native `prompt` command with
+`streamingBehavior: "followUp"` (queue while busy, start a turn while idle); a
+running child is redirected through Pi's native `steer`. The trusted
+notification marks child output as untrusted evidence before it enters the
+parent context. Entering Plan mode stops any still-live child with a writable
+Agent Space capability. The transition fails closed until Piwork confirms the
+OS process exited; a failed termination remains registered and cannot masquerade
+as a successful retry.
 
 Managed MCP supports stdio, SSE, and Streamable HTTP. Piwork owns connection
 state, enable/disable, reconnect, timeouts, and cancellation. SDK transport
@@ -230,6 +322,7 @@ agent-facing User Space contract remains `read`, `write`, `edit`, and `bash`.
 
 ```bash
 make verify-pi-versions
+make verify-pi-upstream
 make test-pi-rpc-contract
 make test-srt-pi
 make test-srt-user-space-transport

@@ -9,6 +9,7 @@ import {
   sumHistoryUsage,
   usageFromPiMessage,
 } from "./ws-bridge-history.js";
+import { projectNativeMessage } from "./native-projection-contract.js";
 import { WsBridge } from "./ws-bridge.js";
 
 const roots: string[] = [];
@@ -167,6 +168,62 @@ describe("Pi JSONL browser history", () => {
         1,
       ),
     ).toBeNull();
+  });
+
+  it("fail-closes unknown messages and keeps managed-task transport envelopes out of chat", () => {
+    const context = { id: "entry-1", parentId: null, timestamp: 1, generation: 2 };
+    expect(projectNativeMessage({ role: "tool" }, context)).toBeNull();
+    expect(
+      projectNativeMessage(
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: '[Piwork managed task notification]\n--- BEGIN MANAGED TASK PAYLOAD ---\n{"type":"piwork_managed_task_result"}\n--- END MANAGED TASK PAYLOAD ---',
+            },
+          ],
+        },
+        context,
+      ),
+    ).toBeNull();
+    expect(
+      projectNativeMessage(
+        {
+          role: "assistant",
+          content: [{ type: "unknown", text: "not displayable" }],
+        },
+        context,
+      ),
+    ).toMatchObject({
+      type: "agent_message",
+      message: { id: "entry-1", role: "assistant", content: [] },
+    });
+  });
+
+  it("preserves stable task identity and terminal task state from native tool results", () => {
+    expect(
+      projectNativeMessage(
+        {
+          role: "toolResult",
+          toolCallId: "tool-task-1",
+          toolName: "task",
+          details: {
+            taskId: "task-1",
+            name: "Research",
+            status: "completed",
+            execution: "background",
+            depth: 1,
+          },
+        },
+        { id: "entry-task", parentId: "parent", timestamp: 42, generation: 3 },
+      ),
+    ).toMatchObject({
+      type: "tool_execution",
+      toolCallId: "tool-task-1",
+      status: "completed",
+      task: { taskId: "task-1", status: "completed", execution: "background", depth: 1 },
+    });
   });
 
   it("normalizes display summaries, assistant metadata, errors, and malformed records", () => {

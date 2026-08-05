@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import type { AgentMessage } from "../shared/pi-browser-protocol.js";
 import { AtomicJsonStore } from "./atomic-json-store.js";
 import type { SessionAuthoritySnapshot } from "./control-plane-types.js";
+import { log } from "./logger.js";
 import { requireSessionId } from "./path-policy.js";
 
 /**
@@ -84,6 +85,8 @@ function normalizeAuthority(value: unknown): SessionAuthoritySnapshot | undefine
   return {
     tenantId: requireString(value.tenantId, "authority tenant id"),
     userId: requireString(value.userId, "authority user id"),
+    membershipId: requireString(value.membershipId, "authority membership id"),
+    orgNodeId: requireString(value.orgNodeId, "authority org node id"),
     agentDefinitionId: requireString(value.agentDefinitionId, "authority agent definition id"),
     agentVersionId: requireString(value.agentVersionId, "authority agent version id"),
     effectivePolicyHash: requireString(value.effectivePolicyHash, "authority policy hash", 1_024),
@@ -300,7 +303,10 @@ export class SessionStore {
       try {
         this.saveSync(pending);
       } catch (error) {
-        console.error(`[session-store] Failed to save session ${normalized.id}:`, error);
+        log.error("session-store", "Failed to save session", {
+          sessionId: normalized.id,
+          error: error instanceof Error ? error.name : "UnknownError",
+        });
       }
     }, 150);
     this.debounceTimers.set(normalized.id, timer);
@@ -308,6 +314,7 @@ export class SessionStore {
 
   saveSync(session: PersistedSession): void {
     const id = requireSessionId(session.id);
+    this.cancelPending(id);
     const normalized = normalizePersistedSession(session, id);
     if (this.layout === "session-dir") {
       mkdirSync(join(this.dir, id), { recursive: true, mode: 0o700 });

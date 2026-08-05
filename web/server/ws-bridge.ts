@@ -7,6 +7,7 @@ import type {
   BrowserIncomingMessage,
   BrowserOutgoingMessage,
   HistorySnapshotEvent,
+  InteractionRequest,
   McpServerDetail,
   PiHistoryEntry,
   PiMessagePart,
@@ -14,7 +15,6 @@ import type {
   PiUsage,
   SessionMessageHistoryPage,
   SessionState,
-  ToolExecutionEvent,
   UserSpaceMount,
 } from "../shared/pi-browser-protocol.js";
 import type { SessionAuthoritySnapshot } from "./control-plane-types.js";
@@ -45,9 +45,17 @@ import {
 } from "./ws-bridge-browser-ingest.js";
 import { handleSessionAck, handleSessionSubscribe } from "./ws-bridge-browser.js";
 import { piSessionEntriesToHistory, usageFromPiMessage } from "./ws-bridge-history.js";
-import { persistSession as persistSessionRecord } from "./ws-bridge-persist.js";
+import { projectNativeMessage, projectNativeToolExecution } from "./native-projection-contract.js";
+import {
+  persistSession as persistSessionRecord,
+  persistSessionSync as persistSessionRecordSync,
+} from "./ws-bridge-persist.js";
 import { broadcastToBrowsers, sendToBrowser } from "./ws-bridge-publish.js";
-import { isHistoryBackedEvent } from "./ws-bridge-replay.js";
+import {
+  isDuplicateClientMessage,
+  isHistoryBackedEvent,
+  rememberClientMessage,
+} from "./ws-bridge-replay.js";
 import {
   makeDefaultState,
   type AttachPiSessionInfo,
@@ -61,6 +69,9 @@ export type { BrowserSocketData, SocketData } from "./ws-bridge-types.js";
 const PROCESSED_CLIENT_MESSAGE_LIMIT = 4_096;
 const OFFLINE_QUEUE_LIMIT = 100;
 const HISTORY_PAGE_MAX = 500;
+const PROMPT_RECONCILE_INITIAL_DELAY_MS = 100;
+const PROMPT_RECONCILE_RETRY_DELAY_MS = 250;
+const PROMPT_RECONCILE_MAX_ATTEMPTS = 3;
 const TRUSTED_TOOLS = [
   "read",
   "write",
@@ -68,11 +79,14 @@ const TRUSTED_TOOLS = [
   "bash",
   "ask",
   "todo_write",
+  "todo_read",
   "task",
   "propose_plan",
 ] as const;
 const IDLE_KILL_THRESHOLD_MS = 30 * 60_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
+type PendingInteraction =
+  Session["interactionKinds"] extends Map<string, infer Value> ? Value : never;
 
 export type PiBridgeControlMessage = Exclude<
   BrowserOutgoingMessage,
@@ -295,34 +309,6 @@ function phaseForRunState(runState: PiRunState): SessionPhase {
   }
 }
 
-function messageParts(value: unknown): PiMessagePart[] {
-  if (typeof value === "string") return [{ type: "text", text: value }];
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((part): PiMessagePart[] => {
-    if (!isRecord(part)) return [];
-    if (part.type === "text" && typeof part.text === "string") {
-      return [{ type: "text", text: part.text }];
-    }
-    if (part.type === "thinking" && typeof part.thinking === "string") {
-      return [{ type: "thinking", thinking: part.thinking }];
-    }
-    if (
-      part.type === "image" &&
-      typeof part.data === "string" &&
-      (typeof part.mimeType === "string" || typeof part.mediaType === "string")
-    ) {
-      return [
-        {
-          type: "image",
-          data: part.data,
-          mediaType: typeof part.mimeType === "string" ? part.mimeType : (part.mediaType as string),
-        },
-      ];
-    }
-    return [];
-  });
-}
-
 function errorText(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   if (!value) return undefined;
@@ -333,31 +319,10 @@ function errorText(value: unknown): string | undefined {
   }
 }
 
-function todosFromDetails(value: unknown): ToolExecutionEvent["todos"] {
-  if (!isRecord(value) || !Array.isArray(value.todos)) return undefined;
-  const result: NonNullable<ToolExecutionEvent["todos"]> = [];
-  for (const todo of value.todos) {
-    if (
-      !isRecord(todo) ||
-      typeof todo.id !== "string" ||
-      (typeof todo.content !== "string" && typeof todo.text !== "string") ||
-      !["pending", "in_progress", "completed"].includes(String(todo.status))
-    ) {
-      return undefined;
-    }
-    result.push({
-      id: todo.id,
-      content: typeof todo.content === "string" ? todo.content : (todo.text as string),
-      status: todo.status as "pending" | "in_progress" | "completed",
-      activeForm: typeof todo.activeForm === "string" ? todo.activeForm : undefined,
-    });
-  }
-  return result;
-}
-
 export class WsBridge {
   private readonly sessions = new Map<string, Session>();
   private readonly idleKillTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private readonly offlineQueueFlushes = new Map<string, Promise<void>>();
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
   private userSpaceBroker: UserSpaceBroker | null = null;
@@ -440,6 +405,7 @@ export class WsBridge {
       offlineQueue,
       processedClientMessageIds,
       processedClientMessageIdSet: new Set(processedClientMessageIds),
+      acceptingClientMessageIds: new Map(),
       nextEventSeq: 1,
       eventBuffer: [],
       lastAckSeq: 0,
@@ -448,6 +414,7 @@ export class WsBridge {
       archived: persisted?.archived ?? info.archived,
       archivedAt: persisted?.archivedAt ?? info.archivedAt,
       interactionKinds: new Map(),
+      piActivityEpoch: 0,
       toolStarts: new Map(),
       firstUserPromptSeen: historyEntries.some(
         (entry) => entry.event.type === "agent_message" && entry.event.message.role === "user",
@@ -484,7 +451,8 @@ export class WsBridge {
       info.piSessionRelativePath ??
       persisted?.piSessionRelativePath ??
       session.piSessionRelativePath;
-    session.interactionKinds.clear();
+    this.clearPendingInteractions(session);
+    session.piActivityEpoch += 1;
     session.toolStarts.clear();
 
     const current = () =>
@@ -531,7 +499,7 @@ export class WsBridge {
       type: "session_init",
       session: session.state,
     });
-    this.flushOfflineQueue(session);
+    this.sendInteractionSnapshot(session);
     return session;
   }
 
@@ -546,8 +514,10 @@ export class WsBridge {
     }
     session.piAdapter = null;
     delete session.adapterGeneration;
-    session.interactionKinds.clear();
+    this.clearPendingInteractions(session);
+    session.piActivityEpoch += 1;
     session.toolStarts.clear();
+    this.sendInteractionSnapshot(session);
     if (session.state.runState !== "stopped") {
       this.publishRunState(session, "disconnected", "Pi process disconnected.");
     }
@@ -655,6 +625,11 @@ export class WsBridge {
     socket.data.lastAckSeq = 0;
     session.browserSockets.add(socket);
     sendToBrowser(socket, { type: "session_init", session: session.state });
+    // Interaction requests are orthogonal to replayable transcript events.
+    // Send the authoritative pending set to every newly connected browser so
+    // reconnects do not depend on the transient event buffer retaining the
+    // original request.
+    this.sendInteractionSnapshot(session, socket);
     if (!session.piAdapter?.isConnected() && session.state.runState !== "stopped") {
       sendToBrowser(socket, {
         type: "run_state",
@@ -708,7 +683,7 @@ export class WsBridge {
     this.startIdleKillWatchdog(session.id);
   }
 
-  injectUserMessage(sessionId: string, content: string | AgentMessage): boolean {
+  async injectUserMessage(sessionId: string, content: string | AgentMessage): Promise<boolean> {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
     const timestamp = Date.now();
@@ -731,16 +706,12 @@ export class WsBridge {
     if (message.role !== "user" || !isUserMessageContentWithinLimit(text)) {
       return false;
     }
-    return this.acceptAgentMessage(
-      session,
-      {
-        type: "agent_message",
-        generation: session.state.generation,
-        message,
-        clientMsgId: message.id,
-      },
-      true,
-    );
+    return this.acceptAgentMessage(session, {
+      type: "agent_message",
+      generation: session.state.generation,
+      message,
+      clientMsgId: message.id,
+    });
   }
 
   interruptSession(sessionId: string): boolean {
@@ -798,6 +769,9 @@ export class WsBridge {
     this.broadcastLifecycleUpdate(sessionId, "closed");
     session.unsubscribeStateMachine?.();
     session.unsubscribeStateMachine = undefined;
+    this.clearPendingInteractions(session);
+    session.acceptingClientMessageIds.clear();
+    this.offlineQueueFlushes.delete(session.id);
     const adapter = session.piAdapter;
     session.piAdapter = null;
     if (adapter) void adapter.disconnect().catch(() => undefined);
@@ -819,6 +793,9 @@ export class WsBridge {
     const disconnects: Promise<void>[] = [];
     for (const session of this.sessions.values()) {
       session.unsubscribeStateMachine?.();
+      this.clearPendingInteractions(session);
+      session.acceptingClientMessageIds.clear();
+      this.offlineQueueFlushes.delete(session.id);
       if (session.piAdapter) {
         disconnects.push(session.piAdapter.disconnect().catch(() => undefined));
       }
@@ -830,6 +807,7 @@ export class WsBridge {
       session.browserSockets.clear();
     }
     this.sessions.clear();
+    this.offlineQueueFlushes.clear();
     this.currentWorkspaceSessionResolver = null;
     this.controlHandler = null;
     this.userSpaceBroker = null;
@@ -837,6 +815,66 @@ export class WsBridge {
     this.recorder = null;
     this.store = null;
     await Promise.allSettled(disconnects);
+  }
+
+  private removePendingInteraction(
+    session: Session,
+    requestId: string,
+    expected?: PendingInteraction,
+  ): boolean {
+    const current = session.interactionKinds.get(requestId);
+    if (!current || (expected && current !== expected)) return false;
+    if (current.timeout) clearTimeout(current.timeout);
+    session.interactionKinds.delete(requestId);
+    session.piAdapter?.forgetInteraction(requestId);
+    return true;
+  }
+
+  private clearPendingInteractions(session: Session): void {
+    for (const [requestId, pending] of session.interactionKinds) {
+      if (pending.timeout) clearTimeout(pending.timeout);
+      session.piAdapter?.forgetInteraction(requestId);
+    }
+    session.interactionKinds.clear();
+    session.piAdapter?.clearPendingInteractions();
+  }
+
+  private expirePendingInteraction(
+    session: Session,
+    requestId: string,
+    pending: PendingInteraction,
+  ): void {
+    if (
+      pending.generation !== session.state.generation ||
+      !this.removePendingInteraction(session, requestId, pending)
+    ) {
+      return;
+    }
+    this.broadcastToSession(session.id, {
+      type: "interaction_response",
+      generation: pending.generation,
+      requestId,
+      kind: pending.kind,
+      status: "timed_out",
+      timestamp: Date.now(),
+    });
+  }
+
+  private sendInteractionSnapshot(
+    session: Session,
+    target?: ServerWebSocket<BrowserSocketData>,
+  ): void {
+    const message: BrowserIncomingMessage = {
+      type: "interaction_snapshot",
+      generation: session.state.generation,
+      requests: [...session.interactionKinds.values()]
+        .filter((pending) => pending.generation === session.state.generation)
+        .map((pending) => pending.request),
+    };
+    const sockets = target ? [target] : [...session.browserSockets];
+    for (const socket of sockets) {
+      if (session.browserSockets.has(socket)) sendToBrowser(socket, message);
+    }
   }
 
   private wireStateMachine(session: Session): void {
@@ -954,32 +992,14 @@ export class WsBridge {
     const generation = session.state.generation;
     switch (message.type) {
       case "agent_message": {
-        const role =
-          message.message.role === "user" ||
-          message.message.role === "system" ||
-          message.message.role === "assistant"
-            ? message.message.role
-            : "system";
-        const normalized: AgentMessageEvent = {
-          type: "agent_message",
+        const projected = projectNativeMessage(message.message, {
+          id: message.message.id,
+          parentId: null,
+          timestamp: message.message.timestamp ?? Date.now(),
           generation,
-          message: {
-            id: message.message.id,
-            role,
-            content: messageParts(message.message.content),
-            timestamp: message.message.timestamp ?? Date.now(),
-            model:
-              message.message.provider && message.message.modelId
-                ? {
-                    key: `${message.message.provider}/${message.message.modelId}`,
-                    provider: message.message.provider,
-                    modelId: message.message.modelId,
-                  }
-                : undefined,
-            stopReason: message.message.stopReason ?? null,
-            ...(message.message.error ? { error: message.message.error } : {}),
-          },
-        };
+        });
+        if (!projected || projected.type !== "agent_message") return;
+        const normalized: AgentMessageEvent = projected;
         const nextUsage = usageFromPiMessage(message.message.usage);
         if (nextUsage) {
           session.state.usage = {
@@ -989,7 +1009,7 @@ export class WsBridge {
           };
         }
         this.broadcastToSession(session.id, normalized);
-        if (role === "assistant") {
+        if (normalized.message.role === "assistant") {
           piworkBus.emit("message:assistant", {
             sessionId: session.id,
             message: normalized,
@@ -1021,46 +1041,12 @@ export class WsBridge {
           });
         }
         const start = session.toolStarts.get(message.tool_call_id);
-        const result = isRecord(message.result) ? message.result : undefined;
-        const details = result && isRecord(result.details) ? result.details : result;
-        const event: ToolExecutionEvent = {
-          type: "tool_execution",
+        const event = projectNativeToolExecution(message, {
           generation,
-          toolCallId: message.tool_call_id,
-          toolName: message.tool_name,
-          status:
-            message.phase === "start"
-              ? "started"
-              : message.phase === "update"
-                ? "running"
-                : message.is_error
-                  ? "failed"
-                  : "completed",
           timestamp: now,
-          input: message.args ?? start?.input,
-          output: message.phase === "update" ? message.result : message.result,
-          error: message.is_error ? errorText(message.result) : undefined,
-          elapsedMs: start ? Math.max(0, now - start.startedAt) : undefined,
-          progress: details && typeof details.progress === "string" ? details.progress : undefined,
-          todos: message.tool_name === "todo_write" ? todosFromDetails(details) : undefined,
-          task:
-            message.tool_name === "task" &&
-            details &&
-            typeof details.taskId === "string" &&
-            typeof details.name === "string" &&
-            ["running", "completed", "failed", "stopped"].includes(String(details.status))
-              ? {
-                  taskId: details.taskId,
-                  name: details.name,
-                  description:
-                    typeof details.description === "string" ? details.description : undefined,
-                  execution: details.execution === "background" ? "background" : "foreground",
-                  status: details.status as "running" | "completed" | "failed" | "stopped",
-                  depth: typeof details.depth === "number" ? details.depth : 0,
-                  progress: typeof details.progress === "string" ? details.progress : undefined,
-                }
-              : undefined,
-        };
+          ...(start ? { startedAt: start.startedAt } : {}),
+        });
+        if (!event) return;
         if (message.phase === "end") {
           session.toolStarts.delete(message.tool_call_id);
         }
@@ -1136,44 +1122,63 @@ export class WsBridge {
           optionValues.set("cancel", "false");
         }
         const kind = isPlan ? "propose_plan" : "ask";
-        session.interactionKinds.set(message.request_id, {
+        const timestamp = Date.now();
+        const timeoutAt = message.timeout_ms ? timestamp + message.timeout_ms : undefined;
+        const request: InteractionRequest = isPlan
+          ? {
+              id: message.request_id,
+              kind: "propose_plan",
+              toolCallId: planRequest?.toolCallId ?? message.request_id,
+              plan: planRequest?.plan ?? "",
+              timeoutAt,
+            }
+          : {
+              id: message.request_id,
+              kind: "ask",
+              toolCallId: batchAsk?.toolCallId ?? message.request_id,
+              title: batchAsk ? undefined : message.title,
+              questions: askQuestions ?? [],
+              timeoutAt,
+            };
+        const previousPending = session.interactionKinds.get(message.request_id);
+        if (previousPending?.timeout) clearTimeout(previousPending.timeout);
+        session.interactionKinds.delete(message.request_id);
+        const pending: PendingInteraction = {
           kind,
           method: message.method,
           optionValues,
           askQuestions,
           askBatch: Boolean(batchAsk),
-        });
+          generation,
+          request,
+        };
+        if (timeoutAt) {
+          pending.timeout = setTimeout(
+            () => this.expirePendingInteraction(session, message.request_id, pending),
+            Math.max(0, timeoutAt - Date.now()),
+          );
+        }
+        session.interactionKinds.set(message.request_id, pending);
         this.publishRunState(session, "awaiting_interaction");
         this.broadcastToSession(session.id, {
           type: "interaction_request",
           generation,
-          request: isPlan
-            ? {
-                id: message.request_id,
-                kind: "propose_plan",
-                toolCallId: planRequest?.toolCallId ?? message.request_id,
-                plan: planRequest?.plan ?? "",
-                timeoutAt: message.timeout_ms ? Date.now() + message.timeout_ms : undefined,
-              }
-            : {
-                id: message.request_id,
-                kind: "ask",
-                toolCallId: batchAsk?.toolCallId ?? message.request_id,
-                title: batchAsk ? undefined : message.title,
-                questions: askQuestions ?? [],
-                timeoutAt: message.timeout_ms ? Date.now() + message.timeout_ms : undefined,
-              },
-          timestamp: Date.now(),
+          request,
+          timestamp,
         });
         return;
       }
       case "run_state": {
+        session.piActivityEpoch += 1;
         const state: PiRunState =
           message.state === "idle" || message.state === "aborted"
             ? "ready"
             : message.state === "retrying"
               ? "running"
               : message.state;
+        if (state === "ready") {
+          this.clearPendingInteractions(session);
+        }
         this.publishRunState(
           session,
           state,
@@ -1182,6 +1187,9 @@ export class WsBridge {
             ? (message.detail as Extract<BrowserIncomingMessage, { type: "run_state" }>["detail"])
             : undefined,
         );
+        if (state === "ready" && session.offlineQueue.length > 0) {
+          void this.flushOfflineQueue(session.id);
+        }
         return;
       }
       case "history_snapshot": {
@@ -1277,6 +1285,7 @@ export class WsBridge {
         (reason) => this.historySnapshot(session, reason),
         isHistoryBackedEvent,
       );
+      if (socket) this.sendInteractionSnapshot(session, socket);
       return;
     }
     if (message.type === "session_ack") {
@@ -1294,6 +1303,27 @@ export class WsBridge {
         "The browser message belongs to an inactive Pi generation.",
         false,
       );
+      return;
+    }
+    if (
+      message.type === "agent_message" &&
+      isDuplicateClientMessage(session, message.clientMsgId ?? message.message.id)
+    ) {
+      if (socket && session.browserSockets.has(socket)) {
+        if (
+          !sendToBrowser(socket, {
+            type: "agent_message_accepted",
+            generation: session.state.generation,
+            clientMsgId: message.clientMsgId ?? message.message.id,
+          })
+        ) {
+          session.browserSockets.delete(socket);
+        }
+      }
+      return;
+    }
+    if (message.type === "agent_message") {
+      await this.acceptBrowserAgentMessage(session, message);
       return;
     }
     if (
@@ -1389,10 +1419,6 @@ export class WsBridge {
       }
       return;
     }
-    if (message.type === "agent_message") {
-      this.acceptAgentMessage(session, message, false);
-      return;
-    }
     if (message.type === "interaction_response") {
       this.acceptInteractionResponse(session, message);
       return;
@@ -1452,23 +1478,10 @@ export class WsBridge {
     }
   }
 
-  private acceptAgentMessage(
+  private publishAcceptedAgentMessage(
     session: Session,
     event: Extract<BrowserOutgoingMessage, { type: "agent_message" }>,
-    alreadyDeduplicated: boolean,
-  ): boolean {
-    const id = event.clientMsgId ?? event.message.id;
-    if (
-      !alreadyDeduplicated &&
-      isUserMessageContentWithinLimit(
-        event.message.content
-          .filter((part): part is Extract<PiMessagePart, { type: "text" }> => part.type === "text")
-          .map((part) => part.text)
-          .join("\n"),
-      ) === false
-    ) {
-      return false;
-    }
+  ): void {
     metricsCollector.recordTurnStarted(session.id);
     const browserEvent: AgentMessageEvent = {
       type: "agent_message",
@@ -1490,11 +1503,13 @@ export class WsBridge {
         });
       }
     }
-    const outgoing = this.toPiAgentMessage(event.message);
-    if (session.piAdapter?.isConnected() && session.piAdapter.send(outgoing)) {
-      this.publishRunState(session, "running");
-      return true;
-    }
+  }
+
+  private enqueueAgentMessage(
+    session: Session,
+    event: Extract<BrowserOutgoingMessage, { type: "agent_message" }>,
+  ): boolean {
+    const id = event.clientMsgId ?? event.message.id;
     if (session.offlineQueue.length >= OFFLINE_QUEUE_LIMIT) {
       this.publishError(session, "offline_queue_full", "The Pi offline queue is full.", true);
       return false;
@@ -1505,9 +1520,7 @@ export class WsBridge {
         message: event.message,
         queuedAt: Date.now(),
       });
-      persistSessionRecord(session, this.store);
     }
-    this.publishRunState(session, "disconnected", "Pi is not connected.");
     piworkBus.emit("session:relaunch-needed", {
       sessionId: session.id,
       reason: "queued_message",
@@ -1515,7 +1528,151 @@ export class WsBridge {
     return true;
   }
 
-  private toPiAgentMessage(message: AgentMessage): PiBrowserOutgoingMessage {
+  private async acceptAgentMessage(
+    session: Session,
+    event: Extract<BrowserOutgoingMessage, { type: "agent_message" }>,
+  ): Promise<boolean> {
+    const outgoing = this.toPiAgentMessage(event.message);
+    const adapter = session.piAdapter;
+    const generation = session.state.generation;
+    if (adapter?.isConnected()) {
+      const delivery = await adapter.sendAgentMessage(outgoing);
+      if (delivery === "rejected") return false;
+      if (this.sessions.get(session.id) !== session) return true;
+      this.publishAcceptedAgentMessage(session, event);
+      if (delivery === "unknown") {
+        this.publishError(
+          session,
+          "pi_delivery_unknown",
+          "Pi prompt delivery could not be confirmed; it will not be resent automatically.",
+          false,
+        );
+        return true;
+      }
+      if (
+        session.piAdapter !== adapter ||
+        session.adapterGeneration !== adapter.generation ||
+        session.state.generation !== generation
+      ) {
+        return true;
+      }
+      this.publishRunState(session, "running");
+      this.scheduleAcceptedPromptReconciliation(session, adapter, generation);
+      return true;
+    }
+    if (!this.enqueueAgentMessage(session, event)) return false;
+    persistSessionRecordSync(session, this.store);
+    this.publishAcceptedAgentMessage(session, event);
+    this.publishRunState(session, "disconnected", "Pi is not connected.");
+    return true;
+  }
+
+  private async acceptBrowserAgentMessage(
+    session: Session,
+    event: Extract<BrowserOutgoingMessage, { type: "agent_message" }>,
+  ): Promise<boolean> {
+    const id = event.clientMsgId ?? event.message.id;
+    const content = event.message.content
+      .filter((part): part is Extract<PiMessagePart, { type: "text" }> => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    if (!isUserMessageContentWithinLimit(content)) return false;
+    if (session.acceptingClientMessageIds.has(id)) return false;
+
+    const reservation = Symbol(id);
+    session.acceptingClientMessageIds.set(id, reservation);
+    try {
+      let adapter = session.piAdapter;
+      let generation = session.state.generation;
+      let delivery: "accepted" | "rejected" | "unknown" = "rejected";
+      let queued = false;
+      while (adapter?.isConnected()) {
+        const attemptedAdapter = adapter;
+        const attemptedGeneration = generation;
+        delivery = await attemptedAdapter.sendAgentMessage(this.toPiAgentMessage(event.message));
+        if (delivery !== "rejected") break;
+        if (this.sessions.get(session.id) !== session) return false;
+        const replacement = session.piAdapter;
+        const replacementGeneration = session.state.generation;
+        if (
+          replacement?.isConnected() &&
+          (replacement !== attemptedAdapter || replacementGeneration !== attemptedGeneration)
+        ) {
+          adapter = replacement;
+          generation = replacementGeneration;
+          continue;
+        }
+        if (
+          replacement?.isConnected() &&
+          replacement === attemptedAdapter &&
+          replacementGeneration === attemptedGeneration
+        ) {
+          return false;
+        }
+        adapter = replacement;
+        generation = replacementGeneration;
+        queued = this.enqueueAgentMessage(session, event);
+        delivery = queued ? "accepted" : "rejected";
+        break;
+      }
+      if (!adapter?.isConnected() && delivery === "rejected" && !queued) {
+        queued = this.enqueueAgentMessage(session, event);
+        delivery = queued ? "accepted" : "rejected";
+      }
+      if (delivery === "rejected" || this.sessions.get(session.id) !== session) return false;
+
+      rememberClientMessage(session, id, PROCESSED_CLIENT_MESSAGE_LIMIT, (value) =>
+        persistSessionRecordSync(value, this.store),
+      );
+      this.publishAcceptedAgentMessage(session, event);
+      for (const browserSocket of [...session.browserSockets]) {
+        if (
+          !sendToBrowser(browserSocket, {
+            type: "agent_message_accepted",
+            generation: session.state.generation,
+            clientMsgId: id,
+          })
+        ) {
+          session.browserSockets.delete(browserSocket);
+        }
+      }
+      if (delivery === "unknown") {
+        this.publishError(
+          session,
+          "pi_delivery_unknown",
+          "Pi prompt delivery could not be confirmed; it will not be resent automatically.",
+          false,
+        );
+        return true;
+      }
+      if (
+        !queued &&
+        adapter &&
+        (session.piAdapter !== adapter ||
+          session.adapterGeneration !== adapter.generation ||
+          session.state.generation !== generation)
+      ) {
+        return true;
+      }
+      this.publishRunState(
+        session,
+        queued ? "disconnected" : "running",
+        queued ? "Pi is not connected." : undefined,
+      );
+      if (!queued && adapter) {
+        this.scheduleAcceptedPromptReconciliation(session, adapter, generation);
+      }
+      return true;
+    } finally {
+      if (session.acceptingClientMessageIds.get(id) === reservation) {
+        session.acceptingClientMessageIds.delete(id);
+      }
+    }
+  }
+
+  private toPiAgentMessage(
+    message: AgentMessage,
+  ): Extract<PiBrowserOutgoingMessage, { type: "agent_message" }> {
     return {
       type: "agent_message",
       content: message.content
@@ -1542,13 +1699,21 @@ export class WsBridge {
     message: Extract<BrowserOutgoingMessage, { type: "interaction_response" }>,
   ): boolean {
     const pending = session.interactionKinds.get(message.requestId);
-    if (!pending || pending.kind !== message.kind) {
+    if (
+      !pending ||
+      pending.kind !== message.kind ||
+      pending.generation !== session.state.generation
+    ) {
       this.publishError(
         session,
         "stale_interaction",
         "The interaction is no longer active.",
         false,
       );
+      return false;
+    }
+    if (pending.request.timeoutAt && pending.request.timeoutAt <= Date.now()) {
+      this.expirePendingInteraction(session, message.requestId, pending);
       return false;
     }
     let outgoing: PiBrowserOutgoingMessage;
@@ -1621,7 +1786,7 @@ export class WsBridge {
       this.publishError(session, "pi_not_connected", "Pi is not connected.", true);
       return false;
     }
-    session.interactionKinds.delete(message.requestId);
+    this.removePendingInteraction(session, message.requestId, pending);
     this.broadcastToSession(session.id, {
       ...message,
       generation: session.state.generation,
@@ -1631,20 +1796,114 @@ export class WsBridge {
     return true;
   }
 
-  private flushOfflineQueue(session: Session): void {
-    const adapter = session.piAdapter;
-    if (!adapter?.isConnected()) return;
-    let delivered = 0;
-    while (session.offlineQueue.length > 0) {
-      const entry = session.offlineQueue[0]!;
-      if (!adapter.send(this.toPiAgentMessage(entry.message))) break;
-      session.offlineQueue.shift();
-      delivered += 1;
+  private scheduleAcceptedPromptReconciliation(
+    session: Session,
+    adapter: PiAdapter,
+    generation: number,
+  ): void {
+    const activityEpoch = ++session.piActivityEpoch;
+    const isCurrent = () =>
+      this.sessions.get(session.id) === session &&
+      session.piAdapter === adapter &&
+      session.adapterGeneration === adapter.generation &&
+      session.state.generation === generation &&
+      session.piActivityEpoch === activityEpoch &&
+      session.interactionKinds.size === 0 &&
+      session.toolStarts.size === 0;
+    const reconcile = (attempt: number): void => {
+      const delay =
+        attempt === 0 ? PROMPT_RECONCILE_INITIAL_DELAY_MS : PROMPT_RECONCILE_RETRY_DELAY_MS;
+      const timer = setTimeout(async () => {
+        if (!isCurrent()) return;
+        const status = await adapter.settlementStatus();
+        if (!isCurrent()) return;
+        if (status === "settled") {
+          this.publishRunState(session, "ready");
+          if (session.offlineQueue.length > 0) void this.flushOfflineQueue(session.id);
+          return;
+        }
+        if (status === "unavailable" && attempt + 1 < PROMPT_RECONCILE_MAX_ATTEMPTS) {
+          reconcile(attempt + 1);
+          return;
+        }
+        if (status === "unavailable") {
+          this.publishError(
+            session,
+            "pi_state_reconciliation_failed",
+            "Pi accepted the prompt, but its settled state could not be confirmed.",
+            true,
+          );
+          this.publishRunState(session, "reconnecting", "Pi state reconciliation is unavailable.");
+        }
+      }, delay);
+      timer.unref?.();
+    };
+    reconcile(0);
+  }
+
+  async flushOfflineQueue(sessionId: string): Promise<void> {
+    const current = this.offlineQueueFlushes.get(sessionId);
+    if (current) return current;
+    const operation = this.flushOfflineQueueHead(sessionId);
+    this.offlineQueueFlushes.set(sessionId, operation);
+    try {
+      await operation;
+    } finally {
+      if (this.offlineQueueFlushes.get(sessionId) === operation) {
+        this.offlineQueueFlushes.delete(sessionId);
+      }
     }
-    if (delivered > 0) {
-      persistSessionRecord(session, this.store);
-      this.publishRunState(session, "running");
+  }
+
+  private async flushOfflineQueueHead(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const initialAdapter = session.piAdapter;
+    if (!initialAdapter?.isConnected()) return;
+    let adapter: PiAdapter = initialAdapter;
+    let generation = session.state.generation;
+    const entry = session.offlineQueue[0];
+    if (!entry) return;
+    let delivery: "accepted" | "rejected" | "unknown";
+    while (true) {
+      const attemptedAdapter: PiAdapter = adapter;
+      const attemptedGeneration = generation;
+      delivery = await attemptedAdapter.sendAgentMessage(this.toPiAgentMessage(entry.message));
+      if (delivery !== "rejected") break;
+      if (this.sessions.get(sessionId) !== session) return;
+      const replacement = session.piAdapter;
+      const replacementGeneration = session.state.generation;
+      if (
+        !replacement?.isConnected() ||
+        (replacement === attemptedAdapter && replacementGeneration === attemptedGeneration)
+      ) {
+        return;
+      }
+      adapter = replacement;
+      generation = replacementGeneration;
     }
+    if (this.sessions.get(sessionId) !== session) return;
+    if (session.offlineQueue[0]?.clientMessageId !== entry.clientMessageId) return;
+    session.offlineQueue.shift();
+    persistSessionRecordSync(session, this.store);
+    if (delivery === "unknown") {
+      this.publishError(
+        session,
+        "pi_delivery_unknown",
+        "Pi prompt delivery could not be confirmed; it will not be resent automatically.",
+        false,
+      );
+      return;
+    }
+    if (
+      session.piAdapter !== adapter ||
+      session.adapterGeneration !== adapter.generation ||
+      session.state.generation !== generation
+    ) {
+      return;
+    }
+    this.publishRunState(session, "running");
+    this.scheduleAcceptedPromptReconciliation(session, adapter, generation);
   }
 
   private async readHistory(session: Session): Promise<PiHistoryEntry[]> {

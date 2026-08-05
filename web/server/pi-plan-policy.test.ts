@@ -121,6 +121,24 @@ describe("Pi Plan policy", () => {
     expect(
       evaluatePiToolPolicy({ mode: "plan", toolName: "task", args: { readOnly: false } }),
     ).toEqual({ allowed: true, patchedArgs: { readOnly: true } });
+    expect(evaluatePiToolPolicy({ mode: "plan", toolName: "todo_read", args: {} })).toEqual({
+      allowed: true,
+    });
+    expect(evaluatePiToolPolicy({ mode: "plan", toolName: "list_apps", args: {} })).toEqual({
+      allowed: true,
+    });
+    expect(evaluatePiToolPolicy({ mode: "plan", toolName: "list_app_versions", args: {} })).toEqual(
+      { allowed: true },
+    );
+    expect(
+      evaluatePiToolPolicy({ mode: "plan", toolName: "get_app_logs", args: {} }),
+    ).toMatchObject({ allowed: false });
+    expect(
+      evaluatePiToolPolicy({ mode: "plan", toolName: "set_app_visibility", args: {} }),
+    ).toMatchObject({ allowed: false });
+    expect(evaluatePiToolPolicy({ mode: "plan", toolName: "deploy_app", args: {} })).toMatchObject({
+      allowed: false,
+    });
     expect(evaluatePiToolPolicy({ mode: "plan", toolName: "future_tool", args: {} })).toMatchObject(
       { allowed: false },
     );

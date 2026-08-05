@@ -7,7 +7,6 @@ script = """
 set -euo pipefail
 make install
 make agent-browser
-make onlyoffice-browser
 """
 
 [cleanup]

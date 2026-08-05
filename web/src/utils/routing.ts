@@ -4,6 +4,7 @@ export type Route =
   | { page: "home"; userUuid?: string; agentId?: string }
   | { page: "session"; sessionId: string; userUuid?: string; agentId?: string }
   | { page: "rbacAdmin" }
+  | { page: "apps" }
   | { page: "projectionLab" };
 
 let clipboardFallbackInitialized = false;
@@ -91,6 +92,9 @@ function parsePath(pathname: string): Route {
     return { page: "rbacAdmin" };
   }
 
+  if (segments.length === 1 && segments[0] === "apps") {
+    return { page: "apps" };
+  }
   if (import.meta.env.DEV && segments[0] === "lab" && segments[1] === "projection") {
     return { page: "projectionLab" };
   }
@@ -179,4 +183,9 @@ export function navigateHome(replace = false, context?: RouteContext): void {
 export function navigateRbacAdmin(replace = false): void {
   ensureClipboardFallbackInstalled();
   updateLocationPath("/admin/rbac", replace);
+}
+
+export function navigateApps(replace = false): void {
+  ensureClipboardFallbackInstalled();
+  updateLocationPath("/apps", replace);
 }

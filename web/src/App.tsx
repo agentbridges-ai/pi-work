@@ -95,6 +95,11 @@ const RbacAdminPage = lazyRoute(
   "/src/components/RbacAdminPage.tsx",
   "RbacAdminPage",
 );
+const AppsPage = lazyRoute(
+  () => import("./components/AppsPage.js").then((m) => ({ default: m.AppsPage })),
+  "/src/components/AppsPage.tsx",
+  "AppsPage",
+);
 const ProjectionLab = import.meta.env.DEV
   ? lazyRoute(
       () => import("./components/ProjectionLab.js").then((m) => ({ default: m.ProjectionLab })),
@@ -882,6 +887,11 @@ export default function App() {
           {route.page === "rbacAdmin" && (
             <Suspense fallback={<LazyFallback />}>
               <RbacAdminPage />
+            </Suspense>
+          )}
+          {route.page === "apps" && (
+            <Suspense fallback={<LazyFallback />}>
+              <AppsPage />
             </Suspense>
           )}
           {route.page === "projectionLab" && ProjectionLab && (

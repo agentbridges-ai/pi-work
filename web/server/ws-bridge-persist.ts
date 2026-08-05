@@ -28,3 +28,9 @@ export function persistSession(session: Session, store: SessionStore | null): vo
   if (!store) return;
   store.save(serializeForStore(session));
 }
+
+/** Persist delivery acceptance before it is acknowledged to a browser. */
+export function persistSessionSync(session: Session, store: SessionStore | null): void {
+  if (!store) return;
+  store.saveSync(serializeForStore(session));
+}

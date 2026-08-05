@@ -243,6 +243,51 @@ describe("agent-space routes", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]));
   });
 
+  it("atomically reclaims binary native edits against the source digest", async () => {
+    mkdirSync(workspacePath("docs"), { recursive: true });
+    const original = new Uint8Array([1, 2, 3]);
+    const changed = new Uint8Array([4, 5, 6, 7]);
+    writeFileSync(workspacePath("docs", "artifact.bin"), original);
+    const baseline = sha256(original);
+
+    const replaced = await app.request(
+      `/sessions/s1/agent-space/raw?path=docs%2Fartifact.bin&baselineSha256=${baseline}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: changed,
+      },
+    );
+    expect(replaced.status).toBe(200);
+    expect(new Uint8Array(readFileSync(workspacePath("docs", "artifact.bin")))).toEqual(changed);
+
+    const stale = await app.request(
+      `/sessions/s1/agent-space/raw?path=docs%2Fartifact.bin&baselineSha256=${baseline}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: original,
+      },
+    );
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      code: "native_edit_source_changed",
+    });
+
+    const copy = await app.request(
+      "/sessions/s1/agent-space/raw?path=docs%2Fartifact-copy.bin&create=1",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: original,
+      },
+    );
+    expect(copy.status).toBe(200);
+    expect(new Uint8Array(readFileSync(workspacePath("docs", "artifact-copy.bin")))).toEqual(
+      original,
+    );
+  });
+
   it("forces active Agent Space content to download under a strict sandbox policy", async () => {
     mkdirSync(workspacePath("pages"), { recursive: true });
     const active = '<script>top.location="https://example.invalid"</script>';

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PiAdapter, type PiBrowserIncomingMessage } from "./pi-adapter.js";
-import type { PiRpcTransport } from "./pi-rpc-transport.js";
+import { PiRpcRemoteError, type PiRpcTransport } from "./pi-rpc-transport.js";
 
 function fixture() {
   const transport = {
@@ -16,6 +16,13 @@ function fixture() {
       id: modelId,
     })),
     setThinkingLevel: vi.fn(async () => undefined),
+    getState: vi.fn(async () => ({
+      model: { provider: "openai", id: "gpt-5" },
+      thinkingLevel: "minimal",
+      isStreaming: false,
+      isCompacting: false,
+      pendingMessageCount: 0,
+    })),
     replayHistory: vi.fn(async () => ({ entries: [], leafId: null })),
     sendExtensionUiResponse: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),
@@ -399,7 +406,7 @@ describe("PiAdapter", () => {
     expect(value.adapter.send({ type: "set_thinking", level: "xhigh" })).toBe(true);
     expect(value.adapter.send({ type: "history_request", since: "entry-1" })).toBe(true);
     expect(value.adapter.send({ type: "unknown" } as never)).toBe(false);
-    await flush();
+    await vi.waitFor(() => expect(value.transport.setThinkingLevel).toHaveBeenCalledWith("xhigh"));
 
     expect(value.transport.prompt).toHaveBeenCalledWith("prompt", {
       images: [{ type: "image", data: "AA==", mimeType: "image/png" }],
@@ -409,7 +416,6 @@ describe("PiAdapter", () => {
     expect(value.transport.abort).toHaveBeenCalledOnce();
     expect(value.transport.abortRetry).toHaveBeenCalledOnce();
     expect(value.transport.compact).toHaveBeenCalledWith("shorten");
-    expect(value.transport.setThinkingLevel).toHaveBeenCalledWith("xhigh");
     expect(value.transport.replayHistory).toHaveBeenCalledWith("entry-1");
     expect(sessionMeta).toHaveBeenCalledWith({
       model: { key: "openai/gpt-5", provider: "openai", modelId: "gpt-5" },
@@ -417,8 +423,9 @@ describe("PiAdapter", () => {
     expect(value.messages).toContainEqual({
       type: "pi_state",
       model: { key: "openai/gpt-5", provider: "openai", modelId: "gpt-5" },
+      thinkingLevel: "minimal",
     });
-    expect(value.messages).toContainEqual({
+    expect(value.messages).not.toContainEqual({
       type: "pi_state",
       thinkingLevel: "xhigh",
     });
@@ -443,6 +450,122 @@ describe("PiAdapter", () => {
       detail: "Pi RPC command failed.",
     });
     expect(initError).toHaveBeenCalledWith("Pi RPC command failed.");
+  });
+
+  it("reports stock Pi prompt acceptance instead of optimistic dispatch", async () => {
+    const value = fixture();
+    vi.mocked(value.transport.prompt).mockRejectedValueOnce(
+      new PiRpcRemoteError("prompt", "preflight rejected"),
+    );
+    await expect(
+      value.adapter.sendAgentMessage({ type: "agent_message", content: "fail" }),
+    ).resolves.toBe("rejected");
+
+    expect(value.messages).toContainEqual({
+      type: "run_state",
+      state: "error",
+      detail: "Pi RPC command failed.",
+    });
+  });
+
+  it("does not turn an uncorrelated transport failure into a definitive rejection", async () => {
+    const value = fixture();
+    vi.mocked(value.transport.prompt).mockRejectedValueOnce(new Error("response lost"));
+
+    await expect(
+      value.adapter.sendAgentMessage({ type: "agent_message", content: "maybe delivered" }),
+    ).resolves.toBe("unknown");
+  });
+
+  it("distinguishes settled, busy, and unavailable stock Pi state", async () => {
+    const value = fixture();
+    await expect(value.adapter.settlementStatus()).resolves.toBe("settled");
+
+    vi.mocked(value.transport.getState).mockResolvedValueOnce({
+      model: { provider: "openai", id: "gpt-5" },
+      thinkingLevel: "minimal",
+      isStreaming: true,
+      isCompacting: false,
+      pendingMessageCount: 0,
+    } as never);
+    await expect(value.adapter.settlementStatus()).resolves.toBe("busy");
+
+    vi.mocked(value.transport.getState).mockRejectedValueOnce(new Error("temporarily down"));
+    await expect(value.adapter.settlementStatus()).resolves.toBe("unavailable");
+  });
+
+  it("reconciles the previous stock Pi state after a rejected model change", async () => {
+    const value = fixture();
+    vi.mocked(value.transport.setModel).mockRejectedValueOnce(new Error("model unavailable"));
+
+    expect(
+      value.adapter.send({
+        type: "set_model",
+        model: { provider: "openai", modelId: "missing" },
+      }),
+    ).toBe(true);
+    await vi.waitFor(() => {
+      expect(value.messages).toContainEqual({
+        type: "run_state",
+        state: "error",
+        detail: "Pi RPC command failed.",
+      });
+    });
+
+    expect(value.messages).toContainEqual({
+      type: "pi_state",
+      model: { key: "openai/gpt-5", provider: "openai", modelId: "gpt-5" },
+      thinkingLevel: "minimal",
+    });
+  });
+
+  it("uses the stock set_model result when get_state reconciliation is unavailable", async () => {
+    const value = fixture();
+    const sessionMeta = vi.fn();
+    value.adapter.onSessionMeta(sessionMeta);
+    vi.mocked(value.transport.getState).mockRejectedValueOnce(new Error("state unavailable"));
+
+    expect(
+      value.adapter.send({
+        type: "set_model",
+        model: { provider: "openai", modelId: "gpt-5-mini" },
+      }),
+    ).toBe(true);
+    await flush();
+
+    const model = {
+      key: "openai/gpt-5-mini",
+      provider: "openai",
+      modelId: "gpt-5-mini",
+    };
+    expect(sessionMeta).toHaveBeenCalledWith({ model });
+    expect(value.messages).toContainEqual({ type: "pi_state", model });
+  });
+
+  it("serializes model and thinking mutations through one stock Pi state lane", async () => {
+    const value = fixture();
+    let releaseModel!: () => void;
+    vi.mocked(value.transport.setModel).mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        releaseModel = resolve;
+      });
+      return { provider: "openai", id: "gpt-5-mini" } as never;
+    });
+
+    expect(
+      value.adapter.send({
+        type: "set_model",
+        model: { provider: "openai", modelId: "gpt-5-mini" },
+      }),
+    ).toBe(true);
+    expect(value.adapter.send({ type: "set_thinking", level: "high" })).toBe(true);
+    await Promise.resolve();
+
+    expect(value.transport.setModel).toHaveBeenCalledOnce();
+    expect(value.transport.setThinkingLevel).not.toHaveBeenCalled();
+
+    releaseModel();
+    await vi.waitFor(() => expect(value.transport.setThinkingLevel).toHaveBeenCalledOnce());
   });
 
   it("validates confirm, value, cancellation, and stale interaction responses", () => {
@@ -732,6 +855,47 @@ describe("PiAdapter", () => {
       event: "error",
       payload: { event: "load", error: "bad" },
     });
+  });
+
+  it("uses stock Pi's distinct manual and automatic compaction boundaries", () => {
+    const manual = fixture();
+    manual.adapter.handleNotification({ type: "compaction_start", reason: "manual" });
+    manual.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "manual",
+      aborted: false,
+      willRetry: false,
+    });
+    expect(manual.messages.at(-1)).toEqual({
+      type: "run_state",
+      state: "idle",
+      detail: {
+        kind: "compaction",
+        phase: "end",
+        reason: "manual",
+        aborted: false,
+        willRetry: false,
+        error: undefined,
+      },
+    });
+
+    const automatic = fixture();
+    automatic.adapter.handleNotification({ type: "compaction_start", reason: "threshold" });
+    automatic.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "threshold",
+      aborted: false,
+      willRetry: false,
+    });
+    expect(automatic.messages).toContainEqual({
+      type: "run_state",
+      state: "compacting",
+      detail: { kind: "compaction", phase: "start", reason: "threshold" },
+    });
+    expect(automatic.messages.at(-1)).toMatchObject({ type: "run_state", state: "idle" });
+
+    automatic.adapter.handleNotification({ type: "agent_settled" });
+    expect(automatic.messages.at(-1)).toEqual({ type: "run_state", state: "idle" });
   });
 
   it("replays history and disconnects exactly once for local or transport closure", async () => {

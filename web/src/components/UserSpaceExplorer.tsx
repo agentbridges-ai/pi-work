@@ -5870,217 +5870,217 @@ function UserSpaceMountSwitcher({
           </button>
         </div>
       </div>
-      <Modal
+      <Modal.Backdrop
+        variant="opaque"
+        isDismissable
         isOpen={switcherOpen}
         onOpenChange={(open) => {
           if (!open) discardDraft();
           setSwitcherOpen(open);
         }}
       >
-        <Modal.Backdrop variant="opaque" isDismissable>
-          <Modal.Container placement="center" size="sm">
-            <Modal.Dialog
-              aria-label={workspaceCopy.mountSwitcherDialog.title}
-              className={`piwork-superellipse-panel w-full max-w-md overflow-hidden ${WORKSPACE_PANEL_RADIUS_CLASS} border border-border bg-card !p-0 text-foreground`}
-            >
-              <Modal.Header className="relative block border-b border-border px-5 py-4 pr-12">
-                <div className="min-w-0 flex-1">
-                  <Modal.Heading className="text-base font-semibold">
-                    {workspaceCopy.mountSwitcherDialog.title}
-                  </Modal.Heading>
-                </div>
-                <Modal.CloseTrigger
-                  aria-label={uiCopy.common.close}
-                  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center bg-transparent text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </Modal.CloseTrigger>
-              </Modal.Header>
-              <Modal.Body className="max-h-[min(420px,60dvh)] overflow-y-auto p-2">
-                {draftMounts.length > 0 ? (
-                  <div role="list" aria-label={workspaceCopy.mountMenuLabel} className="space-y-1">
-                    {draftMounts.map((mount) => {
-                      const current = mount.mountId === draftActiveMountId;
-                      const removing = unmountingMountId === mount.mountId;
-                      const aliasCandidate = mount.rootName.trim();
-                      const aliasDuplicate =
-                        Boolean(aliasCandidate) &&
-                        draftMounts.some(
-                          (item) =>
-                            item.mountId !== mount.mountId &&
-                            item.rootName.trim().toLocaleLowerCase() ===
-                              aliasCandidate.toLocaleLowerCase(),
-                        );
-                      const aliasInvalid = !aliasCandidate || aliasDuplicate;
-                      return (
-                        <div
-                          key={mount.mountId}
-                          role="listitem"
-                          data-testid={`user-space-mount-option-${mount.mountId}`}
-                          className={`group flex min-h-12 w-full items-center gap-1 border border-transparent ${WORKSPACE_CONTROL_RADIUS_CLASS} p-1.5 text-foreground transition-colors ${
-                            current ? "bg-accent" : "bg-transparent hover:bg-accent"
-                          }`}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1">
-                            {editingMountId === mount.mountId ? (
-                              <>
-                                {current ? (
-                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground">
-                                    <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                  </span>
-                                ) : (
-                                  <span className="h-8 w-8 shrink-0" aria-hidden="true" />
-                                )}
-                                <input
-                                  autoFocus
-                                  value={mount.rootName}
-                                  aria-label={workspaceCopy.mountSwitcherDialog.aliasLabel(
-                                    mount.rootName,
-                                  )}
-                                  aria-invalid={aliasInvalid ? true : undefined}
-                                  data-name-availability={aliasInvalid ? "invalid" : "available"}
-                                  onChange={(event) => {
-                                    const rootName = event.target.value;
-                                    setDraftMounts((currentMounts) =>
-                                      currentMounts.map((item) =>
-                                        item.mountId === mount.mountId
-                                          ? { ...item, name: rootName, rootName }
-                                          : item,
-                                      ),
-                                    );
-                                  }}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter" && !aliasInvalid) {
-                                      setEditingMountId("");
-                                    }
-                                  }}
-                                  className={`h-9 min-w-0 flex-1 rounded-[var(--piwork-control-radius)] border bg-background px-3 text-sm font-semibold text-foreground outline-none transition-colors focus:ring-2 ${
-                                    aliasInvalid
-                                      ? "border-danger focus:border-danger focus:ring-danger/25"
-                                      : "border-success focus:border-success focus:ring-success/25"
-                                  }`}
-                                />
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={current || Boolean(unmountingMountId)}
-                                aria-label={
-                                  current
-                                    ? workspaceCopy.mountSwitcherDialog.currentAria(mount.rootName)
-                                    : workspaceCopy.mountSwitcherDialog.choose(mount.rootName)
-                                }
-                                onClick={() => chooseMount(mount.mountId)}
-                                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg text-left text-muted-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-100"
-                              >
-                                {current ? (
-                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground">
-                                    <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                  </span>
-                                ) : (
-                                  <span className="h-8 w-8 shrink-0" aria-hidden="true" />
-                                )}
-                                <span className="min-w-0 flex-1 truncate px-1 text-sm font-semibold text-foreground">
-                                  {mount.rootName}
+        <Modal.Container placement="center" size="sm">
+          <Modal.Dialog
+            aria-label={workspaceCopy.mountSwitcherDialog.title}
+            className={`piwork-superellipse-panel w-full max-w-md overflow-hidden ${WORKSPACE_PANEL_RADIUS_CLASS} border border-border bg-card !p-0 text-foreground`}
+          >
+            <Modal.Header className="relative block border-b border-border px-5 py-4 pr-12">
+              <div className="min-w-0 flex-1">
+                <Modal.Heading className="text-base font-semibold">
+                  {workspaceCopy.mountSwitcherDialog.title}
+                </Modal.Heading>
+              </div>
+              <Modal.CloseTrigger
+                aria-label={uiCopy.common.close}
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center bg-transparent text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Modal.CloseTrigger>
+            </Modal.Header>
+            <Modal.Body className="max-h-[min(420px,60dvh)] overflow-y-auto p-2">
+              {draftMounts.length > 0 ? (
+                <div role="list" aria-label={workspaceCopy.mountMenuLabel} className="space-y-1">
+                  {draftMounts.map((mount) => {
+                    const current = mount.mountId === draftActiveMountId;
+                    const removing = unmountingMountId === mount.mountId;
+                    const aliasCandidate = mount.rootName.trim();
+                    const aliasDuplicate =
+                      Boolean(aliasCandidate) &&
+                      draftMounts.some(
+                        (item) =>
+                          item.mountId !== mount.mountId &&
+                          item.rootName.trim().toLocaleLowerCase() ===
+                            aliasCandidate.toLocaleLowerCase(),
+                      );
+                    const aliasInvalid = !aliasCandidate || aliasDuplicate;
+                    return (
+                      <div
+                        key={mount.mountId}
+                        role="listitem"
+                        data-testid={`user-space-mount-option-${mount.mountId}`}
+                        className={`group flex min-h-12 w-full items-center gap-1 border border-transparent ${WORKSPACE_CONTROL_RADIUS_CLASS} p-1.5 text-foreground transition-colors ${
+                          current ? "bg-accent" : "bg-transparent hover:bg-accent"
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1">
+                          {editingMountId === mount.mountId ? (
+                            <>
+                              {current ? (
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground">
+                                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
                                 </span>
-                              </button>
-                            )}
+                              ) : (
+                                <span className="h-8 w-8 shrink-0" aria-hidden="true" />
+                              )}
+                              <input
+                                autoFocus
+                                value={mount.rootName}
+                                aria-label={workspaceCopy.mountSwitcherDialog.aliasLabel(
+                                  mount.rootName,
+                                )}
+                                aria-invalid={aliasInvalid ? true : undefined}
+                                data-name-availability={aliasInvalid ? "invalid" : "available"}
+                                onChange={(event) => {
+                                  const rootName = event.target.value;
+                                  setDraftMounts((currentMounts) =>
+                                    currentMounts.map((item) =>
+                                      item.mountId === mount.mountId
+                                        ? { ...item, name: rootName, rootName }
+                                        : item,
+                                    ),
+                                  );
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" && !aliasInvalid) {
+                                    setEditingMountId("");
+                                  }
+                                }}
+                                className={`h-9 min-w-0 flex-1 rounded-[var(--piwork-control-radius)] border bg-background px-3 text-sm font-semibold text-foreground outline-none transition-colors focus:ring-2 ${
+                                  aliasInvalid
+                                    ? "border-danger focus:border-danger focus:ring-danger/25"
+                                    : "border-success focus:border-success focus:ring-success/25"
+                                }`}
+                              />
+                            </>
+                          ) : (
                             <button
                               type="button"
-                              disabled={editingMountId === mount.mountId && aliasInvalid}
-                              onClick={() =>
-                                setEditingMountId((currentId) =>
-                                  currentId === mount.mountId ? "" : mount.mountId,
-                                )
-                              }
+                              disabled={current || Boolean(unmountingMountId)}
                               aria-label={
-                                editingMountId === mount.mountId
-                                  ? workspaceCopy.mountSwitcherDialog.finishRename(mount.rootName)
-                                  : workspaceCopy.mountSwitcherDialog.renameAlias(mount.rootName)
+                                current
+                                  ? workspaceCopy.mountSwitcherDialog.currentAria(mount.rootName)
+                                  : workspaceCopy.mountSwitcherDialog.choose(mount.rootName)
                               }
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45`}
+                              onClick={() => chooseMount(mount.mountId)}
+                              className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg text-left text-muted-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-100"
                             >
-                              {editingMountId === mount.mountId ? (
-                                <Check className="h-4 w-4" aria-hidden="true" />
+                              {current ? (
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground">
+                                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                </span>
                               ) : (
-                                <Pencil className="h-4 w-4" aria-hidden="true" />
+                                <span className="h-8 w-8 shrink-0" aria-hidden="true" />
                               )}
+                              <span className="min-w-0 flex-1 truncate px-1 text-sm font-semibold text-foreground">
+                                {mount.rootName}
+                              </span>
                             </button>
-                          </div>
+                          )}
                           <button
                             type="button"
+                            disabled={editingMountId === mount.mountId && aliasInvalid}
                             onClick={() =>
-                              setDraftMounts((currentMounts) => {
-                                const nextMounts = currentMounts.filter(
-                                  (item) => item.mountId !== mount.mountId,
-                                );
-                                if (draftActiveMountId === mount.mountId) {
-                                  setDraftActiveMountId(nextMounts[0]?.mountId || "");
-                                }
-                                return nextMounts;
-                              })
+                              setEditingMountId((currentId) =>
+                                currentId === mount.mountId ? "" : mount.mountId,
+                              )
                             }
-                            disabled={Boolean(unmountingMountId)}
-                            title={workspaceCopy.unmount}
-                            aria-label={workspaceCopy.unmountFor(mount.rootName)}
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-muted-foreground transition-colors hover:bg-danger-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-45`}
+                            aria-label={
+                              editingMountId === mount.mountId
+                                ? workspaceCopy.mountSwitcherDialog.finishRename(mount.rootName)
+                                : workspaceCopy.mountSwitcherDialog.renameAlias(mount.rootName)
+                            }
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45`}
                           >
-                            <Trash2
-                              className={`h-4 w-4 ${removing ? "opacity-50" : ""}`}
-                              aria-hidden="true"
-                            />
+                            {editingMountId === mount.mountId ? (
+                              <Check className="h-4 w-4" aria-hidden="true" />
+                            ) : (
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                            )}
                           </button>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-                    {workspaceCopy.mountSwitcherDialog.empty}
-                  </div>
-                )}
-              </Modal.Body>
-              <Modal.Footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void onMount().then((mount) => {
-                      if (!mount) return;
-                      setDraftMounts((current) => [...current, mount]);
-                      setDraftAddedMountIds((current) => new Set(current).add(mount.mountId));
-                      setDraftActiveMountId(mount.mountId);
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraftMounts((currentMounts) => {
+                              const nextMounts = currentMounts.filter(
+                                (item) => item.mountId !== mount.mountId,
+                              );
+                              if (draftActiveMountId === mount.mountId) {
+                                setDraftActiveMountId(nextMounts[0]?.mountId || "");
+                              }
+                              return nextMounts;
+                            })
+                          }
+                          disabled={Boolean(unmountingMountId)}
+                          title={workspaceCopy.unmount}
+                          aria-label={workspaceCopy.unmountFor(mount.rootName)}
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center ${WORKSPACE_CONTROL_RADIUS_CLASS} text-muted-foreground transition-colors hover:bg-danger-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-45`}
+                        >
+                          <Trash2
+                            className={`h-4 w-4 ${removing ? "opacity-50" : ""}`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  {workspaceCopy.mountSwitcherDialog.empty}
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer className="flex items-center justify-between gap-3 border-t border-border px-5 py-4">
+              <button
+                type="button"
+                onClick={() =>
+                  void onMount().then((mount) => {
+                    if (!mount) return;
+                    setDraftMounts((current) => [...current, mount]);
+                    setDraftAddedMountIds((current) => new Set(current).add(mount.mountId));
+                    setDraftActiveMountId(mount.mountId);
+                  })
+                }
+                disabled={Boolean(mountDisabledReason) || mounting || savingConfiguration}
+                title={mountDisabledReason || workspaceCopy.mountSwitcherDialog.addDirectory}
+                className={`inline-flex h-9 items-center ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-border bg-secondary px-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45`}
+              >
+                {workspaceCopy.mountSwitcherDialog.addDirectory}
+              </button>
+              <button
+                type="button"
+                disabled={!draftNamesValid || mounting || savingConfiguration}
+                onClick={() => {
+                  setSavingConfiguration(true);
+                  void onSave(draftMounts, draftActiveMountId)
+                    .then(() => {
+                      setDraftAddedMountIds(new Set());
+                      setSwitcherOpen(false);
                     })
-                  }
-                  disabled={Boolean(mountDisabledReason) || mounting || savingConfiguration}
-                  title={mountDisabledReason || workspaceCopy.mountSwitcherDialog.addDirectory}
-                  className={`inline-flex h-9 items-center ${WORKSPACE_CONTROL_RADIUS_CLASS} border border-border bg-secondary px-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45`}
-                >
-                  {workspaceCopy.mountSwitcherDialog.addDirectory}
-                </button>
-                <button
-                  type="button"
-                  disabled={!draftNamesValid || mounting || savingConfiguration}
-                  onClick={() => {
-                    setSavingConfiguration(true);
-                    void onSave(draftMounts, draftActiveMountId)
-                      .then(() => {
-                        setDraftAddedMountIds(new Set());
-                        setSwitcherOpen(false);
-                      })
-                      .catch(() => undefined)
-                      .finally(() => setSavingConfiguration(false));
-                  }}
-                  className={`inline-flex h-9 items-center ${WORKSPACE_CONTROL_RADIUS_CLASS} bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45`}
-                >
-                  {savingConfiguration
-                    ? workspaceCopy.mountSwitcherDialog.saving
-                    : workspaceCopy.mountSwitcherDialog.save}
-                </button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+                    .catch(() => undefined)
+                    .finally(() => setSavingConfiguration(false));
+                }}
+                className={`inline-flex h-9 items-center ${WORKSPACE_CONTROL_RADIUS_CLASS} bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45`}
+              >
+                {savingConfiguration
+                  ? workspaceCopy.mountSwitcherDialog.saving
+                  : workspaceCopy.mountSwitcherDialog.save}
+              </button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
       {pendingUnmount && (
         <MountUnmountConfirmDialog
           targetName={pendingUnmount.rootName}

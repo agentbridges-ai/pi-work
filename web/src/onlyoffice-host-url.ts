@@ -1,61 +1,46 @@
 import type { OfficeHostUrlContext } from "@agentbridges-ai/onlyoffice-browser";
-import { clientEnvironment } from "./environment.js";
-import { uiCopy } from "./ui-copy.js";
 
-const ONLYOFFICE_HOST_URL_TEMPLATE = clientEnvironment.onlyOfficeHostUrlTemplate;
+const ONLYOFFICE_SHARED_ASSET_ORIGIN = "https://onlyoffice.getpi.work/";
+const OFFICE_EDITOR_SLOTS = [
+  "aries",
+  "taurus",
+  "gemini",
+  "cancer",
+  "leo",
+  "virgo",
+  "libra",
+  "scorpio",
+  "sagittarius",
+  "capricorn",
+  "aquarius",
+  "pisces",
+] as const;
+const OFFICE_EDITOR_SLOT_SET = new Set<string>(OFFICE_EDITOR_SLOTS);
+const OFFICE_EDITOR_HOSTNAMES = new Set(OFFICE_EDITOR_SLOTS.map((slot) => `${slot}.getpi.work`));
 
-export function resolvePiworkOnlyOfficeHostUrl(context: OfficeHostUrlContext): string {
-  const currentUrl = new URL(window.location.href);
-  const sessionLabel = officeHostSessionLabel(context.sessionId);
-  if (ONLYOFFICE_HOST_URL_TEMPLATE) {
-    return ONLYOFFICE_HOST_URL_TEMPLATE.replaceAll("{sessionId}", sessionLabel)
-      .replaceAll("{rawSessionId}", encodeURIComponent(context.sessionId))
-      .replaceAll("{hostname}", currentUrl.hostname)
-      .replaceAll("{origin}", currentUrl.origin)
-      .replaceAll("{protocol}", currentUrl.protocol.replace(/:$/, ""))
-      .replaceAll("{port}", currentUrl.port);
-  }
-
-  return resolveDefaultPiworkOnlyOfficeHostUrl(currentUrl, sessionLabel);
-}
-
-export function resolveDefaultPiworkOnlyOfficeHostUrl(
-  currentUrl: URL,
-  sessionLabel = "office",
+export function resolvePiworkOnlyOfficeHostUrl(
+  context: OfficeHostUrlContext,
+  releaseId?: string | null,
 ): string {
-  const hostUrl = new URL("/office-host.html", currentUrl);
-  if (isLocalOnlyOfficeParentHost(currentUrl.hostname)) {
-    hostUrl.hostname = `host-${officeHostSessionLabel(sessionLabel)}.office.localhost`;
-    return hostUrl.href;
+  if (!OFFICE_EDITOR_SLOT_SET.has(context.hostSlot)) {
+    throw new Error("OnlyOffice host slot is outside the fixed constellation pool");
   }
-  if (isIpAddress(currentUrl.hostname)) {
-    throw new Error(uiCopy.userSpace.office.remoteIpHostRequiresTemplate);
+  const path = releaseId
+    ? `/r/${encodeURIComponent(releaseId)}/office-host.html`
+    : "/office-host.html";
+  return `https://${context.hostSlot}.getpi.work${path}`;
+}
+
+export function resolvePiworkOnlyOfficeAssetBaseUrl(): string {
+  return ONLYOFFICE_SHARED_ASSET_ORIGIN;
+}
+
+export function resolveOnlyOfficeAssetBaseUrl(hostUrl: URL, fallbackOrigin: string): string {
+  if (
+    hostUrl.hostname === "onlyoffice.getpi.work" ||
+    OFFICE_EDITOR_HOSTNAMES.has(hostUrl.hostname.toLowerCase())
+  ) {
+    return ONLYOFFICE_SHARED_ASSET_ORIGIN;
   }
-  hostUrl.hostname = `${officeHostSessionLabel(sessionLabel)}.office-host.${currentUrl.hostname}`;
-  return hostUrl.href;
-}
-
-function isIpAddress(hostname: string): boolean {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
-}
-
-function officeHostSessionLabel(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "office"
-  );
-}
-
-function isLocalOnlyOfficeParentHost(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname === "[::1]"
-  );
+  return fallbackOrigin;
 }

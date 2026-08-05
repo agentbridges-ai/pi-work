@@ -39,6 +39,8 @@ import { userSpaceOperationRequiresMutationCommit } from "../shared/user-space-m
 import { uiCopy } from "./ui-copy.js";
 
 const WS_RECONNECT_DELAY_MS = 2_000;
+const WS_CONNECTION_TIMEOUT_MS = 10_000;
+const WS_RECONCILE_TIMEOUT_MS = 8_000;
 const WORKBENCH_HISTORY_PAGE_SIZE = 200;
 const MAX_PENDING_OUTGOING_PER_SESSION = 128;
 const MAX_PENDING_OUTGOING_SESSIONS = 128;
@@ -47,6 +49,16 @@ const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const reconnectScopeDetachers = new Map<string, () => void>();
 const lastSeqBySession = new Map<string, number>();
 const pendingOutgoingBySession = new Map<string, BrowserOutgoingMessage[]>();
+type AgentMessageOutgoing = Extract<BrowserOutgoingMessage, { type: "agent_message" }>;
+const unacknowledgedAgentMessages = new Map<string, Map<string, AgentMessageOutgoing>>();
+const socketHealthTimeouts = new Map<
+  string,
+  {
+    socket: WebSocket;
+    timer: ReturnType<typeof setTimeout>;
+    kind: "connect" | "reconcile";
+  }
+>();
 const streamingDraftMessageIdBySession = new Map<string, string>();
 const streamingPartsBySession = new Map<string, { text: string; thinking: string }>();
 
@@ -83,7 +95,12 @@ const MAX_PENDING_USER_SPACE_MUTATIONS = 256;
 let idCounter = 0;
 let clientMsgCounter = 0;
 const nextId = () => `msg-${Date.now()}-${++idCounter}`;
-const nextClientMsgId = () => `cmsg-${Date.now()}-${++clientMsgCounter}`;
+const nextClientMsgId = () =>
+  `cmsg-${
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${++clientMsgCounter}`
+  }`;
 export const createClientMessageId = (): string => nextClientMsgId();
 
 function withUserSpacePreferences(
@@ -221,11 +238,96 @@ function connectionCandidates(sessions?: PiSessionInfo[]): string[] {
   });
 }
 
+function clearSocketHealthTimeout(sessionId: string, socket?: WebSocket): void {
+  const pending = socketHealthTimeouts.get(sessionId);
+  if (!pending || (socket && pending.socket !== socket)) return;
+  clearTimeout(pending.timer);
+  socketHealthTimeouts.delete(sessionId);
+}
+
+function replaceUnresponsiveSocket(
+  sessionId: string,
+  socket: WebSocket,
+  runtimeContext?: WsRuntimeContextIdentity,
+): void {
+  if (
+    !connections.isCurrent(sessionId, socket) ||
+    (runtimeContext && !runtimeContextCoordinator.isCurrent(runtimeContext))
+  ) {
+    clearSocketHealthTimeout(sessionId, socket);
+    return;
+  }
+  clearSocketHealthTimeout(sessionId, socket);
+  connections.remove(sessionId, socket);
+  try {
+    socket.close();
+  } catch {}
+  const store = useStore.getState();
+  store.setConnectionStatus(sessionId, "disconnected");
+  store.setRuntimeConnected(sessionId, false);
+  scheduleReconnect(sessionId);
+}
+
+function armSocketHealthTimeout(
+  sessionId: string,
+  socket: WebSocket,
+  kind: "connect" | "reconcile",
+  runtimeContext?: WsRuntimeContextIdentity,
+): void {
+  clearSocketHealthTimeout(sessionId);
+  const timeoutMs = kind === "connect" ? WS_CONNECTION_TIMEOUT_MS : WS_RECONCILE_TIMEOUT_MS;
+  const timer = setTimeout(
+    () => replaceUnresponsiveSocket(sessionId, socket, runtimeContext),
+    timeoutMs,
+  );
+  socketHealthTimeouts.set(sessionId, { socket, timer, kind });
+}
+
+function reconcileOpenSocket(sessionId: string, socket: WebSocket): void {
+  if (!connections.isCurrent(sessionId, socket) || socket.readyState !== WebSocket.OPEN) return;
+  const runtimeContext = connections.context(sessionId);
+  try {
+    sendSocketMessage(
+      socket,
+      { type: "session_subscribe", lastSeq: subscribeSeq(sessionId) },
+      runtimeContext,
+    );
+    armSocketHealthTimeout(sessionId, socket, "reconcile", runtimeContext);
+  } catch {
+    replaceUnresponsiveSocket(sessionId, socket, runtimeContext);
+  }
+}
+
+function resumeActiveConnections(): void {
+  for (const sessionId of connectionCandidates()) {
+    if (!shouldReconnectSession(sessionId)) continue;
+    const socket = connections.get(sessionId);
+    if (socket?.readyState === WebSocket.OPEN) {
+      reconcileOpenSocket(sessionId, socket);
+      continue;
+    }
+    if (socket?.readyState === WebSocket.CONNECTING) {
+      armSocketHealthTimeout(sessionId, socket, "connect", connections.context(sessionId));
+      continue;
+    }
+    if (socket) {
+      try {
+        socket.close();
+      } catch {}
+      connections.remove(sessionId, socket);
+    }
+    connectSession(sessionId);
+  }
+}
+
 let pageHidden = typeof document !== "undefined" ? document.hidden : false;
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       pageHidden = true;
+      for (const sessionId of [...socketHealthTimeouts.keys()]) {
+        clearSocketHealthTimeout(sessionId);
+      }
       for (const [sessionId, timer] of reconnectTimers) {
         clearTimeout(timer);
         reconnectTimers.delete(sessionId);
@@ -233,19 +335,12 @@ if (typeof document !== "undefined") {
       return;
     }
     pageHidden = false;
-    for (const sessionId of connectionCandidates()) {
-      if (!shouldReconnectSession(sessionId)) continue;
-      const socket = connections.get(sessionId);
-      if (!isSocketUsable(socket)) {
-        if (socket) {
-          try {
-            socket.close();
-          } catch {}
-          connections.remove(sessionId, socket);
-        }
-        connectSession(sessionId);
-      }
-    }
+    resumeActiveConnections();
+  });
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => {
+    if (!pageHidden) resumeActiveConnections();
   });
 }
 
@@ -448,7 +543,10 @@ function applyCoreEvent(
     case "agent_message":
       clearStreaming(sessionId);
       upsertChatMessage(sessionId, toChatMessage(event.message));
-      if (event.message.role === "user") store.clearPromptSuggestions(sessionId);
+      if (event.message.role === "user") {
+        acknowledgeAgentMessage(sessionId, event.message.id);
+        store.clearPromptSuggestions(sessionId);
+      }
       break;
     case "message_delta": {
       if (event.delta.kind === "tool_arguments") break;
@@ -528,6 +626,9 @@ function applyCoreEvent(
       if (!active) {
         clearStreaming(sessionId);
         store.clearToolProgress(sessionId);
+      }
+      if (event.state === "ready" || event.state === "stopped") {
+        store.clearPendingInteractions(sessionId);
       }
       break;
     }
@@ -677,13 +778,23 @@ function handleParsedMessage(
 ): void {
   const { processSeq = true, ackSeqMessage = true, sourceSocket, runtimeContext } = options;
   const store = useStore.getState();
+  if (message.type === "session_init" && message.seq === undefined) {
+    setLastSeq(sessionId, 0);
+  }
   if (processSeq && typeof message.seq === "number") {
     if (message.seq <= getLastSeq(sessionId)) return;
     setLastSeq(sessionId, message.seq);
     if (ackSeqMessage) ackSeq(sessionId, message.seq);
   }
   switch (message.type) {
-    case "session_init":
+    case "session_init": {
+      const previousGeneration = store.sessions.get(sessionId)?.generation;
+      if (
+        typeof previousGeneration === "number" &&
+        previousGeneration !== message.session.generation
+      ) {
+        store.clearPendingInteractions(sessionId);
+      }
       if ((store.sessions.get(sessionId)?.generation ?? -1) < message.session.generation)
         store.clearInteractionSubmission(sessionId);
       store.addSession(message.session);
@@ -691,8 +802,12 @@ function handleParsedMessage(
       store.setRuntimeConnected(sessionId, true);
       store.setRuntimeReconnecting(sessionId, false);
       store.setRunState(sessionId, message.session.runState);
+      if (sourceSocket?.readyState === WebSocket.OPEN) {
+        resendUnacknowledgedAgentMessages(sessionId, sourceSocket, runtimeContext);
+      }
       store.projectAgentActivity(sessionId, message);
       break;
+    }
     case "session_update":
       store.updateSession(sessionId, message.session);
       syncSessionUserSpaces(sessionId, message.session.userSpaces);
@@ -705,7 +820,22 @@ function handleParsedMessage(
     case "run_state":
       applyCoreEvent(sessionId, message);
       break;
+    case "agent_message_accepted": {
+      const currentGeneration = store.sessions.get(sessionId)?.generation;
+      if (currentGeneration === message.generation) {
+        acknowledgeAgentMessage(sessionId, message.clientMsgId);
+      }
+      break;
+    }
+    case "interaction_snapshot":
+      if (store.sessions.get(sessionId)?.generation === message.generation) {
+        store.replacePendingInteractions(sessionId, message.requests);
+      }
+      break;
     case "history_snapshot":
+      if (message.reason === "recovery" && message.seq === undefined) {
+        setLastSeq(sessionId, 0);
+      }
       applyHistory(
         sessionId,
         message.entries,
@@ -899,14 +1029,14 @@ function handleMessage(
   event: MessageEvent,
   expectedContext?: WsRuntimeContextIdentity,
   sourceSocket?: WebSocket,
-): void {
+): boolean {
   let parsed: unknown;
   try {
     if (typeof event.data !== "string") throw new Error("WebSocket message is not text");
     parsed = JSON.parse(event.data);
   } catch {
     console.warn(`[ws] Ignored malformed incoming message for session ${sessionId}`);
-    return;
+    return false;
   }
   if (isRecord(parsed) && parsed.protocolVersion === WS_PROTOCOL_VERSION) {
     const envelope = parsed as unknown as WsEnvelope<unknown>;
@@ -923,16 +1053,16 @@ function handleMessage(
       envelope.kind !== envelope.payload.type
     ) {
       console.warn(`[ws] Ignored stale or invalid envelope for session ${sessionId}`);
-      return;
+      return false;
     }
     parsed = envelope.payload;
   } else if (expectedContext) {
     console.warn(`[ws] Ignored non-negotiated event for session ${sessionId}`);
-    return;
+    return false;
   }
   if (!isBrowserIncomingMessage(parsed)) {
     console.warn(`[ws] Ignored invalid incoming event for session ${sessionId}`);
-    return;
+    return false;
   }
   const store = useStore.getState();
   if (store.connectionStatus.get(sessionId) === "connecting") {
@@ -940,6 +1070,7 @@ function handleMessage(
     store.setAgentActivityConnection(sessionId, "connected");
   }
   handleParsedMessage(sessionId, parsed, { sourceSocket, runtimeContext: expectedContext });
+  return true;
 }
 
 function enqueueOutgoing(sessionId: string, message: BrowserOutgoingMessage): boolean {
@@ -953,6 +1084,40 @@ function enqueueOutgoing(sessionId: string, message: BrowserOutgoingMessage): bo
   queue.push(message);
   pendingOutgoingBySession.set(sessionId, queue);
   return true;
+}
+
+function rememberUnacknowledgedAgentMessage(
+  sessionId: string,
+  message: AgentMessageOutgoing,
+): boolean {
+  const current = new Map(unacknowledgedAgentMessages.get(sessionId) || []);
+  if (current.size >= MAX_PENDING_OUTGOING_PER_SESSION && !current.has(message.message.id)) {
+    return false;
+  }
+  current.set(message.message.id, message);
+  unacknowledgedAgentMessages.set(sessionId, current);
+  return true;
+}
+
+function acknowledgeAgentMessage(sessionId: string, messageId: string): void {
+  const current = unacknowledgedAgentMessages.get(sessionId);
+  if (!current?.delete(messageId)) return;
+  if (current.size === 0) unacknowledgedAgentMessages.delete(sessionId);
+}
+
+function resendUnacknowledgedAgentMessages(
+  sessionId: string,
+  socket: WebSocket,
+  context?: WsRuntimeContextIdentity,
+): void {
+  const current = unacknowledgedAgentMessages.get(sessionId);
+  if (!current?.size || socket.readyState !== WebSocket.OPEN) return;
+  const generation = useStore.getState().sessions.get(sessionId)?.generation;
+  for (const message of current.values()) {
+    const outgoing = typeof generation === "number" ? { ...message, generation } : message;
+    current.set(message.message.id, outgoing);
+    sendSocketMessage(socket, outgoing, context);
+  }
 }
 
 function flushOutgoing(
@@ -1033,6 +1198,7 @@ export function connectSession(sessionId: string): void {
   const socket = new WebSocket(wsUrl(sessionId, ownerContext));
   let detachOnlyOfficeTransport = () => {};
   connections.attach(sessionId, socket, ownerContext);
+  armSocketHealthTimeout(sessionId, socket, "connect", ownerContext);
   if (lease) {
     connections.attachScope(
       sessionId,
@@ -1076,9 +1242,12 @@ export function connectSession(sessionId: string): void {
       (ownerContext && !runtimeContextCoordinator.isCurrent(ownerContext))
     )
       return;
-    handleMessage(sessionId, event, ownerContext, socket);
+    if (handleMessage(sessionId, event, ownerContext, socket)) {
+      clearSocketHealthTimeout(sessionId, socket);
+    }
   };
   socket.onclose = () => {
+    clearSocketHealthTimeout(sessionId, socket);
     detachOnlyOfficeTransport();
     discardAwaitingMutationsForSocket(socket);
     if (!connections.remove(sessionId, socket)) return;
@@ -1120,6 +1289,7 @@ function scheduleReconnect(sessionId: string): void {
 }
 
 export function disconnectSession(sessionId: string): void {
+  clearSocketHealthTimeout(sessionId);
   const request = historyPageRequests.get(sessionId);
   request?.controller.abort();
   request?.detachScope?.();
@@ -1149,13 +1319,16 @@ export function disconnectSession(sessionId: string): void {
   lastSeqBySession.delete(sessionId);
   historyPagingBySession.delete(sessionId);
   pendingOutgoingBySession.delete(sessionId);
+  unacknowledgedAgentMessages.delete(sessionId);
 }
 
 export function disconnectAll(): void {
   const ids = new Set([
     ...connections.sessionIds(),
     ...reconnectTimers.keys(),
+    ...socketHealthTimeouts.keys(),
     ...pendingOutgoingBySession.keys(),
+    ...unacknowledgedAgentMessages.keys(),
     ...historyPageRequests.keys(),
   ]);
   for (const id of ids) disconnectSession(id);
@@ -1192,18 +1365,34 @@ export function waitForConnection(sessionId: string): Promise<void> {
 }
 
 export function sendToSession(sessionId: string, message: BrowserOutgoingMessage): boolean {
-  let outgoing = message;
-  if (CLIENT_ID_TYPES.has(message.type) && !(message as { clientMsgId?: string }).clientMsgId) {
+  let outgoing: BrowserOutgoingMessage = message;
+  if (message.type === "agent_message") {
+    const clientMsgId = message.clientMsgId || nextClientMsgId();
+    outgoing = {
+      ...message,
+      clientMsgId,
+      message: { ...message.message, id: clientMsgId },
+    };
+  } else if (
+    CLIENT_ID_TYPES.has(message.type) &&
+    !("clientMsgId" in message && message.clientMsgId)
+  ) {
     outgoing = { ...message, clientMsgId: nextClientMsgId() } as BrowserOutgoingMessage;
   }
   const socket = connections.get(sessionId);
   if (socket?.readyState === WebSocket.OPEN) {
     if (outgoing.type === "agent_message") {
+      if (!rememberUnacknowledgedAgentMessage(sessionId, outgoing)) return false;
       const store = useStore.getState();
       store.setRunState(sessionId, "running");
       store.setRunActive(sessionId, true);
     }
-    sendSocketMessage(socket, outgoing, connections.context(sessionId));
+    try {
+      sendSocketMessage(socket, outgoing, connections.context(sessionId));
+    } catch {
+      if (outgoing.type !== "agent_message") return false;
+      replaceUnresponsiveSocket(sessionId, socket, connections.context(sessionId));
+    }
     return true;
   }
   if (outgoing.type === "interaction_response") return false;

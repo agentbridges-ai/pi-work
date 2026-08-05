@@ -70,6 +70,21 @@ describe("Pi browser ingest", () => {
     expect(parseBrowserMessage(envelope(message, { kind: "abort" }), context)).toBeNull();
   });
 
+  it("requires one canonical id for a browser user message", () => {
+    const message = {
+      type: "agent_message",
+      generation: 3,
+      clientMsgId: "client-1",
+      message: {
+        id: "different-id",
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+        timestamp: 1,
+      },
+    } as BrowserOutgoingMessage;
+    expect(parseBrowserMessage(envelope(message), context)).toBeNull();
+  });
+
   it("rejects legacy-shaped, malformed, stale-schema, and oversized events", () => {
     expect(
       parseBrowserMessage(

@@ -97,6 +97,7 @@ describe("RC9: visibility-aware reconnection", () => {
   });
 
   afterEach(() => {
+    disconnectAll();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -219,5 +220,60 @@ describe("RC9: visibility-aware reconnection", () => {
     Object.defineProperty(document, "hidden", { value: false, configurable: true });
     for (const fn of visibilityListeners) fn();
     expect(wsInstances).toHaveLength(2);
+  });
+
+  it("visibility restore probes an open socket and replaces it when Pi stays silent", async () => {
+    connectSession("test-1");
+    wsInstances[0].onopen?.();
+    mockWsSend.mockClear();
+
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    for (const fn of visibilityListeners) fn();
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    for (const fn of visibilityListeners) fn();
+
+    expect(mockWsSend).toHaveBeenCalledWith(
+      JSON.stringify({ type: "session_subscribe", lastSeq: 0 }),
+    );
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(mockWsClose).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(wsInstances).toHaveLength(2);
+  });
+
+  it("keeps an open socket when Pi answers the visibility restore probe", async () => {
+    connectSession("test-1");
+    wsInstances[0].onopen?.();
+
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    for (const fn of visibilityListeners) fn();
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    for (const fn of visibilityListeners) fn();
+    wsInstances[0].onmessage?.({
+      data: JSON.stringify({
+        type: "run_state",
+        generation: 1,
+        state: "ready",
+        timestamp: 1,
+      }),
+    });
+
+    mockWsClose.mockClear();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mockWsClose).not.toHaveBeenCalled();
+    expect(wsInstances).toHaveLength(1);
+  });
+
+  it("does not let a malformed frame satisfy application-level connection health", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    connectSession("test-1");
+    wsInstances[0].onopen?.();
+    wsInstances[0].onmessage?.({ data: "not-json" });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mockWsClose).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(wsInstances).toHaveLength(2);
+    warning.mockRestore();
   });
 });

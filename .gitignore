@@ -1,4 +1,6 @@
 node_modules/
+/packages/node_modules
+/web/node_modules
 .next/
 out/
 landing-page/.next/
@@ -14,6 +16,9 @@ web/dist/
 .env
 web/.env.local
 .runtime/
+.terraform/
+*.tfplan
+packages/apps-platform/.wrangler/
 .postgres*/
 data/
 /backups/
@@ -28,6 +33,9 @@ web/playwright-report/
 web/test-results/
 /onlyoffice-browser/
 /onlyoffice-browser
+/fonts/onlyoffice-browser/
+/demo-user-space/office/
+/outputs/preview-memory-soak-*.json
 /onlyoffice-x2t-wasm/
 /agent-browser/
 /.omc/

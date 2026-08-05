@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "repository": "agentbridges-ai/pi-work",
+  "defaultBranch": "main",
+  "leader": "Misakago",
+  "coreTeam": "piwork-core",
+  "leadsTeam": "piwork-leads",
+  "ordinaryApprovals": 1,
+  "highRiskApprovals": 1,
+  "leaderApprovals": 1,
+  "nonLeaderCoreApprovals": 2,
+  "productionEnvironment": "production",
+  "productionBranch": "main",
+  "releaseAutomation": "github-actions",
+  "workflowPermissions": {
+    "default": "read",
+    "canApprovePullRequestReviews": false
+  },
+  "requiredRepositorySecrets": ["PIWORK_RELEASE_TOKEN"],
+  "securityFeatures": [
+    "private-vulnerability-reporting",
+    "secret-scanning",
+    "secret-scanning-push-protection",
+    "secret-scanning-non-provider-patterns",
+    "secret-scanning-validity-checks",
+    "dependabot-security-updates"
+  ],
+  "requiredChecks": [
+    "governance",
+    "quality",
+    "better-auth-e2e",
+    "srt-production-canaries",
+    "verify",
+    "landing-quality",
+    "dependency-review",
+    "governance-review"
+  ],
+  "highRiskPaths": [
+    "web/server/**",
+    "web/shared/**",
+    "web/src/**",
+    ".github/**",
+    ".governance/**",
+    "scripts/**",
+    "Makefile",
+    "release/**",
+    "release-please-config.json",
+    ".release-please-manifest.json",
+    "CHANGELOG.md",
+    "package.json",
+    "**/package.json",
+    "bun.lock",
+    "**/bun.lock"
+  ],
+  "bootstrapBypassDays": 90
+}

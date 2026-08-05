@@ -163,7 +163,9 @@ for (const forbidden of [officeEntry, userSpaceEntry]) {
 const budgets = [
   ["登录入口", filesForKeys(loginKeys, ".js"), 140],
   ["工作台壳层", filesForKeys(workbenchKeys, ".js"), 450],
-  ["User Space 初始", filesForKeys(incrementalWorkbenchFeatureKeys(userSpaceKeys), ".js"), 150],
+  // Native file handoff keeps edit ownership and conflict state beside the file tree while
+  // the MIME/share implementation remains a separate on-demand chunk.
+  ["User Space 初始", filesForKeys(incrementalWorkbenchFeatureKeys(userSpaceKeys), ".js"), 155],
   [
     "User Space Bash（按需）",
     filesForKeys(

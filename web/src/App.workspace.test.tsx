@@ -35,6 +35,10 @@ vi.mock("./components/ChatView.js", () => ({
   ),
 }));
 
+vi.mock("./components/AppsPage.js", () => ({
+  AppsPage: () => <main data-testid="apps-page" />,
+}));
+
 import App from "./App.js";
 import { api, type CurrentUser } from "./api.js";
 import { runtimeContextCoordinator } from "./runtime-context.js";
@@ -95,6 +99,16 @@ afterEach(async () => {
 });
 
 describe("automatic Pi workspace creation", () => {
+  it("loads the lazy Apps route through the authenticated shell", async () => {
+    window.history.replaceState({}, "", "/apps");
+    const view = render(createElement(App));
+    try {
+      await waitFor(() => expect(screen.getByTestId("apps-page")).toBeInTheDocument());
+    } finally {
+      view.unmount();
+    }
+  });
+
   it("creates and binds a native Pi session with the probed model", async () => {
     vi.spyOn(api, "getBackendModels").mockImplementation(async () => {
       useStore.getState().setRuntimeSessions([

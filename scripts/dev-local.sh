@@ -10,6 +10,25 @@ SERVER_PID="$RUNTIME_DIR/server.pid"
 VITE_PID="$RUNTIME_DIR/vite.pid"
 PORTS_ENV="$RUNTIME_DIR/ports.env"
 
+case "$(uname -s)" in
+  Linux)
+    ;;
+  Darwin)
+    echo "Piwork development must run inside a Linux execution host." >&2
+    echo "On macOS, open the repository in an OrbStack Linux VM and run make dev there." >&2
+    exit 1
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    echo "Piwork development must run inside Linux rather than native Windows." >&2
+    echo "On Windows, open the repository in a WSL2 Linux distribution and run make dev there." >&2
+    exit 1
+    ;;
+  *)
+    echo "Piwork development requires a Linux execution host; found $(uname -s)." >&2
+    exit 1
+    ;;
+esac
+
 if [[ -f "$ROOT_DIR/.env" ]]; then
   if ! chmod 600 "$ROOT_DIR/.env" 2>/dev/null; then
     echo "warning: could not restrict $ROOT_DIR/.env to mode 600" >&2
@@ -18,6 +37,12 @@ if [[ -f "$ROOT_DIR/.env" ]]; then
   # shellcheck disable=SC1091
   source "$ROOT_DIR/.env"
   set +a
+fi
+
+# `make dev-native` is an explicit in-process debug path. Do not let a
+# Compose-oriented .env silently route it to a remote Runtime socket.
+if [[ "${PIWORK_NATIVE_DEBUG:-0}" == "1" ]]; then
+  export PIWORK_RUNTIME_MODE=local
 fi
 
 requested_port="${PORT:-}"
@@ -216,24 +241,11 @@ add_optional_vite_env() {
 for key in \
   BETTER_AUTH_SECRET \
   PIWORK_SESSION_SANDBOX \
-  PIWORK_REQUIRE_SESSION_SANDBOX \
-  PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE \
-  PIWORK_ONLYOFFICE_BROWSER_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR; do
+  PIWORK_REQUIRE_SESSION_SANDBOX; do
   add_optional_api_env "$key" "${!key:-}"
 done
 
 add_optional_api_env "TMPDIR" "${TMPDIR:-}"
-
-for key in \
-  PIWORK_ONLYOFFICE_BROWSER_ASSET_BASE \
-  PIWORK_ONLYOFFICE_BROWSER_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_FONT_ASSETS_DIR \
-  PIWORK_ONLYOFFICE_BROWSER_PUBLIC_DIR \
-  VITE_PIWORK_ONLYOFFICE_HOST_URL_TEMPLATE; do
-  add_optional_vite_env "$key" "${!key:-}"
-done
 
 : >"$SERVER_LOG"
 : >"$VITE_LOG"
@@ -341,8 +353,6 @@ wait_for_url() {
 
 wait_for_url "local API" "http://127.0.0.1:$PORT/build-info" "$SERVER_LOG"
 wait_for_url "Vite" "http://127.0.0.1:$VITE_PORT/index.html" "$VITE_LOG"
-"$BUN_BIN" "$ROOT_DIR/scripts/check-onlyoffice-dev-health.ts" "http://127.0.0.1:$VITE_PORT" \
-  --checkout "$ROOT_DIR/onlyoffice-browser"
 
 cat >"$PORTS_ENV" <<EOF
 PORT=$PORT

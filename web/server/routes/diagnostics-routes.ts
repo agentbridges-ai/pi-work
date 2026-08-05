@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import type { PiLauncher } from "../pi-launcher.js";
+import type { PiRuntimeBackend } from "../pi-runtime-backend.js";
 import { metricsCollector, type GaugeDataProvider } from "../metrics-collector.js";
 import type { RecorderManager } from "../recorder.js";
 import type { SessionRuntimeSnapshot } from "../session-runtime-state.js";
@@ -17,13 +17,17 @@ function countOpenFileDescriptors(): number | null {
 export function registerDiagnosticsRoutes(
   api: Hono,
   deps: {
-    launcher: PiLauncher;
+    launcher: PiRuntimeBackend;
     gaugeProvider: GaugeDataProvider;
     recorder?: RecorderManager;
     runtimeStateProvider: { listRuntimeStates(): SessionRuntimeSnapshot[] };
+    authorize: () => Promise<boolean>;
   },
 ): void {
-  api.get("/diagnostics/runtime", (c) => {
+  api.get("/diagnostics/runtime", async (c) => {
+    if (!(await deps.authorize())) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
     const sessions = deps.launcher.listSessions();
     const lifecycle = sessions.reduce<Record<string, number>>((counts, session) => {
       counts[session.state] = (counts[session.state] || 0) + 1;

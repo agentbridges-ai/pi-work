@@ -137,7 +137,7 @@ describe("OfficePreviewRuntimeManager", () => {
     expect(resolveOfficeActivationBudget(8, 8)).toBe(1);
   });
 
-  it("mounts 100 independent iframe shells immediately and never exceeds its activation budget", async () => {
+  it("limits Piwork to 12 Office previews and never exceeds its activation budget", async () => {
     const activations: Array<ReturnType<typeof deferred<OfficeEditorInstance>>> = [];
     let inFlight = 0;
     let maxInFlight = 0;
@@ -158,30 +158,40 @@ describe("OfficePreviewRuntimeManager", () => {
       activationBudget: 2,
     });
     adapters.push(manager);
-    const containers = Array.from({ length: 100 }, () => {
+    const containers = Array.from({ length: 13 }, () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
       return container;
     });
-    const leases = containers.map((container, index) =>
+    const leases = containers.slice(0, 12).map((container, index) =>
       manager.mount(container, {
         resourceKey: `tab-${index}`,
         hostUrl: "http://host.localhost/office-host.html",
         file: new File([String(index)], `file-${index}.docx`),
       }),
     );
+    expect(() =>
+      manager.mount(containers[12]!, {
+        resourceKey: "tab-12",
+        hostUrl: "http://host.localhost/office-host.html",
+        file: new File(["12"], "file-12.docx"),
+      }),
+    ).toThrowError(expect.objectContaining({ name: "OfficePreviewLimitError" }));
 
-    expect(containers.every((container) => container.querySelector("iframe"))).toBe(true);
-    expect(new Set(leases.map((lease) => lease.id)).size).toBe(100);
+    expect(containers.slice(0, 12).every((container) => container.querySelector("iframe"))).toBe(
+      true,
+    );
+    expect(containers[12]!.querySelector("iframe")).toBeNull();
+    expect(new Set(leases.map((lease) => lease.id)).size).toBe(12);
     await vi.waitFor(() => expect(createEditor).toHaveBeenCalledTimes(1));
 
-    for (let index = 0; index < 100; index += 1) {
+    for (let index = 0; index < 12; index += 1) {
       activations[index]!.resolve(makeInstance());
-      if (index < 99) {
+      if (index < 11) {
         await vi.waitFor(() => expect(createEditor.mock.calls.length).toBeGreaterThan(index + 1));
       }
     }
-    await expect(Promise.all(leases.map((lease) => lease.ready))).resolves.toHaveLength(100);
+    await expect(Promise.all(leases.map((lease) => lease.ready))).resolves.toHaveLength(12);
     expect(maxInFlight).toBe(1);
   });
 
@@ -269,6 +279,7 @@ describe("OfficePreviewRuntimeManager", () => {
           typeof options.hostUrl === "function"
             ? options.hostUrl({
                 sessionId: "s",
+                hostSlot: "aries",
                 fileName: "a.docx",
                 fileType: "docx",
                 mode: "edit",

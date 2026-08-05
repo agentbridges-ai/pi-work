@@ -5,6 +5,7 @@ import {
   disposeLocalRuntimeComponents,
   LocalRuntimeRegistry,
   type LocalRuntime,
+  wakeAppsOutboxWorker,
 } from "./local-runtime-registry.js";
 
 function tenantUser(tenantId: string): AuthenticatedUser {
@@ -24,6 +25,20 @@ function tenantUser(tenantId: string): AuthenticatedUser {
 }
 
 describe("LocalRuntimeRegistry authority", () => {
+  it("wakes Apps recovery without awaiting provider execution", async () => {
+    let finish!: (value: number) => void;
+    const inFlight = new Promise<number>((resolve) => {
+      finish = resolve;
+    });
+    const pollOnce = vi.fn(() => inFlight);
+
+    await expect(wakeAppsOutboxWorker({ pollOnce })).resolves.toBeUndefined();
+    expect(pollOnce).toHaveBeenCalledOnce();
+
+    finish(0);
+    await inFlight;
+  });
+
   it("revokes session routing immediately and drains leases before disposal", async () => {
     const registry = new LocalRuntimeRegistry(3456);
     let finishDispose!: () => void;

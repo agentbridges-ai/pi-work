@@ -1,12 +1,12 @@
-import type {
-  AgentMessage,
-  PiHistoryEntry,
-  PiHistoryEvent,
-  PiMessagePart,
-  PiUsage,
-  TodoEntry,
-} from "../shared/pi-browser-protocol.js";
+import type { PiHistoryEntry, PiHistoryEvent, PiUsage } from "../shared/pi-browser-protocol.js";
 import type { PiSessionEntry } from "./pi-session-history.js";
+import {
+  nativeTimestamp,
+  normalizeNativeParts,
+  normalizeNativeUsage,
+  projectNativeMessage,
+  projectNativeTodos,
+} from "./native-projection-contract.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -14,57 +14,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function string(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
-}
-
-function timestamp(value: unknown, fallback: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return value;
-  }
-  if (typeof fallback === "string") {
-    const parsed = Date.parse(fallback);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 0;
-}
-
-function parts(value: unknown): PiMessagePart[] {
-  if (typeof value === "string") return [{ type: "text", text: value }];
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item): PiMessagePart[] => {
-    if (!isRecord(item)) return [];
-    if (item.type === "text" && typeof item.text === "string") {
-      return [{ type: "text", text: item.text }];
-    }
-    if (item.type === "thinking" && typeof item.thinking === "string") {
-      return [{ type: "thinking", thinking: item.thinking }];
-    }
-    if (
-      item.type === "image" &&
-      typeof item.data === "string" &&
-      typeof item.mimeType === "string"
-    ) {
-      return [
-        {
-          type: "image",
-          data: item.data,
-          mediaType: item.mimeType,
-        },
-      ];
-    }
-    return [];
-  });
-}
-
-function usage(value: unknown): PiUsage | undefined {
-  if (!isRecord(value)) return undefined;
-  const number = (item: unknown): number =>
-    typeof item === "number" && Number.isFinite(item) && item >= 0 ? item : 0;
-  return {
-    inputTokens: number(value.input),
-    outputTokens: number(value.output),
-    cacheReadTokens: number(value.cacheRead),
-    cacheWriteTokens: number(value.cacheWrite),
-  };
 }
 
 function toolCallInputs(entry: PiSessionEntry): Map<string, Record<string, unknown>> {
@@ -90,117 +39,56 @@ function messageHistoryEvent(
   generation: number,
   inputs: ReadonlyMap<string, Record<string, unknown>>,
 ): PiHistoryEvent | null {
-  if (!isRecord(entry.message)) return null;
-  const message = entry.message;
-  const messageTimestamp = timestamp(message.timestamp, entry.timestamp);
-  if (message.role === "toolResult") {
-    const toolCallId = string(message.toolCallId);
-    const toolName = string(message.toolName);
-    if (!toolCallId || !toolName) return null;
-    return {
-      type: "tool_execution",
-      generation,
-      toolCallId,
-      toolName,
-      status: message.isError === true ? "failed" : "completed",
-      timestamp: messageTimestamp,
-      input: inputs.get(toolCallId),
-      output:
-        message.details ??
-        parts(message.content).map((part) => (part.type === "text" ? part.text : part)),
-      error:
-        message.isError === true
-          ? parts(message.content)
-              .filter(
-                (part): part is Extract<PiMessagePart, { type: "text" }> => part.type === "text",
-              )
-              .map((part) => part.text)
-              .join("\n")
-          : undefined,
-    };
-  }
-  if (message.role !== "user" && message.role !== "assistant") return null;
-  const model =
-    message.role === "assistant" &&
-    typeof message.provider === "string" &&
-    typeof message.model === "string"
-      ? {
-          key: `${message.provider}/${message.model}`,
-          provider: message.provider,
-          modelId: message.model,
-        }
-      : undefined;
-  const normalized: AgentMessage = {
+  const event = projectNativeMessage(entry.message, {
     id: entry.id,
-    role: message.role,
-    content: parts(message.content),
-    timestamp: messageTimestamp,
-    model,
-    stopReason: string(message.stopReason) ?? null,
-    ...(string(message.errorMessage) || string(message.error)
-      ? { error: string(message.errorMessage) ?? string(message.error) }
-      : {}),
-  };
-  return {
-    type: "agent_message",
+    parentId: entry.parentId,
+    timestamp: nativeTimestamp(undefined, entry.timestamp),
     generation,
-    message: normalized,
-  };
-}
-
-function todos(value: unknown): TodoEntry[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const normalized: TodoEntry[] = [];
-  for (const item of value) {
-    if (
-      !isRecord(item) ||
-      typeof item.id !== "string" ||
-      typeof item.text !== "string" ||
-      !["pending", "in_progress", "completed"].includes(String(item.status))
-    ) {
-      return undefined;
-    }
-    normalized.push({
-      id: item.id,
-      content: item.text,
-      status: item.status as TodoEntry["status"],
-    });
+  });
+  if (event?.type === "tool_execution") {
+    const input = inputs.get(event.toolCallId);
+    return input ? { ...event, input } : event;
   }
-  return normalized;
+  return event;
 }
 
 function customHistoryEvent(entry: PiSessionEntry, generation: number): PiHistoryEvent | null {
   const data = isRecord(entry.data) ? entry.data : {};
   if (entry.customType === "piwork.todo") {
-    const normalized = todos(data.todos);
-    if (!normalized) return null;
+    const normalized = projectNativeTodos(data.todos);
+    if (normalized === null) return null;
     return {
       type: "tool_execution",
       generation,
       toolCallId: entry.id,
       toolName: "todo_write",
       status: "completed",
-      timestamp: timestamp(undefined, entry.timestamp),
+      timestamp: nativeTimestamp(undefined, entry.timestamp),
       todos: normalized,
       output: { todos: normalized },
     };
   }
   if (entry.customType === "piwork.plan") {
-    const decision = string(data.decision);
-    if (decision !== "execute" && decision !== "continue_planning" && decision !== "refine") {
+    const decision = typeof data.decision === "string" ? data.decision : undefined;
+    if (
+      decision !== "execute" &&
+      decision !== "continue_planning" &&
+      decision !== "refine" &&
+      decision !== "cancelled"
+    ) {
       return null;
     }
-    const refinement = string(data.refinement)?.trim();
+    const refinement = typeof data.refinement === "string" ? data.refinement.trim() : undefined;
     if (decision === "refine" && !refinement) return null;
     return {
       type: "interaction_response",
       generation,
       requestId: entry.id,
       kind: "propose_plan",
-      status: "submitted",
-      decision,
+      status: decision === "cancelled" ? "cancelled" : "submitted",
+      ...(decision === "cancelled" ? {} : { decision }),
       ...(refinement ? { refinement } : {}),
-      timestamp: timestamp(undefined, entry.timestamp),
+      timestamp: nativeTimestamp(undefined, entry.timestamp),
     };
   }
   return null;
@@ -211,7 +99,7 @@ function systemMessage(
   generation: number,
   content: unknown,
 ): PiHistoryEvent | null {
-  const normalized = parts(content);
+  const normalized = normalizeNativeParts(content);
   if (normalized.length === 0) return null;
   return {
     type: "agent_message",
@@ -220,7 +108,7 @@ function systemMessage(
       id: entry.id,
       role: "system",
       content: normalized,
-      timestamp: timestamp(undefined, entry.timestamp),
+      timestamp: nativeTimestamp(undefined, entry.timestamp),
     },
   };
 }
@@ -255,7 +143,7 @@ export function piSessionEntryToHistoryEntry(
   return {
     id: typed.id,
     parentId: typeof typed.parentId === "string" || typed.parentId === null ? typed.parentId : null,
-    timestamp: timestamp(undefined, typed.timestamp),
+    timestamp: nativeTimestamp(undefined, typed.timestamp),
     event,
   };
 }
@@ -265,8 +153,6 @@ export function piSessionEntriesToHistory(
   generation: number,
   leafId?: string | null,
 ): PiHistoryEntry[] {
-  // Pi can retain alternate branches in one JSONL. Project only the ancestry
-  // selected by its active leaf; the original records remain the authority.
   const byId = new Map<string, PiSessionEntry | Record<string, unknown>>();
   for (const entry of entries) {
     if (isRecord(entry) && typeof entry.id === "string") byId.set(entry.id, entry);
@@ -280,9 +166,9 @@ export function piSessionEntriesToHistory(
       ancestry.add(current.id);
       current = typeof current.parentId === "string" ? byId.get(current.parentId) : undefined;
     }
-    // A malformed/stale leaf must not erase history from the browser view.
-    if (ancestry.size > 0)
+    if (ancestry.size > 0) {
       selected = entries.filter((entry) => isRecord(entry) && ancestry.has(entry.id as string));
+    }
   }
   const inputs = new Map<string, Record<string, unknown>>();
   for (const entry of selected) {
@@ -311,5 +197,5 @@ export function sumHistoryUsage(entries: readonly PiHistoryEntry[]): PiUsage {
 }
 
 export function usageFromPiMessage(value: unknown): PiUsage | undefined {
-  return usage(value);
+  return normalizeNativeUsage(value);
 }

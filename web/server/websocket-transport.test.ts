@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BROWSER_WS_MAX_MESSAGE_BYTES,
   RUNTIME_TRANSPORT_MAX_MESSAGE_BYTES,
+  WEBSOCKET_IDLE_TIMEOUT_SECONDS,
   websocketTransportLimits,
 } from "./websocket-transport.js";
 
@@ -10,6 +11,8 @@ describe("WebSocket transport limits", () => {
     expect(RUNTIME_TRANSPORT_MAX_MESSAGE_BYTES).toBe(8 * 1024 * 1024);
     expect(websocketTransportLimits()).toEqual({
       maxPayloadLength: RUNTIME_TRANSPORT_MAX_MESSAGE_BYTES,
+      idleTimeout: WEBSOCKET_IDLE_TIMEOUT_SECONDS,
+      sendPings: true,
     });
   });
 

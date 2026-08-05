@@ -5,6 +5,7 @@ import type {
   AgentDraftConfig,
   AgentKind,
   AgentModelPolicySnapshot,
+  ControlPlanePermission,
   ResolvedSessionAuthority,
   SessionAuthoritySnapshot,
   TenantMembership,
@@ -14,6 +15,10 @@ import { modelPolicyFromDraft, normalizeAgentDraftConfig } from "./agent-draft-p
 import { materializeManagedMcpServer } from "./control-plane-managed-mcp.js";
 import { scanSkillSnapshot, type SkillFileSnapshot } from "./skill-security.js";
 import { McpSecretService } from "./mcp-secret-service.js";
+import { AppsControlPlane } from "./apps-control-plane.js";
+import { AppCloudflareAccountService } from "./apps-cloudflare-account-service.js";
+import { ScopedDatabase } from "./scoped-database.js";
+import { withRuntimeDbScope } from "./runtime-db-scope.js";
 
 export { normalizeAgentDraftConfig } from "./agent-draft-policy.js";
 
@@ -30,19 +35,49 @@ function membership(row: QueryResultRow): TenantMembership {
     userId: String(row.user_id),
     status: row.status,
     isDefault: row.is_default === true,
+    ...(typeof row.org_node_id === "string" ? { primaryOrgNodeId: row.org_node_id } : {}),
   };
 }
 
 export class ControlPlaneService {
   private readonly pool: Pool;
+  private readonly rawPool: Pool;
   private readonly mcpSecrets: McpSecretService;
+  readonly apps: AppsControlPlane;
+  readonly appCloudflareAccounts: AppCloudflareAccountService;
   private membershipRevoker?: (tenantId: string, userId: string) => Promise<void>;
   private membershipActivator?: (tenantId: string, userId: string) => Promise<void>;
   private readonly membershipLifecycleLocks = new Map<string, Promise<void>>();
   constructor(pool?: Pool) {
-    this.pool =
+    this.rawPool =
       pool || new Pool({ connectionString: getDatabaseUrl() || "postgres://missing-database-url" });
+    this.pool = new ScopedDatabase(this.rawPool) as unknown as Pool;
     this.mcpSecrets = new McpSecretService(this.pool);
+    this.apps = new AppsControlPlane(this.pool);
+    this.appCloudflareAccounts = new AppCloudflareAccountService(this.pool);
+  }
+
+  /** Shared pool for rebuildable runtime projections; callers must scope writes. */
+  getDatabasePool(): Pool {
+    return this.rawPool;
+  }
+
+  private withUserScope<T>(
+    userId: string,
+    operation: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    // A few pure unit tests provide a query-only Pool double. Production uses
+    // the real Pool path below so the scope is transaction-local and cannot
+    // leak through a pooled connection.
+    if (typeof (this.rawPool as unknown as { connect?: unknown }).connect !== "function") {
+      const query = this.rawPool.query.bind(this.rawPool) as PoolClient["query"];
+      return operation({ query, release: () => undefined } as unknown as PoolClient);
+    }
+    return withRuntimeDbScope(
+      this.rawPool,
+      { tenantId: "", userId, membershipId: "", orgNodeId: "" },
+      operation,
+    );
   }
 
   setMembershipRevoker(revoker: (tenantId: string, userId: string) => Promise<void>): void {
@@ -76,6 +111,46 @@ export class ControlPlaneService {
     }
   }
 
+  private async resolveMembershipScope(
+    userId: string,
+    tenantId: string,
+    requestedOrgNodeId?: string,
+  ): Promise<{ membershipId: string; orgNodeId: string }> {
+    const result = await this.pool.query(
+      `select m.id membership_id,
+              coalesce(mo.org_node_id, root.id) org_node_id
+       from tenant_memberships m
+       join tenants t on t.id=m.tenant_id and t.status='active'
+       join org_nodes root on root.tenant_id=m.tenant_id and root.is_root and root.deleted_at is null
+       left join membership_org_nodes mo
+         on mo.membership_id=m.id
+        and ($3::text is null or mo.org_node_id=$3)
+       where m.user_id=$1 and m.tenant_id=$2 and m.status='active'
+         and ($3::text is null or mo.org_node_id=$3)
+       order by mo.primary_org desc nulls last, mo.org_node_id
+       limit 1`,
+      [userId, tenantId, requestedOrgNodeId || null],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("Tenant membership or organization scope not found.");
+    return { membershipId: String(row.membership_id), orgNodeId: String(row.org_node_id) };
+  }
+
+  private async isSessionScopeActive(authority: SessionAuthoritySnapshot): Promise<boolean> {
+    const result = await this.pool.query(
+      `select 1
+       from tenant_memberships m
+       join tenants t on t.id=m.tenant_id and t.status='active'
+       join org_nodes n on n.id=$4 and n.tenant_id=m.tenant_id and n.deleted_at is null
+       where m.id=$1 and m.user_id=$2 and m.tenant_id=$3 and m.status='active'
+         and (exists (select 1 from membership_org_nodes mo
+                      where mo.membership_id=m.id and mo.org_node_id=n.id)
+              or n.is_root) limit 1`,
+      [authority.membershipId, authority.userId, authority.tenantId, authority.orgNodeId],
+    );
+    return Boolean(result.rowCount);
+  }
+
   async ensurePersonalTenant(userId: string, displayName: string): Promise<TenantMembership> {
     const tenantId = personalTenantId(userId);
     return this.withMembershipLifecycleLock(tenantId, userId, () =>
@@ -93,6 +168,13 @@ export class ControlPlaneService {
     try {
       await client.query("begin");
       await client.query(
+        `select set_config('piwork.tenant_id', $1, true),
+                set_config('piwork.user_id', $2, true),
+                set_config('piwork.membership_id', '', true),
+                set_config('piwork.org_node_id', '', true)`,
+        [tenantId, userId],
+      );
+      await client.query(
         `insert into tenants (id, type, name) values ($1, 'personal', $2) on conflict (id) do nothing`,
         [tenantId, `${displayName || "Personal"} Workspace`],
       );
@@ -107,6 +189,29 @@ export class ControlPlaneService {
         `insert into user_tenant_context (user_id, tenant_id) values ($1, $2)
          on conflict (user_id) do nothing`,
         [userId, tenantId],
+      );
+      const rootId = `${tenantId}-root`.slice(0, 128);
+      await client.query(
+        `insert into org_nodes (id, tenant_id, name, is_root)
+         values ($1, $2, $3, true) on conflict (tenant_id, id) do nothing`,
+        [rootId, tenantId, `${displayName || "Personal"} Workspace`],
+      );
+      await client.query(
+        `insert into org_node_closure (tenant_id, ancestor_id, descendant_id, depth)
+         values ($1, $2, $2, 0) on conflict do nothing`,
+        [tenantId, rootId],
+      );
+      await client.query(
+        `insert into membership_org_nodes (membership_id, org_node_id, primary_org)
+         values ($1, $2, true) on conflict do nothing`,
+        [id, rootId],
+      );
+      await client.query(
+        `select set_config('piwork.tenant_id', $1, true),
+                set_config('piwork.user_id', $2, true),
+                set_config('piwork.membership_id', $3, true),
+                set_config('piwork.org_node_id', $4, true)`,
+        [tenantId, userId, id, rootId],
       );
       await this.ensureGeneralAgent(client, tenantId, id, userId);
       await client.query(
@@ -133,20 +238,24 @@ export class ControlPlaneService {
   async syncLegacySystemAdmin(userId: string, isAdmin: boolean): Promise<void> {
     const assignmentId = `assignment-platform-admin-${userId}`.slice(0, 240);
     if (isAdmin) {
-      await this.pool.query(
-        `insert into scoped_role_assignments (id, role_id, user_id, tenant_id, org_node_id, created_by)
-         values ($1, 'role-platform-system-admin', $2, null, null, $2) on conflict (id) do nothing`,
-        [assignmentId, userId],
+      await this.withUserScope(userId, (client) =>
+        client.query(
+          `insert into scoped_role_assignments (id, role_id, user_id, tenant_id, org_node_id, created_by)
+           values ($1, 'role-platform-system-admin', $2, null, null, $2) on conflict (id) do nothing`,
+          [assignmentId, userId],
+        ),
       );
       return;
     }
     // Revoke only the deterministic compatibility grant created above. The
     // full predicate prevents an id collision from deleting an unrelated role.
-    await this.pool.query(
-      `delete from scoped_role_assignments
-       where id=$1 and role_id='role-platform-system-admin' and user_id=$2
-         and tenant_id is null and org_node_id is null`,
-      [assignmentId, userId],
+    await this.withUserScope(userId, (client) =>
+      client.query(
+        `delete from scoped_role_assignments
+         where id=$1 and role_id='role-platform-system-admin' and user_id=$2
+           and tenant_id is null and org_node_id is null`,
+        [assignmentId, userId],
+      ),
     );
   }
 
@@ -168,9 +277,11 @@ export class ControlPlaneService {
       workspaceName?: string;
     },
   ) {
-    const existing = await this.pool.query(
-      `select o.registration_type,t.id,t.name,t.type from user_onboarding o join tenants t on t.id=o.tenant_id where o.user_id=$1`,
-      [userId],
+    const existing = await this.withUserScope(userId, (client) =>
+      client.query(
+        `select o.registration_type,t.id,t.name,t.type from user_onboarding o join tenants t on t.id=o.tenant_id where o.user_id=$1`,
+        [userId],
+      ),
     );
     if (existing.rows[0]) {
       const row = existing.rows[0];
@@ -184,10 +295,12 @@ export class ControlPlaneService {
     }
     if (input.type === "personal") {
       const personal = await this.ensurePersonalTenant(userId, displayName);
-      await this.pool.query(
-        `insert into user_onboarding (user_id,registration_type,tenant_id) values ($1,'personal',$2)
-         on conflict (user_id) do nothing`,
-        [userId, personal.tenantId],
+      await this.withUserScope(userId, (client) =>
+        client.query(
+          `insert into user_onboarding (user_id,registration_type,tenant_id) values ($1,'personal',$2)
+           on conflict (user_id) do nothing`,
+          [userId, personal.tenantId],
+        ),
       );
       await this.switchTenant(userId, personal.tenantId);
       return {
@@ -206,10 +319,12 @@ export class ControlPlaneService {
       name: workspaceName,
       type: input.type,
     });
-    await this.pool.query(
-      `insert into user_onboarding (user_id,registration_type,tenant_id) values ($1,$2,$3)
-       on conflict (user_id) do nothing`,
-      [userId, input.type, created.id],
+    await this.withUserScope(userId, (client) =>
+      client.query(
+        `insert into user_onboarding (user_id,registration_type,tenant_id) values ($1,$2,$3)
+         on conflict (user_id) do nothing`,
+        [userId, input.type, created.id],
+      ),
     );
     await this.switchTenant(userId, created.id);
     return {
@@ -232,6 +347,13 @@ export class ControlPlaneService {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      await client.query(
+        `select set_config('piwork.tenant_id', $1, true),
+                set_config('piwork.user_id', $2, true),
+                set_config('piwork.membership_id', '', true),
+                set_config('piwork.org_node_id', '', true)`,
+        [tenantId, actorUserId],
+      );
       await client.query(`insert into tenants (id,type,name) values ($1,$2,$3)`, [
         tenantId,
         input.type,
@@ -248,6 +370,18 @@ export class ControlPlaneService {
       await client.query(
         `insert into org_node_closure (tenant_id,ancestor_id,descendant_id,depth) values ($1,$2,$2,0)`,
         [tenantId, rootId],
+      );
+      await client.query(
+        `insert into membership_org_nodes (membership_id, org_node_id, primary_org)
+         values ($1, $2, true)`,
+        [membershipId, rootId],
+      );
+      await client.query(
+        `select set_config('piwork.tenant_id', $1, true),
+                set_config('piwork.user_id', $2, true),
+                set_config('piwork.membership_id', $3, true),
+                set_config('piwork.org_node_id', $4, true)`,
+        [tenantId, actorUserId, membershipId, rootId],
       );
       await client.query(
         `insert into scoped_role_assignments (id,role_id,user_id,tenant_id,created_by)
@@ -321,24 +455,33 @@ export class ControlPlaneService {
   }
 
   async listMemberships(userId: string): Promise<TenantMembership[]> {
-    const result = await this.pool.query(
-      `select m.*, t.name tenant_name, t.type tenant_type
-       from tenant_memberships m join tenants t on t.id = m.tenant_id
-       where m.user_id = $1 and m.status = 'active' and t.status = 'active'
-       order by m.is_default desc, t.name`,
-      [userId],
+    const result = await this.withUserScope(userId, (client) =>
+      client.query(
+        `select m.*, t.name tenant_name, t.type tenant_type,
+                mo.org_node_id
+         from tenant_memberships m join tenants t on t.id = m.tenant_id
+         left join membership_org_nodes mo on mo.membership_id=m.id and mo.primary_org
+         where m.user_id = $1 and m.status = 'active' and t.status = 'active'
+         order by m.is_default desc, t.name`,
+        [userId],
+      ),
     );
     return result.rows.map(membership);
   }
 
   async getActiveMembership(userId: string): Promise<TenantMembership | null> {
-    const result = await this.pool.query(
-      `select m.*, t.name tenant_name, t.type tenant_type
-       from tenant_memberships m join tenants t on t.id = m.tenant_id
-       left join user_tenant_context c on c.user_id = m.user_id
-       where m.user_id = $1 and m.status = 'active' and t.status = 'active'
-       order by (m.tenant_id = c.tenant_id) desc, m.is_default desc limit 1`,
-      [userId],
+    const result = await this.withUserScope(userId, (client) =>
+      client.query(
+        `select m.*, t.name tenant_name, t.type tenant_type,
+                coalesce(mo.org_node_id, root.id) org_node_id
+         from tenant_memberships m join tenants t on t.id = m.tenant_id
+         left join user_tenant_context c on c.user_id = m.user_id
+         left join membership_org_nodes mo on mo.membership_id=m.id and mo.primary_org
+         left join org_nodes root on root.tenant_id=m.tenant_id and root.is_root and root.deleted_at is null
+         where m.user_id = $1 and m.status = 'active' and t.status = 'active'
+         order by (m.tenant_id = c.tenant_id) desc, m.is_default desc limit 1`,
+        [userId],
+      ),
     );
     return result.rows[0] ? membership(result.rows[0]) : null;
   }
@@ -401,6 +544,7 @@ export class ControlPlaneService {
 
   async isSessionAuthorityActive(authority: SessionAuthoritySnapshot): Promise<boolean> {
     try {
+      if (!(await this.isSessionScopeActive(authority))) return false;
       if (
         !(await this.canUseAgent(authority.userId, authority.tenantId, authority.agentDefinitionId))
       ) {
@@ -427,18 +571,25 @@ export class ControlPlaneService {
   }
 
   async switchTenant(userId: string, tenantId: string): Promise<TenantMembership> {
-    const result = await this.pool.query(
-      `select m.*, t.name tenant_name, t.type tenant_type from tenant_memberships m
-       join tenants t on t.id = m.tenant_id
-       where m.user_id = $1 and m.tenant_id = $2 and m.status = 'active' and t.status = 'active'`,
-      [userId, tenantId],
-    );
-    if (!result.rows[0]) throw new Error("Tenant membership not found.");
-    await this.pool.query(
-      `insert into user_tenant_context (user_id, tenant_id) values ($1, $2)
-       on conflict (user_id) do update set tenant_id = excluded.tenant_id, updated_at = now()`,
-      [userId, tenantId],
-    );
+    const result = await this.withUserScope(userId, async (client) => {
+      const membershipResult = await client.query(
+        `select m.*, t.name tenant_name, t.type tenant_type,
+                coalesce(mo.org_node_id, root.id) org_node_id
+         from tenant_memberships m
+         join tenants t on t.id = m.tenant_id
+         left join membership_org_nodes mo on mo.membership_id=m.id and mo.primary_org
+         left join org_nodes root on root.tenant_id=m.tenant_id and root.is_root and root.deleted_at is null
+         where m.user_id = $1 and m.tenant_id = $2 and m.status = 'active' and t.status = 'active'`,
+        [userId, tenantId],
+      );
+      if (!membershipResult.rows[0]) throw new Error("Tenant membership not found.");
+      await client.query(
+        `insert into user_tenant_context (user_id, tenant_id) values ($1, $2)
+         on conflict (user_id) do update set tenant_id = excluded.tenant_id, updated_at = now()`,
+        [userId, tenantId],
+      );
+      return membershipResult;
+    });
     return membership(result.rows[0]);
   }
 
@@ -771,6 +922,14 @@ export class ControlPlaneService {
       throw new Error("Forbidden by scoped authorization.");
   }
 
+  async can(
+    userId: string,
+    tenantId: string,
+    permission: ControlPlanePermission,
+  ): Promise<boolean> {
+    return this.hasTenantPermission(userId, tenantId, permission);
+  }
+
   private async hasTenantPermission(
     userId: string,
     tenantId: string,
@@ -824,7 +983,9 @@ export class ControlPlaneService {
     userId: string,
     tenantId: string,
     agentDefinitionId: string,
+    orgNodeId?: string,
   ): Promise<ResolvedSessionAuthority> {
+    const scope = await this.resolveMembershipScope(userId, tenantId, orgNodeId);
     const resolvedAgentDefinitionId = await this.resolveRequestedAgentId(
       userId,
       tenantId,
@@ -843,6 +1004,8 @@ export class ControlPlaneService {
     const authority = {
       tenantId,
       userId,
+      membershipId: scope.membershipId,
+      orgNodeId: scope.orgNodeId,
       agentDefinitionId: String(result.rows[0].agent_definition_id),
       agentVersionId: String(result.rows[0].agent_version_id),
       effectivePolicyHash: String(result.rows[0].effective_policy_hash),
@@ -901,6 +1064,8 @@ export class ControlPlaneService {
       [
         authority.tenantId,
         authority.userId,
+        authority.membershipId,
+        authority.orgNodeId,
         authority.agentDefinitionId,
         authority.agentVersionId,
       ].some((value) => typeof value !== "string" || !value || value.includes("\0")) ||
@@ -909,6 +1074,7 @@ export class ControlPlaneService {
       throw new Error("Pinned Agent authority is invalid.");
     }
     if (
+      !(await this.isSessionScopeActive(authority)) ||
       !(await this.canUseAgent(authority.userId, authority.tenantId, authority.agentDefinitionId))
     ) {
       throw new Error("Agent not found or not granted.");

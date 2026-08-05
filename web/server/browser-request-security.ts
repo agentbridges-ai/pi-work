@@ -6,6 +6,8 @@ import { releaseReaderLockBestEffort } from "./web-stream-compat.js";
 const MEBIBYTE = 1024 * 1024;
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const USER_SPACE_UPLOAD_PATH = /^\/api\/user-space-transfer\/[^/]+\/blob\/checkout\/[^/]+\/upload$/;
+const AGENT_SPACE_RAW_WRITE_PATH = /^\/api\/sessions\/[^/]+\/agent-space\/raw$/;
+const NATIVE_FILE_ACTION_UPLOAD_PATH = /^\/api\/sessions\/[^/]+\/native-file-actions$/;
 
 export const JSON_REQUEST_BODY_LIMIT_BYTES = MEBIBYTE;
 export const USER_SPACE_BINARY_BODY_LIMIT_BYTES = 100 * MEBIBYTE;
@@ -150,7 +152,12 @@ function tenantContextConflict(): Response {
 
 function allowsMissingTenantBinding(request: Request): boolean {
   const url = new URL(request.url);
-  return request.method === "POST" && url.pathname === "/api/onboarding/complete";
+  return (
+    (request.method === "POST" && url.pathname === "/api/onboarding/complete") ||
+    (request.method === "GET" &&
+      (url.pathname === "/api/cloudflare/oauth/callback" ||
+        url.pathname === "/api/apps/cloudflare/oauth/callback"))
+  );
 }
 
 /**
@@ -217,7 +224,11 @@ function isJsonMediaType(value: string | null): boolean {
 }
 
 function bodyPolicy(pathname: string, method: string, limits: CookieApiSecurityLimits): BodyPolicy {
-  if (method === "PUT" && USER_SPACE_UPLOAD_PATH.test(pathname)) {
+  if (
+    (method === "PUT" &&
+      (USER_SPACE_UPLOAD_PATH.test(pathname) || AGENT_SPACE_RAW_WRITE_PATH.test(pathname))) ||
+    (method === "POST" && NATIVE_FILE_ACTION_UPLOAD_PATH.test(pathname))
+  ) {
     return { kind: "user-space-binary", maxBytes: limits.userSpaceBinaryBytes };
   }
   if (method === "POST" && pathname === "/api/hub/recordings/upload") {
