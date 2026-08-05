@@ -161,6 +161,7 @@ echo CANARY_STAGE=done
         LANG: "C",
         LC_ALL: "C",
         SRT_DEBUG: process.env.SRT_DEBUG || "",
+        PIWORK_BWRAP_DEBUG: "1",
       },
       encoding: "utf8",
       timeout: 15_000,
