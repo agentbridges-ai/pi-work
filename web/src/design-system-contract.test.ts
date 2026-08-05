@@ -69,7 +69,7 @@ describe("Piwork design system package contract", () => {
       resolve(repositoryRoot, ".github/workflows/srt-linux.yml"),
       "utf8",
     );
-    expect(workflow).toMatch(/on:\n {2}pull_request:\n {2}merge_group:\n {2}push:/);
+    expect(workflow).toMatch(/on:\n {2}pull_request:\n {2}push:[\s\S]*?\n {2}merge_group:/);
   });
 
   it("keeps the public token layers semantic and CSS-variable based", () => {

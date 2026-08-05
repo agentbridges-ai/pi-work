@@ -2,7 +2,6 @@ name: Linux SRT
 
 on:
   pull_request:
-  merge_group:
   push:
     branches: [main]
     paths:
@@ -30,6 +29,7 @@ on:
       - "web/server/managed-mcp.ts"
       - "web/server/srt-policy.ts"
       - "web/shared/user-space-shell-contract.ts"
+  merge_group:
   workflow_dispatch:
 
 concurrency:
