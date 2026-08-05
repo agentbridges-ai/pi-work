@@ -1,0 +1,157 @@
+name: piwork
+
+services:
+  caddy:
+    image: ${PIWORK_CADDY_IMAGE:-caddy:2.10.2}
+    restart: unless-stopped
+    ports:
+      - "${PIWORK_BIND_ADDRESS:-127.0.0.1}:${PIWORK_HTTP_PORT:-3457}:80"
+    volumes:
+      - ./compose/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+    depends_on:
+      web:
+        condition: service_started
+
+  web:
+    entrypoint: ["/workspace/compose/web-entrypoint.sh"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      HOST: 0.0.0.0
+      PORT: 3457
+      VITE_PORT: 3458
+      PIWORK_SERVE_FRONTEND: "0"
+      PIWORK_DATA_ROOT: /var/lib/piwork/data
+      PIWORK_POSTGRES_APP_USER: ${PIWORK_POSTGRES_APP_USER:-piwork_web}
+      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/piwork-secrets/postgres-app.password
+      POSTGRES_DB: ${POSTGRES_DB:-piwork}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3457}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run selfhost init first}
+      PIWORK_RUNTIME_MODE: compose
+      PIWORK_RUNTIME_SOCKET: /run/piwork-runtime/runtime.sock
+      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/piwork-secrets/runtime-control.key
+      PIWORK_RUNTIME_SECURITY_GATE: verified
+      PIWORK_REQUIRE_SESSION_SANDBOX: "1"
+      PIWORK_SESSION_SANDBOX: srt
+      PIWORK_INTERNAL_PROXY_ONLY: "1"
+      PIWORK_APPS_TEMPORARY_ENABLED: ${PIWORK_APPS_TEMPORARY_ENABLED:-false}
+      PIWORK_APPS_BYOC_ENABLED: ${PIWORK_APPS_BYOC_ENABLED:-false}
+      PIWORK_APPS_KILL_SWITCH: ${PIWORK_APPS_KILL_SWITCH:-false}
+      PIWORK_APPS_LAB_ENABLED: ${PIWORK_APPS_LAB_ENABLED:-false}
+      PIWORK_APPS_TURNSTILE_ENABLED: ${PIWORK_APPS_TURNSTILE_ENABLED:-false}
+      PIWORK_APPS_TURNSTILE_SITE_KEY: ${PIWORK_APPS_TURNSTILE_SITE_KEY:-}
+      PIWORK_APPS_TEMPORARY_MAX_PER_HOUR: ${PIWORK_APPS_TEMPORARY_MAX_PER_HOUR:-3}
+      PIWORK_APPS_TEMPORARY_MAX_PER_DAY: ${PIWORK_APPS_TEMPORARY_MAX_PER_DAY:-10}
+      PIWORK_APPS_TEMPORARY_MAX_ACTIVE_PER_APP: ${PIWORK_APPS_TEMPORARY_MAX_ACTIVE_PER_APP:-1}
+      PIWORK_APPS_TEMPORARY_MAX_POW_CONCURRENCY: ${PIWORK_APPS_TEMPORARY_MAX_POW_CONCURRENCY:-2}
+      PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_ID: ${PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_ID:-}
+      PIWORK_APPS_CLOUDFLARE_OAUTH_REDIRECT_URI: ${PIWORK_APPS_CLOUDFLARE_OAUTH_REDIRECT_URI:-}
+      PIWORK_APPS_CLOUDFLARE_OAUTH_SCOPE_CATALOG: ${PIWORK_APPS_CLOUDFLARE_OAUTH_SCOPE_CATALOG:-}
+      PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_SECRET: ${PIWORK_APPS_CLOUDFLARE_OAUTH_CLIENT_SECRET:-}
+      PIWORK_APPS_CLOUDFLARE_CREDENTIAL_KEY: ${PIWORK_APPS_CLOUDFLARE_CREDENTIAL_KEY:-}
+      PIWORK_APPS_TURNSTILE_SECRET_KEY: ${PIWORK_APPS_TURNSTILE_SECRET_KEY:-}
+    volumes:
+      - piwork-data:/var/lib/piwork/data
+      - runtime-socket:/run/piwork-runtime:ro
+      - runtime-secrets:/run/piwork-secrets:ro
+    networks:
+      - edge
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runtime:
+        condition: service_started
+
+  runtime:
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:./compose/runtime/seccomp.json
+      # Bubblewrap needs to create a capability-bearing nested user namespace.
+      # Keep the explicit seccomp profile, no-new-privileges, and zero Linux
+      # capabilities as the Runtime boundary while avoiding Docker's default
+      # AppArmor profile denying that inner namespace on Ubuntu 24.04+.
+      - apparmor=unconfined
+    pids_limit: 256
+    mem_limit: ${PIWORK_RUNTIME_MEMORY_LIMIT:-2g}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+      - /run:rw,nosuid,nodev,size=32m
+    environment:
+      NODE_ENV: production
+      PIWORK_DATA_ROOT: /var/lib/piwork/data
+      PIWORK_RUNTIME_SOCKET: /run/piwork-runtime/runtime.sock
+      PIWORK_RUNTIME_CONTROL_KEY_FILE: /run/piwork-secrets/runtime-control.key
+      PIWORK_RUNTIME_DEPLOYMENT_MODE: compose-nested
+      PIWORK_RUNTIME_SECURITY_GATE: verified
+      PIWORK_RUNTIME_SECURITY_MARKER: /run/piwork-secrets/runtime-security.marker
+    volumes:
+      - piwork-data:/var/lib/piwork/data
+      - runtime-socket:/run/piwork-runtime
+      - runtime-secrets:/run/piwork-secrets:ro
+    networks:
+      - backend
+      - runtime-egress
+
+  postgres:
+    image: ${PIWORK_POSTGRES_IMAGE:-postgres:16.4}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-piwork}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-piwork}
+      POSTGRES_DB: ${POSTGRES_DB:-piwork}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    profiles: [migrate]
+    entrypoint: ["/workspace/compose/migrate-entrypoint.sh"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      PIWORK_DATA_ROOT: /var/lib/piwork/data
+      DATABASE_URL: postgres://${POSTGRES_USER:-piwork}:${POSTGRES_PASSWORD:-piwork}@postgres:5432/${POSTGRES_DB:-piwork}
+      PIWORK_POSTGRES_APP_USER: ${PIWORK_POSTGRES_APP_USER:-piwork_web}
+      PIWORK_POSTGRES_APP_PASSWORD_FILE: /run/piwork-secrets/postgres-app.password
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run selfhost init first}
+    volumes:
+      - piwork-data:/var/lib/piwork/data
+      - runtime-secrets:/run/piwork-secrets:ro
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  edge:
+    driver: bridge
+  backend:
+    internal: true
+  runtime-egress:
+    driver: bridge
+
+volumes:
+  piwork-data:
+  postgres-data:
+  runtime-socket:
+  runtime-secrets:
+    name: piwork_runtime_secrets
+  caddy-data:
+  caddy-config:

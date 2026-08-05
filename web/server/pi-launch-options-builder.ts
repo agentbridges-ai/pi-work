@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PiModelRef, ThinkingLevel } from "../shared/pi-browser-protocol.js";
 import type { ControlPlaneService } from "./control-plane-service.js";
@@ -24,7 +24,9 @@ import {
 import { providerSensitiveValues } from "./pi-provider-secrets.js";
 import { PiProviderVault } from "./pi-provider-vault.js";
 import type { PiRuntimeObserver } from "./pi-runtime-observer.js";
-import { PiRuntimeBrokers } from "./pi-runtime-brokers.js";
+import { PiRuntimeBrokers, type PiTaskBrokerHandler } from "./pi-runtime-brokers.js";
+import { nativeHelperService, type NativeFileAction } from "./native-helper.js";
+import { readScopedFileSnapshotNoFollow, resolveScopedPath } from "./path-policy.js";
 import { requirePiRuntimeLayout } from "./pi-runtime-layout.js";
 import {
   readPiSessionDocument,
@@ -60,8 +62,20 @@ export interface PiLaunchOptionsBuilderOptions {
   internalTransport: ProtectedInternalTransport;
   providerVault: PiProviderVault;
   issueUserSpaceCapability(sessionId: string): string;
+  nativeHelperOwnerKey?: string;
   controlPlane?: ControlPlaneService;
   onTaskEvent?: (sessionId: string, event: Record<string, unknown>) => void;
+  deliverTaskResult?: (parentSessionId: string, message: string) => Promise<void>;
+  handleApp?: (
+    request: Parameters<PiTaskBrokerHandler>[0],
+    context: Parameters<PiTaskBrokerHandler>[1],
+    scope: {
+      sessionId: string;
+      generation: number;
+      sessionRoot: string;
+      workspaceDir: string;
+    },
+  ) => Promise<unknown>;
   runtimeObserverForSession?: (options: {
     recordingSessionId: string;
     cwd: string;
@@ -214,6 +228,20 @@ export class PiLaunchOptionsBuilder {
       throw new Error("Piwork trusted Pi extension is unavailable");
     }
     const sessionRoot = this.options.sessionDirFor(sessionId);
+    const authority = context.persisted?.authority;
+    const runtimeScope = authority
+      ? {
+          tenantId: authority.tenantId,
+          userId: authority.userId,
+          membershipId: authority.membershipId,
+          orgNodeId: authority.orgNodeId,
+          sessionId,
+          generation,
+        }
+      : undefined;
+    if (environment.runtimeMode === "compose" && !runtimeScope) {
+      throw new Error("Compose Pi Runtime requires a tenant-scoped Agent authority");
+    }
     const sandbox = await this.resolveSandbox(context);
     const restored = await this.restore(sessionId, context);
     const mode = context.request.mode ?? restored.mode ?? "agent";
@@ -283,6 +311,62 @@ export class PiLaunchOptionsBuilder {
         taskManager
           ? taskManager.handle(request, brokerContext)
           : Promise.reject(new Error("Managed task runtime is not ready")),
+      handleApp: this.options.handleApp
+        ? (request, brokerContext) =>
+            this.options.handleApp!(request, brokerContext, {
+              sessionId,
+              generation,
+              sessionRoot,
+              workspaceDir: prepared.layout.workspaceDir,
+            })
+        : undefined,
+      handleNativeFile: async (request) => {
+        const payload =
+          request.payload && typeof request.payload === "object" && !Array.isArray(request.payload)
+            ? (request.payload as Record<string, unknown>)
+            : {};
+        const action = typeof payload.action === "string" ? payload.action : "";
+        const path = typeof payload.path === "string" ? payload.path.trim() : "";
+        if (
+          ![
+            "file.quickLook",
+            "file.open",
+            "file.openWith",
+            "file.print",
+            "file.saveAs",
+            "file.revealExport",
+            "file.share",
+            "file.nativeEdit",
+          ].includes(action) ||
+          !path ||
+          path.includes("\0")
+        ) {
+          throw new Error("Native file action payload is invalid");
+        }
+        const workspaceRoot = prepared.layout.workspaceDir;
+        const target = resolveScopedPath(resolve(workspaceRoot, path), [workspaceRoot]);
+        if (!target) throw new Error("Native file path is outside Agent Space");
+        const snapshot = await readScopedFileSnapshotNoFollow(target, [workspaceRoot], {
+          maxBytes: 100 * 1024 * 1024,
+        });
+        const operation = await nativeHelperService.createFileAction({
+          ownerKey: this.options.nativeHelperOwnerKey || "local-user",
+          sessionId,
+          action: action as NativeFileAction,
+          bytes: snapshot.bytes,
+          filename: basename(target),
+          source: {
+            space: "agent",
+            path: relative(workspaceRoot, target).split(sep).join("/"),
+            baselineMtime: snapshot.mtimeMs,
+          },
+        });
+        return {
+          operationId: operation.id,
+          action: operation.action,
+          state: operation.state,
+        };
+      },
       onModeChange: (nextMode) => taskManager?.setRootMode(nextMode),
     });
     await runtimeBrokers.start();
@@ -324,6 +408,7 @@ export class PiLaunchOptionsBuilder {
       registerRecordingSensitiveValues: (values) =>
         this.options.registerRecordingSensitiveValues?.(sessionId, values),
       onTaskEvent: (event) => this.options.onTaskEvent?.(sessionId, event),
+      deliverTaskResult: this.options.deliverTaskResult,
     });
     this.brokers.set(sessionId, runtimeBrokers);
     this.taskManagers.set(sessionId, taskManager);
@@ -366,6 +451,8 @@ export class PiLaunchOptionsBuilder {
     };
     return {
       sessionId,
+      ...(runtimeScope ? { runtimeScope } : {}),
+      ...(environment.runtimeMode === "compose" ? { runtimeMode: "compose-nested" as const } : {}),
       sessionRoot,
       workingDirectory: prepared.layout.workspaceDir,
       trustedExtensionPath: TRUSTED_EXTENSION_PATH,

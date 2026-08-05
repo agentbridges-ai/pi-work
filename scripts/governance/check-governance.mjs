@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const fail = [];
@@ -74,6 +74,14 @@ if (policy) {
       "github-policy.json: workflow permissions or release automation policy is incomplete",
     );
   }
+  if (policy.leaderApprovals !== 1 || policy.nonLeaderCoreApprovals !== 2) {
+    fail.push(
+      "github-policy.json: Misaka requires one audit and non-Misaka Core authors require two",
+    );
+  }
+  if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
+    fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
+  }
   if (!Array.isArray(policy.securityFeatures) || policy.securityFeatures.length < 5) {
     fail.push("github-policy.json: security feature policy is incomplete");
   }
@@ -138,6 +146,15 @@ function walk(directory) {
 }
 
 for (const file of walk(join(root, "docs"))) {
+  // The Pi source tree is a pinned read-only submodule. Its upstream
+  // documentation and fixtures follow Pi's own governance contract, not
+  // Piwork's local frontmatter/link policy.
+  if (
+    file === join(root, "docs/upstream") ||
+    file.startsWith(`${join(root, "docs/upstream")}${sep}`)
+  ) {
+    continue;
+  }
   if (!file.endsWith(".md") || file.endsWith("README.md")) continue;
   const text = readFileSync(file, "utf8");
   if (text.startsWith("---\n")) {

@@ -3,6 +3,7 @@ import { installClipboardWriteFallback } from "./clipboard.js";
 export type Route =
   | { page: "home"; userUuid?: string; agentId?: string }
   | { page: "session"; sessionId: string; userUuid?: string; agentId?: string }
+  | { page: "apps" }
   | { page: "rbacAdmin" };
 
 let clipboardFallbackInitialized = false;
@@ -90,6 +91,10 @@ function parsePath(pathname: string): Route {
     return { page: "rbacAdmin" };
   }
 
+  if (segments.length === 1 && segments[0] === "apps") {
+    return { page: "apps" };
+  }
+
   if (segments[0] === "session" && segments[1]) {
     return { page: "session", sessionId: segments[1] };
   }
@@ -174,4 +179,9 @@ export function navigateHome(replace = false, context?: RouteContext): void {
 export function navigateRbacAdmin(replace = false): void {
   ensureClipboardFallbackInstalled();
   updateLocationPath("/admin/rbac", replace);
+}
+
+export function navigateApps(replace = false): void {
+  ensureClipboardFallbackInstalled();
+  updateLocationPath("/apps", replace);
 }

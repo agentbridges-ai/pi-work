@@ -187,4 +187,61 @@ describe("workspace bootstrap identity gate", () => {
       await runtimeContextCoordinator.dispose();
     }
   });
+
+  it("loads the Apps route through the authenticated shell", async () => {
+    const user: CurrentUser = {
+      userId: "better-auth-user",
+      uuid: "compat-user-id",
+      username: "user",
+      displayName: "User",
+      orgId: "org",
+      orgName: "Org",
+      roles: [],
+      tenantId: "tenant-a",
+    };
+    const emptyBindings = { agent: "", "agent-a": "", "agent-b": "", "agent-c": "" };
+    const emptyHistory = { agent: [], "agent-a": [], "agent-b": [], "agent-c": [] };
+    const emptyUserSpaces = { agent: [], "agent-a": [], "agent-b": [], "agent-c": [] };
+    await runtimeContextCoordinator.dispose();
+    useStore.getState().reset();
+    useStore.setState({
+      authInitialized: true,
+      isAuthenticated: true,
+      currentUser: user,
+      runtimeMode: "local",
+    });
+    window.history.replaceState({}, "", "/apps");
+
+    const getMe = vi.spyOn(api, "getMe").mockResolvedValue({ user, runtimeMode: "local" });
+    const getWorkspaceBootstrap = vi.spyOn(api, "getWorkspaceBootstrap").mockResolvedValue({
+      user,
+      sessions: [],
+      workspaceState: {
+        selectedAgentId: "agent",
+        currentSessionId: null,
+        agentSessionIds: emptyBindings,
+        agentSessionHistoryIds: emptyHistory,
+        agentUserSpaces: emptyUserSpaces,
+      },
+    });
+    const getBackendModels = vi
+      .spyOn(api, "getBackendModels")
+      .mockImplementation(() => new Promise<never>(() => {}));
+    const putWorkspaceSessionState = vi
+      .spyOn(api, "putWorkspaceSessionState")
+      .mockImplementation(async (state) => state);
+    const view = render(createElement(App));
+    try {
+      await waitFor(() => expect(getWorkspaceBootstrap).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(document.body.textContent).toContain("Apps"));
+    } finally {
+      view.unmount();
+      getMe.mockRestore();
+      getWorkspaceBootstrap.mockRestore();
+      getBackendModels.mockRestore();
+      putWorkspaceSessionState.mockRestore();
+      useStore.getState().reset();
+      await runtimeContextCoordinator.dispose();
+    }
+  });
 });

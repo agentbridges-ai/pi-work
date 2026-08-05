@@ -7,6 +7,17 @@ export interface DomainPolicyLayer {
   allowedDomains: string[];
   deniedDomains: string[];
 }
+
+/**
+ * The nested mode is a deployment property, never a user-controlled toggle.
+ * Native Linux keeps the strict PID/proc boundary; Compose selects this only
+ * after the Runtime container security gate has verified its outer boundary.
+ */
+export type SrtExecutionMode = "native" | "compose-nested";
+
+/** Root-owned runtime helper present only in the fixed Compose image. */
+export const COMPOSE_NESTED_BWRAP_PATH = "/usr/local/bin/piwork-bwrap";
+
 export interface SrtPolicyInput {
   tenantsRoot: string;
   tenantRoot: string;
@@ -26,6 +37,7 @@ export interface SrtPolicyInput {
   unixSocketPaths?: readonly string[];
   requiredInternalDomains: string[];
   domainLayers: DomainPolicyLayer[];
+  executionMode?: SrtExecutionMode;
 }
 
 export interface TaskSrtPolicyInput {
@@ -145,6 +157,12 @@ function systemRuntimeReadPaths(): string[] {
             "/usr/lib64",
             "/usr/libexec",
             "/usr/sbin",
+            // The fixed Compose image keeps Node/Bun in these root-owned
+            // runtime directories. Re-open the directories (not only exact
+            // files) after the top-level /usr/local deny so bubblewrap can
+            // create bind parents for exact runtime-file grants.
+            "/usr/local/bin",
+            "/usr/local/bun/bin",
             "/usr/share/ca-certificates",
             "/usr/share/zoneinfo",
             "/etc/ca-certificates",
@@ -490,7 +508,10 @@ export function compileSrtPolicy(input: SrtPolicyInput): SandboxRuntimeConfig {
       allowLocalBinding: false,
       parentProxy: undefined,
     },
-    enableWeakerNestedSandbox: false,
+    // This is intentionally derived from a typed server-side deployment mode;
+    // no environment value or browser request is read here.
+    enableWeakerNestedSandbox: input.executionMode === "compose-nested",
     enableWeakerNetworkIsolation: false,
+    ...(input.executionMode === "compose-nested" ? { bwrapPath: COMPOSE_NESTED_BWRAP_PATH } : {}),
   };
 }

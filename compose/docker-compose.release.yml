@@ -1,0 +1,20 @@
+services:
+  caddy:
+    image: ${PIWORK_CADDY_IMAGE:?release Caddy digest is required}
+    volumes:
+      - ./compose/caddy/Caddyfile.release:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+  web:
+    image: ${PIWORK_WEB_IMAGE:?release Web digest is required}
+    command: ["bun", "server/index.ts"]
+    environment:
+      PIWORK_BUILD_TAG: ${PIWORK_BUILD_TAG:-release}
+      PIWORK_SERVE_FRONTEND: "1"
+  runtime:
+    image: ${PIWORK_RUNTIME_IMAGE:?release Runtime digest is required}
+    command: ["bun", "server/runtime-entry.ts"]
+  postgres:
+    image: ${PIWORK_POSTGRES_IMAGE:?release Postgres digest is required}
+  migrate:
+    image: ${PIWORK_WEB_IMAGE:?release Web digest is required}

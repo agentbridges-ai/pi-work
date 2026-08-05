@@ -111,7 +111,40 @@ describe("Pi WebSocket transport", () => {
       message: { role: "user" },
     });
     expect(payload.clientMsgId).toMatch(/^cmsg-/);
+    expect(payload.message.id).toBe(payload.clientMsgId);
     expect(useStore.getState().runStates.get("s1")).toBe("running");
+  });
+
+  it("rejects a new prompt instead of evicting an unacknowledged prompt", () => {
+    for (let index = 0; index < 128; index += 1) {
+      expect(
+        wsModule.sendToSession("s1", {
+          type: "agent_message",
+          generation: 1,
+          clientMsgId: `pending-${index}`,
+          message: {
+            id: `pending-${index}`,
+            role: "user",
+            content: [{ type: "text", text: `Prompt ${index}` }],
+            timestamp: index,
+          },
+        }),
+      ).toBe(true);
+    }
+    expect(
+      wsModule.sendToSession("s1", {
+        type: "agent_message",
+        generation: 1,
+        clientMsgId: "overflow",
+        message: {
+          id: "overflow",
+          role: "user",
+          content: [{ type: "text", text: "Do not silently drop an earlier prompt" }],
+          timestamp: 129,
+        },
+      }),
+    ).toBe(false);
+    expect(lastSocket.send).toHaveBeenCalledTimes(128);
   });
 
   it("projects Pi messages, deltas and tool execution into the browser store", () => {
@@ -214,6 +247,64 @@ describe("Pi WebSocket transport", () => {
     expect(useStore.getState().completedInteractions.get("s1")).toHaveLength(1);
   });
 
+  it("does not treat an unrelated Pi RPC error as interaction completion", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "interaction_request",
+      generation: 1,
+      request: {
+        id: "ask-still-pending",
+        kind: "ask",
+        toolCallId: "tool-ask",
+        questions: [
+          {
+            id: "question-0",
+            question: "Document title",
+            options: [],
+            allowMultiple: false,
+            allowFreeText: true,
+          },
+        ],
+      },
+      timestamp: 10,
+      seq: 2,
+    });
+    fireMessage({
+      type: "run_state",
+      generation: 1,
+      state: "error",
+      timestamp: 11,
+      seq: 3,
+    });
+
+    expect(useStore.getState().pendingInteractions.get("s1")?.has("ask-still-pending")).toBe(true);
+  });
+
+  it("applies interaction snapshots only to the exact active Pi generation", () => {
+    fireMessage({ type: "session_init", session: makeSession(2), seq: 1 });
+    useStore.getState().addInteraction("s1", {
+      id: "current",
+      kind: "ask",
+      toolCallId: "tool-current",
+      questions: [
+        {
+          id: "question-0",
+          question: "Current",
+          options: [],
+          allowMultiple: false,
+          allowFreeText: true,
+        },
+      ],
+    });
+    fireMessage({ type: "interaction_snapshot", generation: 3, requests: [] });
+    fireMessage({ type: "interaction_snapshot", generation: 1, requests: [] });
+    expect(useStore.getState().pendingInteractions.get("s1")?.has("current")).toBe(true);
+
+    fireMessage({ type: "interaction_snapshot", generation: 2, requests: [] });
+    expect(useStore.getState().pendingInteractions.has("s1")).toBe(false);
+    expect(useStore.getState().sessions.get("s1")?.generation).toBe(2);
+  });
+
   it("rebuilds pending interactions from a reset Pi history snapshot", () => {
     fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
     useStore.getState().addInteraction("s1", {
@@ -266,6 +357,81 @@ describe("Pi WebSocket transport", () => {
       seq: 2,
     });
     expect([...useStore.getState().pendingInteractions.get("s1")!.keys()]).toEqual(["current"]);
+  });
+
+  it("accepts restarted server sequence numbers after a recovery snapshot", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "run_state",
+      generation: 1,
+      state: "ready",
+      timestamp: 10,
+      seq: 500,
+    });
+    fireMessage({
+      type: "history_snapshot",
+      generation: 1,
+      entries: [],
+      total: 0,
+      cursor: 0,
+      nextCursor: 0,
+      hasMore: false,
+      reason: "recovery",
+    });
+    fireMessage({
+      type: "agent_message",
+      generation: 1,
+      message: {
+        id: "after-restart",
+        role: "assistant",
+        content: [{ type: "text", text: "Fresh sequence" }],
+        timestamp: 11,
+      },
+      seq: 1,
+    });
+
+    expect(useStore.getState().messages.get("s1")).toEqual([
+      expect.objectContaining({ id: "after-restart", content: "Fresh sequence" }),
+    ]);
+    expect(lastSocket.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "session_ack", lastSeq: 1 }),
+    );
+  });
+
+  it("resets the transport cursor on a new socket even when history recovery fails", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "run_state",
+      generation: 1,
+      state: "ready",
+      timestamp: 10,
+      seq: 500,
+    });
+    fireMessage({ type: "session_init", session: makeSession() });
+    fireMessage({
+      type: "error",
+      code: "pi_history_unavailable",
+      message: "Pi session history is unavailable.",
+      retryable: true,
+    });
+    fireMessage({
+      type: "agent_message",
+      generation: 1,
+      message: {
+        id: "after-failed-recovery",
+        role: "assistant",
+        content: [{ type: "text", text: "Still accepted" }],
+        timestamp: 11,
+      },
+      seq: 1,
+    });
+
+    expect(
+      useStore
+        .getState()
+        .messages.get("s1")
+        ?.some((message) => message.id === "after-failed-recovery"),
+    ).toBe(true);
   });
 
   it("drops late events from an older process generation", () => {
@@ -595,5 +761,75 @@ describe("Pi WebSocket transport", () => {
     expect(lastSocket).not.toBe(closedSocket);
     expect(lastSocket.url).toBe("ws://localhost:3456/ws/browser/s1");
     expect(useStore.getState().connectionStatus.get("s1")).toBe("connecting");
+  });
+
+  it("retries an unacknowledged prompt with the same id and the current Pi generation", async () => {
+    useStore.getState().setRuntimeSessions([
+      {
+        sessionId: "s1",
+        state: "connected",
+        transport: "pi-rpc",
+        cwd: "/workspace",
+        createdAt: 1,
+        backendType: "pi",
+      },
+    ]);
+    useStore.getState().setCurrentSession("s1");
+    fireMessage({ type: "session_init", session: makeSession(1) });
+
+    expect(
+      wsModule.sendToSession("s1", {
+        type: "agent_message",
+        generation: 1,
+        clientMsgId: "client-retry",
+        message: {
+          id: "discarded-local-id",
+          role: "user",
+          content: [{ type: "text", text: "Retry me" }],
+          timestamp: 1,
+        },
+      }),
+    ).toBe(true);
+    const firstSocket = lastSocket;
+    const firstPrompt = JSON.parse(firstSocket.send.mock.calls.at(-1)?.[0] as string);
+    expect(firstPrompt).toMatchObject({
+      type: "agent_message",
+      generation: 1,
+      clientMsgId: "client-retry",
+      message: { id: "client-retry" },
+    });
+
+    firstSocket.onclose?.();
+    await vi.advanceTimersByTimeAsync(2_000);
+    const retrySocket = lastSocket;
+    retrySocket.onopen?.(new Event("open"));
+    fireMessage({ type: "session_init", session: makeSession(2) });
+
+    expect(
+      retrySocket.send.mock.calls
+        .map(([raw]) => JSON.parse(raw as string))
+        .find((message) => message.type === "agent_message"),
+    ).toMatchObject({
+      generation: 2,
+      clientMsgId: "client-retry",
+      message: { id: "client-retry" },
+    });
+
+    fireMessage({
+      type: "agent_message_accepted",
+      generation: 2,
+      clientMsgId: "client-retry",
+    });
+    retrySocket.onclose?.();
+    await vi.advanceTimersByTimeAsync(2_000);
+    const acknowledgedSocket = lastSocket;
+    acknowledgedSocket.onopen?.(new Event("open"));
+    fireMessage({ type: "session_init", session: makeSession(3) });
+
+    expect(
+      acknowledgedSocket.send.mock.calls
+        .map(([raw]) => JSON.parse(raw as string))
+        .some((message) => message.type === "agent_message"),
+    ).toBe(false);
   });
 });

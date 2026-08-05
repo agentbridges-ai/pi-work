@@ -164,7 +164,7 @@ describe("Pi browser replay subscription", () => {
     expect(sent[2]).toMatchObject({ type: "run_state", state: "ready", generation: 4 });
   });
 
-  it("uses history recovery when the replay buffer is empty and stops at a current ack", async () => {
+  it("uses history recovery when the replay buffer is empty and reconciles a current ack", async () => {
     const current = socket();
     const value = session({ eventBuffer: [], nextEventSeq: 8 });
     value.browserSockets = new Set([current]);
@@ -191,8 +191,46 @@ describe("Pi browser replay subscription", () => {
     send.mockClear();
     loadHistory.mockClear();
     await handleSessionSubscribe(value, current, 7, send, loadHistory, () => false);
-    expect(send).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledWith(
+      current,
+      expect.objectContaining({ type: "run_state", generation: 4 }),
+    );
     expect(loadHistory).not.toHaveBeenCalled();
+  });
+
+  it("recovers when the browser cursor is ahead of a restarted server", async () => {
+    const current = socket();
+    const value = session({
+      eventBuffer: [
+        {
+          seq: 1,
+          message: {
+            type: "run_state",
+            state: "running",
+            generation: 4,
+            timestamp: 1,
+          },
+        },
+      ],
+      nextEventSeq: 2,
+    });
+    value.browserSockets = new Set([current]);
+    const sent: BrowserIncomingMessage[] = [];
+    const send = vi.fn((_socket, message: BrowserIncomingMessage) => {
+      sent.push(message);
+    });
+    const loadHistory = vi.fn(async (reason) => history(reason));
+
+    await handleSessionSubscribe(value, current, 500, send, loadHistory, () => false);
+
+    expect(current.data.lastAckSeq).toBe(0);
+    expect(loadHistory).toHaveBeenCalledWith("recovery");
+    expect(sent).toEqual([
+      history("recovery"),
+      { type: "event_replay", events: value.eventBuffer },
+      expect.objectContaining({ type: "run_state", generation: 4 }),
+    ]);
   });
 
   it("advances attached socket and session acknowledgements monotonically", () => {

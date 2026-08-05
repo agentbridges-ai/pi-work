@@ -24,6 +24,8 @@ describe("Pi bridge persistence boundary", () => {
         authority: {
           tenantId: "tenant-1",
           userId: "user-1",
+          membershipId: "membership-1",
+          orgNodeId: "org-root",
           agentDefinitionId: "agent-1",
           agentVersionId: "version-1",
           effectivePolicyHash: "policy-1",
@@ -59,6 +61,13 @@ describe("Pi bridge persistence boundary", () => {
       kind: "ask",
       method: "input",
       optionValues: new Map(),
+      generation: 4,
+      request: {
+        id: "ask-1",
+        kind: "ask",
+        toolCallId: "tool-1",
+        questions: [],
+      },
     });
     const serialized = serializeForStore(session);
     expect(serialized).toEqual({

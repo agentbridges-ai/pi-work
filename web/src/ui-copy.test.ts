@@ -1,6 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getUiCopyCatalog, setUiCopyLanguage, uiCopy } from "./ui-copy.js";
 
+function exerciseCopyFunctions(value: unknown, path: string[] = []): void {
+  if (typeof value === "function") {
+    const args: unknown[] = Array.from({ length: value.length }, (_item, index) =>
+      index === 0 ? 2 : "sample",
+    );
+    if (path.at(-1) === "additionalOAuthPermissionsRequired") {
+      args[0] = ["sample"];
+    }
+    if (path.at(-1) === "notFound") args[0] = "sample";
+    expect(() => (value as (...input: unknown[]) => unknown)(...args)).not.toThrow();
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    exerciseCopyFunctions(child, [...path, key]);
+  }
+}
+
 describe("uiCopy", () => {
   beforeEach(() => {
     setUiCopyLanguage("zh-CN");
@@ -127,5 +145,10 @@ describe("uiCopy", () => {
       "Not enough browser storage: 1 MB available, 2 MB required. Free space or leave private browsing.",
     );
     expect(en.userSpace.office.resourcePreparationDescription("24 MB")).toContain("24 MB");
+  });
+
+  it("executes every catalog formatter in both locales", () => {
+    exerciseCopyFunctions(getUiCopyCatalog("zh-CN"));
+    exerciseCopyFunctions(getUiCopyCatalog("en-US"));
   });
 });

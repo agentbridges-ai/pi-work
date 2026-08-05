@@ -37,7 +37,6 @@ function fixture() {
     remove: vi.fn(),
     hasSessionData: vi.fn((id: string) => persisted.has(id)),
     setPiSessionRelativePath: vi.fn(),
-    drainOffline: vi.fn(() => [{ message: "queued prompt" }]),
     setAuthority: vi.fn(() => true),
     setArchived: vi.fn((id: string, archived: boolean) => {
       const value = persisted.get(id);
@@ -80,6 +79,7 @@ function fixture() {
     detachPiAdapter: vi.fn(() => true),
     broadcastLifecycleUpdate: vi.fn(),
     injectUserMessage: vi.fn(),
+    flushOfflineQueue: vi.fn(async () => undefined),
     setSessionAuthority: vi.fn(() => true),
     setSessionNameSource: vi.fn(() => true),
     getSessionPhase: vi.fn((id: string) => phases.get(id) ?? null),
@@ -148,7 +148,7 @@ describe("SessionOrchestrator native Pi lifecycle", () => {
     if (!result.ok) return;
     const id = result.session.sessionId;
     expect(value.bridge.attachPiAdapter).toHaveBeenCalledOnce();
-    expect(value.bridge.injectUserMessage).toHaveBeenCalledWith(id, "queued prompt");
+    expect(value.bridge.flushOfflineQueue).toHaveBeenCalledWith(id);
     expect(value.store.setPiSessionRelativePath).toHaveBeenCalledWith(
       id,
       "pi-sessions/conversation.jsonl",

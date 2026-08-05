@@ -1,0 +1,34 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: compose/web/Dockerfile
+    image: piwork-web:source
+    command: ["/workspace/compose/source-entrypoint.sh"]
+    environment:
+      PIWORK_BUILD_TAG: source
+      PIWORK_DEV_CONTROL_PLANE_URL: http://127.0.0.1:3457
+    volumes:
+      # The source checkout must be writable at this boundary so Docker can
+      # mount the named dependency volume beneath /workspace/web. The runtime
+      # service remains read-only; this is development-only hot-reload wiring.
+      - .:/workspace:rw
+      - web-node-modules-v3:/workspace/web/node_modules
+      - piwork-data:/var/lib/piwork/data
+      - runtime-socket:/run/piwork-runtime:ro
+
+  runtime:
+    build:
+      context: .
+      dockerfile: compose/runtime/Dockerfile
+    image: piwork-runtime:source
+    command: ["bun", "server/runtime-entry.ts"]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: compose/web/Dockerfile
+    image: piwork-web:source
+
+volumes:
+  web-node-modules-v3:

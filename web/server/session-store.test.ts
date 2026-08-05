@@ -46,6 +46,8 @@ describe("Pi authority persistence", () => {
       authority: {
         tenantId: "tenant",
         userId: "user",
+        membershipId: "membership",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent",
         agentVersionId: "version",
         effectivePolicyHash: "sha256:abc",
@@ -203,6 +205,19 @@ describe("updates, debounce and discovery", () => {
     }
   });
 
+  it("lets an immediate delivery write supersede a pending debounced snapshot", () => {
+    vi.useFakeTimers();
+    try {
+      store.save(makeSession("immediate", { processedClientMessageIds: ["stale"] }));
+      store.saveSync(makeSession("immediate", { processedClientMessageIds: ["accepted"] }));
+      vi.advanceTimersByTime(200);
+
+      expect(store.load("immediate")?.processedClientMessageIds).toEqual(["accepted"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("logs and swallows a failed debounced persistence", () => {
     vi.useFakeTimers();
     const saveSync = vi.spyOn(store, "saveSync").mockImplementationOnce(() => {
@@ -223,6 +238,8 @@ describe("updates, debounce and discovery", () => {
       store.setAuthority("updates", {
         tenantId: "t",
         userId: "u",
+        membershipId: "m",
+        orgNodeId: "o",
         agentDefinitionId: "a",
         agentVersionId: "v",
         effectivePolicyHash: "hash",

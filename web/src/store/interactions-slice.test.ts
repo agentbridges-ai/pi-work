@@ -72,4 +72,18 @@ describe("interaction store", () => {
     expect(useStore.getState().pendingInteractions.has("session-1")).toBe(false);
     expect(useStore.getState().pendingInteractions.has("session-2")).toBe(true);
   });
+
+  it("replaces a session snapshot without touching other sessions", () => {
+    useStore.getState().addInteraction("session-1", request);
+    useStore.getState().addInteraction("session-2", { ...request, id: "request-2" });
+    useStore
+      .getState()
+      .replacePendingInteractions("session-1", [
+        { ...request, id: "request-3", toolCallId: "tool-3" },
+      ]);
+    expect([...useStore.getState().pendingInteractions.get("session-1")!.keys()]).toEqual([
+      "request-3",
+    ]);
+    expect(useStore.getState().pendingInteractions.get("session-2")?.has("request-2")).toBe(true);
+  });
 });

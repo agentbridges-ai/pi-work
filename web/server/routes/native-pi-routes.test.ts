@@ -144,6 +144,7 @@ function fixture(
         name: "Managed Model",
         reasoning: true,
         thinkingLevelMap: {
+          off: null,
           minimal: null,
           low: null,
           medium: null,
@@ -165,6 +166,12 @@ function fixture(
         reasoning: false,
       },
     ],
+    defaultModel: {
+      key: "managed/reasoning",
+      provider: "managed",
+      modelId: "reasoning",
+    },
+    defaultThinkingLevel: "high" as const,
   }));
   const launchBuilder = { probeModels };
   const providerVault = {
@@ -404,11 +411,6 @@ describe("native Pi routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual([
       {
-        model: MODEL,
-        label: "Managed Model",
-        thinkingLevels: ["off", "high", "max"],
-      },
-      {
         model: {
           key: "managed/reasoning",
           provider: "managed",
@@ -416,6 +418,11 @@ describe("native Pi routes", () => {
         },
         label: "managed/reasoning",
         thinkingLevels: ["off", "minimal", "low", "medium", "high"],
+      },
+      {
+        model: MODEL,
+        label: "Managed Model",
+        thinkingLevels: ["high", "max"],
       },
       {
         model: { key: "managed/plain", provider: "managed", modelId: "plain" },

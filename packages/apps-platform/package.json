@@ -1,0 +1,25 @@
+{
+  "name": "@piwork/apps-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./wrapper": "./src/wrapper.ts",
+    "./runtime-wrapper-source": "./src/runtime-wrapper-source.ts"
+  },
+  "scripts": {
+    "check": "bun run types:check && bun run typecheck && bun run test && bun run wrangler:check",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types -c wrangler.example.jsonc src/wrapper-configuration.d.ts --env-interface WrapperExampleEnv --include-runtime false --strict-vars false && wrangler types -c wrangler.test.jsonc src/test-configuration.d.ts --env-interface TestEnv --include-runtime false --strict-vars false",
+    "types:check": "wrangler types -c wrangler.example.jsonc --check src/wrapper-configuration.d.ts --env-interface WrapperExampleEnv --include-runtime false --strict-vars false && wrangler types -c wrangler.test.jsonc --check src/test-configuration.d.ts --env-interface TestEnv --include-runtime false --strict-vars false",
+    "wrangler:check": "wrangler deploy -c wrangler.example.jsonc --dry-run --outdir .wrangler/dry-run/wrapper-example"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.20.1",
+    "@cloudflare/workers-types": "5.20260804.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.118.0"
+  }
+}

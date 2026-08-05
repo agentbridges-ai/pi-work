@@ -1,0 +1,99 @@
+name: Compose Runtime
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/compose-runtime.yml"
+      - ".github/actions/setup-toolchain/action.yml"
+      - "Makefile"
+      - "compose/**"
+      - "release/piwork-compose-release-manifest.json"
+      - "scripts/release-manifest.mjs"
+      - "scripts/selfhost.sh"
+      - "scripts/verify-runtime-container-canary.ts"
+      - "web/scripts/apply-control-plane-migration.ts"
+      - "web/package.json"
+      - "web/bun.lock"
+      - "web/scripts/compose-migrate.ts"
+      - "web/scripts/verify-runtime-rls.ts"
+      - "web/server/migrations/**"
+      - "web/server/pi-runtime-*.ts"
+      - "web/server/remote-pi-runtime.ts"
+      - "web/server/runtime-*.ts"
+      - "web/server/srt-policy.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/compose-runtime.yml"
+      - ".github/actions/setup-toolchain/action.yml"
+      - "Makefile"
+      - "compose/**"
+      - "release/piwork-compose-release-manifest.json"
+      - "scripts/release-manifest.mjs"
+      - "scripts/selfhost.sh"
+      - "scripts/verify-runtime-container-canary.ts"
+      - "web/scripts/apply-control-plane-migration.ts"
+      - "web/package.json"
+      - "web/bun.lock"
+      - "web/scripts/compose-migrate.ts"
+      - "web/scripts/verify-runtime-rls.ts"
+      - "web/server/migrations/**"
+      - "web/server/pi-runtime-*.ts"
+      - "web/server/remote-pi-runtime.ts"
+      - "web/server/runtime-*.ts"
+      - "web/server/srt-policy.ts"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-compose-canary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup-toolchain
+
+      - name: Initialize private Compose configuration
+        run: ./scripts/selfhost.sh init
+
+      - name: Validate Compose source configuration
+        run: ./scripts/selfhost.sh doctor
+
+      - name: Enable capability-bearing user namespaces for nested SRT
+        run: |
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
+          fi
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_unconfined ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+            test "$(sysctl -n kernel.apparmor_restrict_unprivileged_unconfined)" = "0"
+          fi
+
+      - name: Build and start the source stack
+        run: make test-compose-migrate
+
+      - name: Verify container, SRT, RLS, and health contracts
+        run: |
+          make test-compose-runtime
+          curl --fail --silent --show-error http://127.0.0.1:3457/api/health/ready
+
+      - name: Verify real Pi RPC inside the Compose nested SRT
+        run: |
+          docker compose \
+            --project-directory . \
+            --env-file .runtime/selfhost/selfhost.env \
+            -f compose/docker-compose.yml \
+            -f compose/docker-compose.source.yml \
+            exec -T runtime bun scripts/verify-srt-pi-rpc.ts
+
+      - name: Stop the source stack
+        if: ${{ always() }}
+        run: ./scripts/selfhost.sh down || true

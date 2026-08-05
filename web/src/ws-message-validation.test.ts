@@ -186,6 +186,55 @@ describe("Pi browser message validation", () => {
     ).toBe(false);
   });
 
+  it("accepts generation-bound pending interaction snapshots", () => {
+    expect(
+      isBrowserIncomingMessage({
+        type: "interaction_snapshot",
+        generation: 2,
+        requests: [
+          {
+            id: "ask-1",
+            kind: "ask",
+            toolCallId: "tool-1",
+            questions: [
+              {
+                id: "question-1",
+                question: "Continue?",
+                options: [],
+                allowMultiple: false,
+                allowFreeText: true,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isBrowserIncomingMessage({
+        type: "interaction_snapshot",
+        generation: 2,
+        requests: [{ id: "ask-1" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only canonical user-prompt acceptance ids", () => {
+    expect(
+      isBrowserIncomingMessage({
+        type: "agent_message_accepted",
+        generation: 2,
+        clientMsgId: "client-1",
+      }),
+    ).toBe(true);
+    expect(
+      isBrowserIncomingMessage({
+        type: "agent_message_accepted",
+        generation: 2,
+        clientMsgId: "",
+      }),
+    ).toBe(false);
+  });
+
   it("validates replay framing and disallows nested replay", () => {
     expect(
       isBrowserIncomingMessage({

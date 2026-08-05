@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +60,7 @@ function run(dataRoot: string, scriptPath: string, execute = false) {
 describe("local tenant data migration CLI", () => {
   it("keeps Pi resources at user scope and classifies sessions during dry-run", () => {
     const value = fixture();
+    const canonicalDataRoot = realpathSync(value.dataRoot);
     const result = run(value.dataRoot, value.scriptPath);
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("[tenant-migrate] Dry run");
@@ -67,9 +76,9 @@ describe("local tenant data migration CLI", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "profile",
-          source: join(value.dataRoot, value.userId, "pi-resources"),
+          source: join(canonicalDataRoot, value.userId, "pi-resources"),
           target: join(
-            value.dataRoot,
+            canonicalDataRoot,
             "tenants",
             `personal-${value.userId}`,
             "users",
@@ -79,9 +88,9 @@ describe("local tenant data migration CLI", () => {
         }),
         expect.objectContaining({
           kind: "session",
-          source: join(value.dataRoot, value.userId, value.sessionId),
+          source: join(canonicalDataRoot, value.userId, value.sessionId),
           target: join(
-            value.dataRoot,
+            canonicalDataRoot,
             "tenants",
             `personal-${value.userId}`,
             "users",

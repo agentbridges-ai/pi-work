@@ -12,6 +12,15 @@ const fakes = vi.hoisted(() => ({
   onlyOfficeBrokers: [] as Array<Record<string, unknown>>,
   governors: [] as Array<Record<string, unknown>>,
   quotas: [] as Array<Record<string, unknown>>,
+  appsCoordinators: [] as Array<Record<string, unknown>>,
+  appsOutboxWorkers: [] as Array<Record<string, unknown>>,
+  routeOptions: [] as Array<Record<string, unknown>>,
+  restoreAppSourceSnapshot: vi.fn(async () => ({
+    key: "app-1/sources/deployment-1",
+    digest: "a".repeat(64),
+    fileCount: 1,
+    sourceBytes: 1,
+  })),
 }));
 
 vi.mock("./local-paths.js", () => ({
@@ -124,6 +133,10 @@ vi.mock("./pi-launch-options-builder.js", () => ({
     setMcpEnabled = vi.fn(async () => undefined);
     reconnectMcp = vi.fn(async () => undefined);
     stopTask = vi.fn(async () => undefined);
+    probeModels = vi.fn(async () => ({
+      defaultModel: { key: "openai/model", provider: "openai", modelId: "model" },
+      defaultThinkingLevel: "medium",
+    }));
     dispose = vi.fn(async () => undefined);
 
     constructor(options: Record<string, unknown>) {
@@ -139,6 +152,8 @@ vi.mock("./session-orchestrator.js", () => ({
     initialize = vi.fn();
     shutdown = vi.fn();
     killSession = vi.fn(async () => ({ ok: true }));
+    createSession = vi.fn(async () => ({ ok: true, session: { sessionId: "restored-session" } }));
+    hardDeleteSession = vi.fn(async () => undefined);
     getLifecycleState = vi.fn(() => "enabled");
     getRuntimeState = vi.fn(() => ({ state: "ready" }));
     hasSessionData = vi.fn(() => false);
@@ -199,6 +214,7 @@ vi.mock("./workspace-state-store.js", () => ({
       agentUserSpaces: {},
       updatedAt: "2026-01-01T00:00:00.000Z",
     }));
+    bindSession = vi.fn();
   },
 }));
 
@@ -225,6 +241,48 @@ vi.mock("./pi-recording-observer.js", () => ({
   createPiRecordingObserver: vi.fn(() => ({ record: vi.fn() })),
 }));
 
+vi.mock("./apps-runtime-coordinator.js", () => ({
+  AppsRuntimeCoordinator: class {
+    options: Record<string, unknown>;
+    handleBroker = vi.fn();
+    handleDeploymentTargetQueued = vi.fn(async () => undefined);
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+      fakes.appsCoordinators.push(this as unknown as Record<string, unknown>);
+    }
+  },
+}));
+
+vi.mock("./apps-outbox-worker.js", () => ({
+  AppsOutboxWorker: class {
+    dependencies: Record<string, (...args: any[]) => Promise<unknown>>;
+    start = vi.fn();
+    stop = vi.fn(async () => undefined);
+    pollOnce = vi.fn(async () => 0);
+
+    constructor(dependencies: Record<string, (...args: any[]) => Promise<unknown>>) {
+      this.dependencies = dependencies;
+      fakes.appsOutboxWorkers.push(this as unknown as Record<string, unknown>);
+    }
+  },
+}));
+
+vi.mock("./app-source-snapshot.js", () => ({
+  restoreAppSourceSnapshot: fakes.restoreAppSourceSnapshot,
+}));
+
+vi.mock("./routes.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./routes.js")>();
+  return {
+    ...original,
+    createRoutes: vi.fn((...args: Parameters<typeof original.createRoutes>) => {
+      fakes.routeOptions.push(args.at(-1) as Record<string, unknown>);
+      return original.createRoutes(...args);
+    }),
+  };
+});
+
 import { LocalRuntimeRegistry } from "./local-runtime-registry.js";
 
 function user(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
@@ -248,6 +306,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const list of [
     fakes.launchers,
     fakes.bridges,
@@ -257,9 +316,19 @@ afterEach(() => {
     fakes.onlyOfficeBrokers,
     fakes.governors,
     fakes.quotas,
+    fakes.appsCoordinators,
+    fakes.appsOutboxWorkers,
+    fakes.routeOptions,
   ]) {
     list.splice(0);
   }
+  fakes.restoreAppSourceSnapshot.mockReset();
+  fakes.restoreAppSourceSnapshot.mockResolvedValue({
+    key: "app-1/sources/deployment-1",
+    digest: "a".repeat(64),
+    fileCount: 1,
+    sourceBytes: 1,
+  });
   rmSync(fakes.root, { recursive: true, force: true });
 });
 
@@ -307,6 +376,289 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
     ).toHaveBeenCalled();
     second!.release();
     await registry.dispose();
+  });
+
+  it("starts a principal-scoped Apps outbox worker and stops it with the runtime", async () => {
+    const apps = {
+      claimDeploymentOutboxForPrincipal: vi.fn().mockResolvedValue([]),
+      completeOutbox: vi.fn().mockResolvedValue(true),
+      retryOutbox: vi.fn().mockResolvedValue(true),
+      failClaimedOutbox: vi.fn().mockResolvedValue(true),
+    };
+    const controlPlane = {
+      apps,
+      appCloudflareAccounts: {},
+      resolveSessionAuthority: vi.fn(async () => ({
+        authority: {
+          tenantId: "tenant-1",
+          userId: "user-1",
+          membershipId: "membership-1",
+          orgNodeId: "org-root",
+          agentDefinitionId: "agent",
+          agentVersionId: "version-1",
+          effectivePolicyHash: "a".repeat(64),
+        },
+        launch: {},
+      })),
+    };
+    const registry = new LocalRuntimeRegistry(
+      3456,
+      undefined,
+      controlPlane as never,
+      undefined,
+      undefined,
+      {
+        internalTransport: { unixSocketPath: "/tmp/internal.sock" },
+        dataRoot: fakes.root,
+        appRuntimeDriver: {} as never,
+      },
+    );
+    const principal = registry.acquirePrincipal(
+      user({ membershipId: "membership-1", orgNodeId: "org-root" }),
+    )!;
+    const outbox = fakes.appsOutboxWorkers[0] as {
+      dependencies: Record<string, (...args: any[]) => Promise<unknown>>;
+      start: ReturnType<typeof vi.fn>;
+      stop: ReturnType<typeof vi.fn>;
+      pollOnce: ReturnType<typeof vi.fn>;
+    };
+    const coordinator = fakes.appsCoordinators[0] as {
+      options: Record<string, unknown>;
+      handleDeploymentTargetQueued: ReturnType<typeof vi.fn>;
+    };
+
+    expect(outbox.start).toHaveBeenCalledOnce();
+    expect((coordinator.options.getCurrentUser as () => AuthenticatedUser)()).toMatchObject({
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
+    expect(
+      (coordinator.options.resolveCreatorRoot as (ownerUserId: string) => string)("user-2"),
+    ).toBe(`${fakes.root}/tenants/tenant-1/users/user-2/profile`);
+    const builder = fakes.builders[0] as { options: Record<string, unknown> };
+    const handleApp = builder.options.handleApp as (
+      request: unknown,
+      context: unknown,
+      scope: unknown,
+    ) => Promise<unknown>;
+    expect(
+      await handleApp({ operation: "app.list" }, {}, { sessionId: "session-1" }),
+    ).toBeUndefined();
+    const deliverTaskResult = builder.options.deliverTaskResult as (
+      parentSessionId: string,
+      message: string,
+    ) => Promise<void>;
+    const parentPrompt = vi.fn(async () => undefined);
+    (fakes.launchers[0]!.getTransport as ReturnType<typeof vi.fn>).mockReturnValue({
+      prompt: parentPrompt,
+    });
+    await deliverTaskResult("session-1", "task result");
+    expect(parentPrompt).toHaveBeenCalledWith("task result", { streamingBehavior: "followUp" });
+    (fakes.launchers[0]!.getTransport as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+    await expect(deliverTaskResult("missing-session", "task result")).rejects.toThrow(
+      "Parent Pi transport is unavailable",
+    );
+    const orchestrator = fakes.orchestrators[0] as {
+      hasSessionData: ReturnType<typeof vi.fn>;
+    };
+    orchestrator.hasSessionData.mockReturnValueOnce(true);
+    const continueAppDevelopment = fakes.routeOptions[0]!.continueAppDevelopment as (source: {
+      sourceSessionId?: string;
+      sourceSnapshotKey?: string;
+    }) => Promise<unknown>;
+    await expect(continueAppDevelopment({ sourceSessionId: "session-existing" })).resolves.toEqual({
+      sessionId: "session-existing",
+      restoredFromSnapshot: false,
+    });
+    await expect(continueAppDevelopment({})).rejects.toThrow("source snapshot");
+    orchestrator.hasSessionData.mockReturnValueOnce(false);
+    fakes.restoreAppSourceSnapshot.mockRejectedValueOnce(new Error("snapshot missing"));
+    await expect(
+      continueAppDevelopment({ sourceSnapshotKey: "app-1/sources/missing.tar" }),
+    ).rejects.toThrow();
+    expect(
+      fakes.orchestrators[0]!.hardDeleteSession as ReturnType<typeof vi.fn>,
+    ).toHaveBeenCalledWith("restored-session");
+    const onDeploymentTargetQueued = fakes.routeOptions[0]!
+      .onAppDeploymentTargetQueued as () => Promise<void>;
+    await expect(onDeploymentTargetQueued()).resolves.toBeUndefined();
+    expect(outbox.pollOnce).toHaveBeenCalledOnce();
+    expect(coordinator.handleDeploymentTargetQueued).not.toHaveBeenCalled();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    outbox.pollOnce.mockRejectedValueOnce(new Error("outbox failed"));
+    await expect(onDeploymentTargetQueued()).resolves.toBeUndefined();
+    await Promise.resolve();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[apps-outbox] Background worker error",
+      expect.objectContaining({ error: "Error" }),
+    );
+
+    await outbox.dependencies.claim!("worker-1", 4, 15_000);
+    expect(apps.claimDeploymentOutboxForPrincipal).toHaveBeenCalledWith(
+      {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        membershipId: "membership-1",
+      },
+      "worker-1",
+      4,
+      15_000,
+    );
+
+    const context = {
+      tenantId: "tenant-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+    };
+    const deployment = {
+      appId: "app-1",
+      deploymentId: "deployment-1",
+      appGeneration: 2,
+      phase: "queued",
+      target: "byoc",
+      connectionId: "connection-1",
+      temporaryAccountId: null,
+    };
+    const abortSignal = new AbortController().signal;
+    await outbox.dependencies.run!(context, deployment, abortSignal);
+    expect(coordinator.handleDeploymentTargetQueued).toHaveBeenCalledWith(
+      context,
+      deployment,
+      abortSignal,
+    );
+
+    await outbox.dependencies.complete!("outbox-1", "worker-1");
+    await outbox.dependencies.retry!("outbox-2", "worker-1", new Error("retry"));
+    await outbox.dependencies.fail!(
+      {
+        id: "outbox-3",
+        appId: "app-1",
+        operation: "rollback",
+        idempotencyKey: "rollback:key",
+        appGeneration: 2,
+      },
+      "worker-1",
+      new Error("invalid"),
+    );
+    expect(apps.completeOutbox).toHaveBeenCalledWith("outbox-1", "worker-1");
+    expect(apps.retryOutbox).toHaveBeenCalledWith("outbox-2", "worker-1", expect.any(Error));
+    expect(apps.failClaimedOutbox).toHaveBeenCalledWith("outbox-3", "worker-1", expect.any(Error));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await (outbox.dependencies.onError as (error: unknown) => Promise<void>)(
+      new Error("background failure"),
+    );
+    expect(errorLog).toHaveBeenCalledWith(
+      "[apps-outbox] Background worker error",
+      expect.objectContaining({ error: "Error" }),
+    );
+    errorLog.mockRestore();
+
+    const coordinatorOptions = fakes.appsCoordinators[0]!.options as Record<string, unknown>;
+    expect((coordinatorOptions.getCurrentUser as () => AuthenticatedUser)()).toMatchObject({
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
+    expect(
+      (coordinatorOptions.resolveCreatorRoot as (ownerUserId: string) => string)("owner-2"),
+    ).toBe(`${fakes.root}/tenants/tenant-1/users/owner-2/profile`);
+
+    const builderRecord = fakes.builders[0] as { options: Record<string, unknown> };
+    await handleApp({ operation: "app.list" }, { signal: new AbortController().signal }, {});
+    expect(fakes.appsCoordinators[0]!.handleBroker).toHaveBeenCalledWith(
+      { operation: "app.list" },
+      expect.any(Object),
+      {},
+    );
+
+    const launcher = fakes.launchers[0] as { transports: Map<string, unknown> };
+    const transport = { prompt: vi.fn(async () => undefined) };
+    (fakes.launchers[0]!.getTransport as ReturnType<typeof vi.fn>).mockImplementation(
+      (sessionId: string) => launcher.transports.get(sessionId),
+    );
+    launcher.transports.set("parent-session", transport);
+    await (
+      builderRecord.options.deliverTaskResult as (
+        parentSessionId: string,
+        message: string,
+      ) => Promise<void>
+    )("parent-session", "Managed task completed.");
+    expect(transport.prompt).toHaveBeenCalledWith("Managed task completed.", {
+      streamingBehavior: "followUp",
+    });
+    await expect(
+      (
+        builderRecord.options.deliverTaskResult as (
+          parentSessionId: string,
+          message: string,
+        ) => Promise<void>
+      )("missing-session", "No transport"),
+    ).rejects.toThrow("Parent Pi transport is unavailable");
+    (builderRecord.options.onTaskEvent as (sessionId: string, event: unknown) => void)(
+      "session-1",
+      { status: "completed", taskId: "task-1", generation: 2 },
+    );
+
+    const routeOptions = fakes.routeOptions[0]!;
+    expect((routeOptions.getCurrentUser as () => AuthenticatedUser)()).toMatchObject({
+      tenantId: "tenant-1",
+    });
+    await expect(principal.runtime.api.request("http://local/api/me")).resolves.toHaveProperty(
+      "status",
+      200,
+    );
+    await expect(
+      (
+        routeOptions.continueAppDevelopment as (
+          source: unknown,
+          currentUser: AuthenticatedUser,
+        ) => Promise<unknown>
+      )({ sourceSessionId: "", sourceSnapshotKey: null }, user()),
+    ).rejects.toThrow("App source snapshot is unavailable");
+    await expect(
+      (
+        routeOptions.continueAppDevelopment as (
+          source: unknown,
+          currentUser: AuthenticatedUser,
+        ) => Promise<unknown>
+      )(
+        {
+          sourceSessionId: "missing-session",
+          sourceSnapshotKey: "app-1/sources/deployment-1",
+        },
+        user({ membershipId: "membership-1", orgNodeId: "org-root" }),
+      ),
+    ).resolves.toEqual({ sessionId: "restored-session", restoredFromSnapshot: true });
+    expect(
+      (fakes.orchestrators[0] as { createSession: ReturnType<typeof vi.fn> }).createSession,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "pi", agentId: "agent", mode: "agent" }),
+    );
+    expect(fakes.restoreAppSourceSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        creatorRoot: expect.stringContaining("profile"),
+        snapshotKey: "app-1/sources/deployment-1",
+        workspaceRoot: expect.stringContaining("restored-session/workspace"),
+      }),
+    );
+    orchestrator.hasSessionData.mockReturnValue(true);
+    await expect(
+      (
+        routeOptions.continueAppDevelopment as (
+          source: unknown,
+          currentUser: AuthenticatedUser,
+        ) => Promise<unknown>
+      )(
+        {
+          sourceSessionId: "session-1",
+          sourceSnapshotKey: null,
+        },
+        user({ membershipId: "membership-1", orgNodeId: "org-root" }),
+      ),
+    ).resolves.toEqual({ sessionId: "session-1", restoredFromSnapshot: false });
+
+    principal.release();
+    await registry.dispose();
+    expect(outbox.stop).toHaveBeenCalledOnce();
   });
 
   it("stops managed processes when the user disk quota monitor reports an overage", async () => {
@@ -432,6 +784,9 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
         }),
       }),
     );
+    const projectedCount = bridge.broadcastToSession.mock.calls.length;
+    onTaskEvent("session-1", { status: "unknown", taskId: "task-1", generation: 3 });
+    expect(bridge.broadcastToSession).toHaveBeenCalledTimes(projectedCount);
 
     const handler = bridge.controlHandler;
     const model = { key: "openai/model", provider: "openai", modelId: "model" };

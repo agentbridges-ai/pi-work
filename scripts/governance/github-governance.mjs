@@ -26,15 +26,14 @@ function gh(method, endpoint, body) {
   return result.stdout ? JSON.parse(result.stdout) : null;
 }
 
-function teamRule(teamId, approvals, filePatterns) {
-  return {
-    type: "required_reviewers",
-    parameters: {
-      required_approving_review_count: approvals,
-      reviewer_teams: [teamId],
+function requiredReviewers(teamId, approvals, filePatterns) {
+  return [
+    {
+      reviewer: { type: "Team", id: teamId },
+      minimum_approvals: approvals,
       file_patterns: filePatterns,
     },
-  };
+  ];
 }
 
 function mainRuleset(coreId, leadsId) {
@@ -57,6 +56,7 @@ function mainRuleset(coreId, leadsId) {
           require_last_push_approval: true,
           required_approving_review_count: policy.ordinaryApprovals,
           required_review_thread_resolution: true,
+          required_reviewers: requiredReviewers(coreId, policy.ordinaryApprovals, ["**"]),
         },
       },
       {
@@ -64,13 +64,9 @@ function mainRuleset(coreId, leadsId) {
         parameters: {
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: false,
-          required_status_checks: policy.requiredChecks.map((context) => ({
-            context,
-            integration_id: -1,
-          })),
+          required_status_checks: policy.requiredChecks.map((context) => ({ context })),
         },
       },
-      teamRule(coreId, policy.ordinaryApprovals, ["**"]),
     ],
   };
 }
@@ -82,29 +78,38 @@ function highRiskRuleset(coreId, leadsId) {
     enforcement: "active",
     bypass_actors: [{ actor_id: leadsId, actor_type: "Team", bypass_mode: "pull_request" }],
     conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
-    rules: [teamRule(coreId, policy.highRiskApprovals, policy.highRiskPaths)],
+    rules: [
+      {
+        type: "pull_request",
+        parameters: {
+          dismiss_stale_reviews_on_push: true,
+          require_code_owner_review: true,
+          require_last_push_approval: true,
+          required_approving_review_count: policy.ordinaryApprovals,
+          required_review_thread_resolution: true,
+          required_reviewers: requiredReviewers(
+            coreId,
+            policy.highRiskApprovals,
+            policy.highRiskPaths,
+          ),
+        },
+      },
+    ],
   };
 }
 
-function releaseTagRuleset(leadsId, releaseAutomationId) {
+function releaseTagRuleset(leadsId) {
   return {
     name: "Piwork release tags",
     target: "tag",
     enforcement: "active",
-    bypass_actors: [
-      { actor_id: leadsId, actor_type: "Team", bypass_mode: "always" },
-      { actor_id: releaseAutomationId, actor_type: "Integration", bypass_mode: "always" },
-    ],
+    // GitHub Actions is not an eligible repository ruleset bypass actor for this
+    // Free organization. Keep release creation workflow-compatible while still
+    // preventing tag updates/deletions except for the Leads team.
+    bypass_actors: [{ actor_id: leadsId, actor_type: "Team", bypass_mode: "always" }],
     conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
-    rules: [{ type: "creation" }, { type: "deletion" }, { type: "non_fast_forward" }],
+    rules: [{ type: "deletion" }, { type: "non_fast_forward" }],
   };
-}
-
-function releaseAutomationId() {
-  const app = gh("GET", `/apps/${policy.releaseAutomation}`);
-  if (!Number.isInteger(app?.id))
-    throw new Error("Release automation integration ID is unavailable");
-  return app.id;
 }
 
 function desiredSecurityAnalysis() {
@@ -184,6 +189,17 @@ function readbackDrift() {
     drift.push("workflow permission readback is unavailable");
   }
   try {
+    const secretResponse = gh("GET", `/repos/${repository}/actions/secrets?per_page=100`);
+    const secretNames = new Set((secretResponse?.secrets || []).map((secret) => secret.name));
+    for (const requiredSecret of policy.requiredRepositorySecrets || []) {
+      if (!secretNames.has(requiredSecret)) {
+        drift.push(`repository Actions secret ${requiredSecret} is missing`);
+      }
+    }
+  } catch {
+    drift.push("repository Actions secret readback is unavailable");
+  }
+  try {
     const environment = gh(
       "GET",
       `/repos/${repository}/environments/${policy.productionEnvironment}`,
@@ -202,8 +218,10 @@ function readbackDrift() {
     if (
       policies.length !== 1 ||
       policies[0]?.name !== policy.productionBranch ||
-      environment?.protection_rules?.length ||
-      environment?.wait_timer !== 0
+      (environment?.protection_rules || []).some((rule) => rule.type !== "branch_policy") ||
+      (environment?.wait_timer !== 0 &&
+        environment?.wait_timer !== null &&
+        environment?.wait_timer !== undefined)
     ) {
       drift.push(`${policy.productionEnvironment} environment is not main-only with no approvals`);
     }
@@ -232,6 +250,14 @@ function readbackDrift() {
       drift.push(`ruleset ${name} is missing or inactive`);
   }
   const main = rulesets.find((item) => item.name === "Piwork main governance");
+  const mainPullRequest = main?.rules?.find((rule) => rule.type === "pull_request");
+  const mainReviewers = mainPullRequest?.parameters?.required_reviewers || [];
+  if (
+    mainPullRequest?.parameters?.required_approving_review_count !== policy.ordinaryApprovals ||
+    mainReviewers[0]?.minimum_approvals !== policy.ordinaryApprovals
+  ) {
+    drift.push("main ruleset approval baseline does not match policy");
+  }
   const contexts =
     main?.rules
       ?.find((rule) => rule.type === "required_status_checks")
@@ -240,17 +266,17 @@ function readbackDrift() {
     if (!contexts.includes(requiredCheck))
       drift.push(`main ruleset is missing required check ${requiredCheck}`);
   }
+  const highRisk = rulesets.find((item) => item.name === "Piwork high-risk review");
+  const highRiskReviewers =
+    highRisk?.rules?.find((rule) => rule.type === "pull_request")?.parameters?.required_reviewers ||
+    [];
+  if (highRiskReviewers[0]?.minimum_approvals !== policy.highRiskApprovals) {
+    drift.push("high-risk ruleset approval baseline does not match policy");
+  }
   const tag = rulesets.find((item) => item.name === "Piwork release tags");
-  try {
-    const automationId = releaseAutomationId();
-    const bypass = tag?.bypass_actors || [];
-    if (
-      !bypass.some((actor) => actor.actor_type === "Integration" && actor.actor_id === automationId)
-    ) {
-      drift.push("release tag ruleset does not allow GitHub Actions automation");
-    }
-  } catch {
-    drift.push("GitHub Actions integration readback is unavailable");
+  const tagRuleTypes = new Set((tag?.rules || []).map((rule) => rule.type));
+  if (!tag || !tagRuleTypes.has("deletion") || !tagRuleTypes.has("non_fast_forward")) {
+    drift.push("release tag ruleset does not protect updates and deletions");
   }
   return drift;
 }
@@ -348,11 +374,13 @@ try {
   const rulesets = rulesetSummaries.map((summary) =>
     summary.id ? gh("GET", `/repos/${repository}/rulesets/${summary.id}`) : summary,
   );
-  const automationId = releaseAutomationId();
+  console.warn(
+    "[github-governance] GitHub Actions cannot be added as a repository ruleset bypass actor on this Free organization; release tag creation remains workflow-compatible while update/deletion protection is enforced.",
+  );
   for (const desired of [
     mainRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
     highRiskRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
-    releaseTagRuleset(teams[policy.leadsTeam].id, automationId),
+    releaseTagRuleset(teams[policy.leadsTeam].id),
   ]) {
     const existing = rulesets.find((item) => item.name === desired.name);
     applyOrReport(`${existing ? "update" : "create"} ruleset ${desired.name}`, () =>

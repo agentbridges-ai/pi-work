@@ -6,9 +6,11 @@
 AGENTS.md
 agent-browser/
 data/
+docs/upstream/pi/
 fonts/
 landing-page/
 ../landing-page/
+packages/apps-platform/src/*-configuration.d.ts
 ../.next/
 ../out/
 node_modules/
@@ -31,3 +33,4 @@ web/wasm/user-workspace-core/target/
 **/*.lock
 **/.DS_Store
 **/.env
+**/.wrangler/

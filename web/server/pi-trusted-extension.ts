@@ -9,6 +9,7 @@ import {
   type ProviderConfig,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { APP_BUILD_TIMEOUT_MS, inspectAppSource, resolveAppBuildCommand } from "./app-build.js";
 import { PiAgentSpace } from "./pi-agent-space.js";
 import {
   buildPiAskReview,
@@ -104,6 +105,10 @@ function textResult(text: string, details?: unknown): ToolResult {
     content: [{ type: "text", text }],
     details: details ?? {},
   };
+}
+
+function jsonText(value: unknown): string {
+  return JSON.stringify(value) ?? "null";
 }
 
 function failTool(message: string): never {
@@ -306,6 +311,26 @@ async function setMode(
   state: ExtensionState,
   mode: PiAgentMode,
 ): Promise<void> {
+  if (mode === "plan") {
+    // Lock the local tool surface before the broker stops writable children.
+    // Their completion notifications may start a Pi follow-up turn while the
+    // broker transition is still in flight.
+    state.mode = "plan";
+    applyActiveTools(state);
+    publishStatus(ctx, state);
+  }
+  await syncModeBroker(state, mode, ctx.signal);
+  state.mode = mode;
+  pi.appendEntry(MODE_ENTRY, { version: 1, mode });
+  applyActiveTools(state);
+  publishStatus(ctx, state);
+}
+
+async function syncModeBroker(
+  state: ExtensionState,
+  mode: PiAgentMode,
+  signal?: AbortSignal,
+): Promise<void> {
   if (state.taskEndpoint) {
     await requestPiBroker({
       endpoint: state.taskEndpoint,
@@ -313,12 +338,9 @@ async function setMode(
       generation: state.payload.generation,
       operation: "mode.set",
       payload: { mode },
+      signal,
     });
   }
-  state.mode = mode;
-  pi.appendEntry(MODE_ENTRY, { version: 1, mode });
-  applyActiveTools(state);
-  publishStatus(ctx, state);
 }
 
 function applyActiveTools(state: ExtensionState): void {
@@ -359,7 +381,7 @@ function registerAskTool(pi: ExtensionAPI): void {
     name: "ask",
     label: "ask",
     description:
-      "Ask the user one to four related questions in one interaction. Keep questions concise, provide two to four distinct options per question, and mark multiSelect only when multiple options may be combined.",
+      "Ask the user one to four related questions only when the answer materially changes the outcome or grants new authority. Continue with safe, reversible assumptions instead of interrupting for minor choices. Keep questions concise, provide two to four distinct options per question, and mark multiSelect only when multiple options may be combined.",
     parameters: Type.Object({
       questions: Type.Array(
         Type.Object({
@@ -386,6 +408,22 @@ function registerAskTool(pi: ExtensionAPI): void {
     }),
     async execute(id, params, signal, _onUpdate, ctx) {
       if (!ctx.hasUI) return failTool("Interactive RPC UI is unavailable.");
+      const questionTexts = new Set<string>();
+      for (const question of params.questions) {
+        const normalizedQuestion = question.question.trim();
+        if (questionTexts.has(normalizedQuestion)) {
+          return failTool("Ask questions must be unique.");
+        }
+        questionTexts.add(normalizedQuestion);
+        const labels = new Set<string>();
+        for (const option of question.options) {
+          const normalizedLabel = option.label.trim();
+          if (labels.has(normalizedLabel)) {
+            return failTool("Ask option labels must be unique within each question.");
+          }
+          labels.add(normalizedLabel);
+        }
+      }
       const response = await ctx.ui.select(
         encodePiAskBatchTitle(id, params.questions),
         [PI_ASK_BATCH_OPTION],
@@ -404,7 +442,8 @@ function registerTodoTool(pi: ExtensionAPI, state: ExtensionState): void {
   pi.registerTool({
     name: "todo_write",
     label: "todo_write",
-    description: "Replace the complete session todo list.",
+    description:
+      "Replace the complete session todo list for substantial multi-step work. Keep at most one item in progress, update it as work advances, and mark work completed only after the available evidence or verification supports completion. Avoid todos for a trivial single action.",
     parameters: Type.Object({
       todos: Type.Array(
         Type.Object({
@@ -425,10 +464,25 @@ function registerTodoTool(pi: ExtensionAPI, state: ExtensionState): void {
         if (ids.has(todo.id)) return failTool("Todo ids must be unique.");
         ids.add(todo.id);
       }
+      if (params.todos.filter((todo) => todo.status === "in_progress").length > 1) {
+        return failTool("Only one todo may be in progress.");
+      }
       state.todos = params.todos.map((todo) => ({ ...todo }));
       pi.appendEntry(TODO_ENTRY, { version: 1, todos: state.todos });
       return textResult(`Stored ${state.todos.length} todos.`, {
         todos: state.todos,
+      });
+    },
+  });
+  pi.registerTool({
+    name: "todo_read",
+    label: "todo_read",
+    description:
+      "Read the current session todo list after resume, compaction, branching, or before updating unfamiliar task state.",
+    parameters: Type.Object({}),
+    async execute() {
+      return textResult(jsonText({ todos: state.todos }), {
+        todos: state.todos.map((todo) => ({ ...todo })),
       });
     },
   });
@@ -438,30 +492,79 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
   pi.registerTool({
     name: "task",
     label: "task",
-    description: "Start or stop an isolated managed Pi sub-agent.",
+    description:
+      "Delegate a bounded, self-contained research or document task to an isolated managed Pi agent. Use foreground work when its result is needed immediately; use background work for independent parallel investigation, then let its Pi follow-up arrive or call wait/status. Running tasks can be redirected with steer. Do not delegate trivial work or tightly coupled edits.",
     parameters: Type.Object({
-      action: Type.Union([Type.Literal("start"), Type.Literal("stop")]),
+      action: Type.Union([
+        Type.Literal("start"),
+        Type.Literal("list"),
+        Type.Literal("status"),
+        Type.Literal("wait"),
+        Type.Literal("steer"),
+        Type.Literal("stop"),
+      ]),
       prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
+      description: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
       taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+      message: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
       background: Type.Optional(Type.Boolean()),
       readOnly: Type.Optional(Type.Boolean()),
+      timeoutMs: Type.Optional(
+        Type.Integer({
+          minimum: 1,
+          maximum: 1_800_000,
+          description: "Maximum wait or delegated execution time in milliseconds.",
+        }),
+      ),
     }),
     executionMode: "parallel",
     async execute(_id, params, signal, onUpdate, ctx) {
       if (!state.taskEndpoint) return failTool("Managed task broker is unavailable.");
-      if (params.action === "stop") {
+      if (params.action === "list") {
+        const value = await requestPiBroker({
+          endpoint: state.taskEndpoint,
+          sessionId: state.payload.sessionId,
+          generation: state.payload.generation,
+          operation: "task.list",
+          signal,
+        });
+        return textResult(jsonText(value), value);
+      }
+      if (params.action === "stop" || params.action === "status" || params.action === "wait") {
         if (!nonEmpty(params.taskId)) {
-          return failTool("taskId is required to stop a task.");
+          return failTool(`taskId is required to ${params.action} a task.`);
+        }
+        const waitTimeoutMs = params.timeoutMs ?? 30_000;
+        const value = await requestPiBroker({
+          endpoint: state.taskEndpoint,
+          sessionId: state.payload.sessionId,
+          generation: state.payload.generation,
+          operation: `task.${params.action}`,
+          payload: {
+            taskId: params.taskId,
+            ...(params.action === "wait" ? { timeoutMs: waitTimeoutMs } : {}),
+          },
+          signal,
+          ...(params.action === "wait" ? { timeoutMs: waitTimeoutMs + 5_000 } : {}),
+        });
+        return textResult(jsonText(value), value);
+      }
+      if (params.action === "steer") {
+        if (!nonEmpty(params.taskId)) {
+          return failTool("taskId is required to steer a task.");
+        }
+        if (!nonEmpty(params.message)) {
+          return failTool("message is required to steer a task.");
         }
         const value = await requestPiBroker({
           endpoint: state.taskEndpoint,
           sessionId: state.payload.sessionId,
           generation: state.payload.generation,
-          operation: "task.stop",
-          payload: { taskId: params.taskId },
+          operation: "task.steer",
+          payload: { taskId: params.taskId, message: params.message },
           signal,
         });
-        return textResult("Task stop requested.", value);
+        return textResult(jsonText(value), value);
       }
       if (!nonEmpty(params.prompt)) {
         return failTool("prompt is required to start a task.");
@@ -471,6 +574,7 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
       }
       const readOnly =
         state.mode === "plan" || state.payload.taskPolicy.readOnly === true || params.readOnly;
+      const runTimeoutMs = params.timeoutMs ?? 1_800_000;
       const value = await requestPiBroker({
         endpoint: state.taskEndpoint,
         sessionId: state.payload.sessionId,
@@ -478,7 +582,9 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
         operation: "task.start",
         payload: {
           prompt: params.prompt,
+          ...(nonEmpty(params.description) ? { description: params.description.trim() } : {}),
           background: params.background === true,
+          timeoutMs: runTimeoutMs,
           readOnly: readOnly === true,
           mode: state.mode,
           depth: state.payload.taskPolicy.depth + 1,
@@ -496,16 +602,204 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
             .map((server) => server.name),
         },
         signal,
+        timeoutMs: params.background ? 60_000 : runTimeoutMs + 5_000,
         onProgress: (progress) =>
           onUpdate?.({
             content: [{ type: "text", text: JSON.stringify(progress) }],
             details: progress,
           }),
       });
-      return textResult(
-        params.background ? "Task started in background." : "Task completed.",
-        value,
+      return textResult(jsonText(value), value);
+    },
+  });
+}
+
+const APP_BUILD_LOG_LIMIT_BYTES = 256 * 1024;
+
+async function requestAppBroker(
+  state: ExtensionState,
+  operation: string,
+  payload: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (!state.taskEndpoint) return failTool("Managed App runtime is unavailable.");
+  return requestPiBroker({
+    endpoint: state.taskEndpoint,
+    sessionId: state.payload.sessionId,
+    generation: state.payload.generation,
+    operation,
+    payload,
+    signal,
+    timeoutMs: operation === "app.deploy" ? APP_BUILD_TIMEOUT_MS + 60_000 : undefined,
+  });
+}
+
+function requireRootAppMutation(state: ExtensionState): void {
+  if (state.mode !== "agent") failTool("App mutations are unavailable in Plan mode.");
+  if (state.payload.taskPolicy.depth !== 0 || state.payload.taskPolicy.readOnly === true) {
+    failTool("App mutations are available only to the root Agent task.");
+  }
+}
+
+function registerAppTools(pi: ExtensionAPI, state: ExtensionState, cwd: string): void {
+  pi.registerTool({
+    name: "deploy_app",
+    label: "deploy_app",
+    description:
+      "Build and publish an App from a directory in the current session Agent Space. The source must contain package.json, bun.lock, piwork.app.json, and emit build/server/wrangler.json. First publish requires publishIntent=user_requested. dryRun builds and validates without changing deployment state.",
+    parameters: Type.Object({
+      path: Type.String({ minLength: 1, maxLength: 4_096 }),
+      appId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+      slug: Type.Optional(Type.String({ minLength: 1, maxLength: 63 })),
+      dryRun: Type.Optional(Type.Boolean()),
+      publishIntent: Type.Optional(Type.Literal("user_requested")),
+    }),
+    async execute(_id, params, signal, onUpdate) {
+      requireRootAppMutation(state);
+      const source = await inspectAppSource(cwd, params.path);
+      const localBash = createLocalBashOperations();
+      const buildCommand = resolveAppBuildCommand();
+      const chunks: Buffer[] = [];
+      let capturedBytes = 0;
+      const result = await localBash.exec(buildCommand, source.sourceRoot, {
+        timeout: APP_BUILD_TIMEOUT_MS,
+        signal,
+        env: scrubPiShellEnvironment({
+          CI: "1",
+          WRANGLER_SEND_METRICS: "false",
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          TMPDIR: process.env.TMPDIR,
+        }),
+        onData(data) {
+          if (capturedBytes < APP_BUILD_LOG_LIMIT_BYTES) {
+            const remaining = APP_BUILD_LOG_LIMIT_BYTES - capturedBytes;
+            const chunk = data.subarray(0, remaining);
+            chunks.push(chunk);
+            capturedBytes += chunk.byteLength;
+          }
+          onUpdate?.({
+            content: [{ type: "text", text: data.toString("utf8") }],
+            details: { phase: "building" },
+          });
+        },
+      });
+      const buildLog = Buffer.concat(chunks).toString("utf8");
+      if (result.exitCode !== 0) {
+        return failTool(
+          `App build failed with exit code ${String(result.exitCode)}${
+            buildLog ? `\n${buildLog}` : ""
+          }`,
+        );
+      }
+      const value = await requestAppBroker(
+        state,
+        "app.deploy",
+        {
+          path: params.path,
+          ...(params.appId ? { appId: params.appId } : {}),
+          ...(params.slug ? { slug: params.slug } : {}),
+          dryRun: params.dryRun === true,
+          publishIntent: params.publishIntent,
+          build: {
+            command: buildCommand,
+            exitCode: result.exitCode,
+            log: buildLog,
+            logTruncated: capturedBytes >= APP_BUILD_LOG_LIMIT_BYTES,
+            sourceDigestBeforeBuild: source.sourceDigest,
+          },
+        },
+        signal,
       );
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "list_apps",
+    label: "list_apps",
+    description: "List Apps visible in the current session, owned by the current user, or tenant.",
+    parameters: Type.Object({
+      scope: Type.Union([
+        Type.Literal("current-session"),
+        Type.Literal("mine"),
+        Type.Literal("tenant"),
+      ]),
+      cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 1_024 })),
+    }),
+    async execute(_id, params, signal) {
+      const value = await requestAppBroker(state, "app.list", params, signal);
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "list_app_versions",
+    label: "list_app_versions",
+    description: "List immutable successful deployment versions for one App.",
+    parameters: Type.Object({
+      appId: Type.String({ minLength: 1, maxLength: 128 }),
+      cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 1_024 })),
+    }),
+    async execute(_id, params, signal) {
+      const value = await requestAppBroker(state, "app.versions", params, signal);
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "rollback_app",
+    label: "rollback_app",
+    description:
+      "Redeploy an immutable historical App artifact. This rolls back code and bindings only, never KV, R2, D1, or Durable Object data.",
+    parameters: Type.Object({
+      appId: Type.String({ minLength: 1, maxLength: 128 }),
+      deploymentId: Type.String({ minLength: 1, maxLength: 128 }),
+    }),
+    async execute(_id, params, signal) {
+      requireRootAppMutation(state);
+      const value = await requestAppBroker(state, "app.rollback", params, signal);
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "delete_app",
+    label: "delete_app",
+    description:
+      "Archive this App in Piwork without deleting its Worker or resources from the user's Cloudflare account. Requires explicit user intent.",
+    parameters: Type.Object({
+      appId: Type.String({ minLength: 1, maxLength: 128 }),
+      publishIntent: Type.Literal("user_requested"),
+    }),
+    async execute(_id, params, signal) {
+      requireRootAppMutation(state);
+      const value = await requestAppBroker(state, "app.delete", params, signal);
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "restore_app",
+    label: "restore_app",
+    description: "Restore an archived App link in Piwork without changing Cloudflare resources.",
+    parameters: Type.Object({ appId: Type.String({ minLength: 1, maxLength: 128 }) }),
+    async execute(_id, params, signal) {
+      requireRootAppMutation(state);
+      const value = await requestAppBroker(state, "app.restore", params, signal);
+      return textResult(jsonText(value), value);
+    },
+  });
+
+  pi.registerTool({
+    name: "open_app_preview",
+    label: "open_app_preview",
+    description: "Open a ready Temporary or BYOC App URL in Piwork's isolated App preview.",
+    parameters: Type.Object({ appId: Type.String({ minLength: 1, maxLength: 128 }) }),
+    async execute(_id, params, signal) {
+      requireRootAppMutation(state);
+      const value = await requestAppBroker(state, "app.preview", params, signal);
+      return textResult(jsonText(value), value);
     },
   });
 }
@@ -550,6 +844,46 @@ function registerPlanTool(pi: ExtensionAPI, state: ExtensionState): void {
         ...decision,
         mode: state.mode,
       });
+    },
+  });
+}
+
+function registerNativeFileTool(pi: ExtensionAPI, state: ExtensionState): void {
+  pi.registerTool({
+    name: "native_file",
+    label: "native_file",
+    description:
+      "Use a typed macOS file action for one Agent Space file. Supported actions are Quick Look, open, Open With, print, export, reveal, share, and an explicit native-edit handoff. This tool never accepts shell commands or host paths. User Space binaries must first be checked out to Agent Space.",
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal("file.quickLook"),
+        Type.Literal("file.open"),
+        Type.Literal("file.openWith"),
+        Type.Literal("file.print"),
+        Type.Literal("file.saveAs"),
+        Type.Literal("file.revealExport"),
+        Type.Literal("file.share"),
+        Type.Literal("file.nativeEdit"),
+      ]),
+      path: Type.String({ minLength: 1, maxLength: 4_096 }),
+    }),
+    async execute(_id, params, signal) {
+      if (state.mode === "plan") {
+        return failTool("native_file is unavailable in Plan mode.");
+      }
+      if (!state.taskEndpoint) return failTool("Native file helper is unavailable.");
+      const value = await requestPiBroker({
+        endpoint: state.taskEndpoint,
+        sessionId: state.payload.sessionId,
+        generation: state.payload.generation,
+        operation: "native-file.action",
+        payload: {
+          action: params.action,
+          path: params.path,
+        },
+        signal,
+      });
+      return textResult(jsonText(value), value);
     },
   });
 }
@@ -620,13 +954,25 @@ function registerLifecyclePolicies(pi: ExtensionAPI, state: ExtensionState): voi
   pi.on("resources_discover", () => ({
     skillPaths: state.payload.managedSkills.map((skill) => skill.path),
   }));
-  pi.on("session_start", (_event, ctx) => {
+  const restoreSessionState = async (ctx: ExtensionContext) => {
     const restored = restoreCustomState(ctx.sessionManager.getBranch(), state.payload.mode);
+    const modeChanged = restored.mode !== state.mode;
+    if (modeChanged && restored.mode === "plan") {
+      state.mode = "plan";
+      state.todos = restored.todos;
+      applyActiveTools(state);
+      publishStatus(ctx, state);
+    }
+    if (modeChanged) {
+      await syncModeBroker(state, restored.mode, ctx.signal);
+    }
     state.mode = restored.mode;
     state.todos = restored.todos;
     applyActiveTools(state);
     publishStatus(ctx, state);
-  });
+  };
+  pi.on("session_start", (_event, ctx) => restoreSessionState(ctx));
+  pi.on("session_tree", (_event, ctx) => restoreSessionState(ctx));
   pi.on("tool_call", (event) => {
     if (
       state.mcpManager.isManagedTool(event.toolName) &&
@@ -672,26 +1018,14 @@ function registerLifecyclePolicies(pi: ExtensionAPI, state: ExtensionState): voi
     }
     return { action: "continue" };
   });
-  pi.on("before_agent_start", async (event, ctx) => {
+  pi.on("before_agent_start", async (_event, ctx) => {
     try {
       await state.mcpManager.refresh(ctx.signal);
     } finally {
       applyActiveTools(state);
       publishStatus(ctx, state);
     }
-    const governed = state.payload.instructions?.trim();
-    if (state.mode !== "plan") {
-      return governed ? { systemPrompt: `${event.systemPrompt}\n\n${governed}` } : undefined;
-    }
-    return {
-      systemPrompt: [
-        event.systemPrompt,
-        governed,
-        "Piwork Plan mode is active. Do not modify files or external state. Use only read-only tools. Bash commands are accepted only when the fail-closed classifier proves they are read-only. Sub-agents are forced read-only. MCP calls are limited to tools explicitly declared read-only. Use propose_plan to request execution; remain in Plan mode unless the user explicitly selects execute.",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    };
+    return undefined;
   });
   pi.registerCommand("piwork-plan", {
     description: "Enter Piwork Plan mode.",
@@ -782,6 +1116,8 @@ export default async function piworkTrustedPiExtension(pi: ExtensionAPI): Promis
   registerAskTool(pi);
   registerTodoTool(pi, state);
   registerTaskTool(pi, state);
+  registerAppTools(pi, state, process.cwd());
+  registerNativeFileTool(pi, state);
   registerPlanTool(pi, state);
   registerLifecyclePolicies(pi, state);
 }

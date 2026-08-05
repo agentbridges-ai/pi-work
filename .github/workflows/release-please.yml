@@ -22,8 +22,23 @@ jobs:
     steps:
       - name: Verify release token configured
         env:
-          RELEASE_PLEASE_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
-        run: test -n "$RELEASE_PLEASE_TOKEN"
+          PIWORK_RELEASE_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${PIWORK_RELEASE_TOKEN:-}" ]; then
+            echo "::error::Repository secret PIWORK_RELEASE_TOKEN is missing; configure the scoped release credential before retrying."
+            exit 1
+          fi
+
+      - name: Verify release token can access this repository
+        env:
+          GH_TOKEN: ${{ secrets.PIWORK_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh api "/repos/${GITHUB_REPOSITORY}" --silent >/dev/null; then
+            echo "::error::PIWORK_RELEASE_TOKEN exists but GitHub rejected it or it cannot access this repository. Use a valid, unexpired credential with the documented repository permissions."
+            exit 1
+          fi
 
       - name: Create or update the Piwork release PR
         id: release

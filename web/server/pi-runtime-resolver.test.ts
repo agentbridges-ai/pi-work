@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertSupportedPiExecutionPlatform,
   assertSupportedNodeVersion,
   buildPiRpcArgs,
   PINNED_PI_PACKAGE,
@@ -41,6 +42,12 @@ function piFixture(version = PINNED_PI_VERSION) {
 }
 
 describe("Pi runtime resolution", () => {
+  it("requires a Linux execution host for Pi and SRT", () => {
+    expect(() => assertSupportedPiExecutionPlatform("linux")).not.toThrow();
+    expect(() => assertSupportedPiExecutionPlatform("darwin")).toThrow(/OrbStack Linux VM/);
+    expect(() => assertSupportedPiExecutionPlatform("win32")).toThrow(/WSL2 Linux/);
+  });
+
   it("accepts the minimum Node release and rejects an older runtime", () => {
     expect(() => assertSupportedNodeVersion("22.19.0")).not.toThrow();
     expect(() => assertSupportedNodeVersion("24.14.0")).not.toThrow();
@@ -52,6 +59,7 @@ describe("Pi runtime resolution", () => {
     const runtime = resolvePinnedPiRuntime(
       () => pathToFileURL(fixture.entryPath).href,
       fixture.nodePath,
+      "linux",
     );
     expect(runtime).toEqual({
       entryPath: realpathSync(fixture.entryPath),
@@ -68,6 +76,7 @@ describe("Pi runtime resolution", () => {
       resolvePinnedPiRuntime(
         () => pathToFileURL(wrongVersion.entryPath).href,
         wrongVersion.nodePath,
+        "linux",
       ),
     ).toThrow(/0.82.1 is required/);
 
@@ -82,7 +91,7 @@ describe("Pi runtime resolution", () => {
       }),
     );
     expect(() =>
-      resolvePinnedPiRuntime(() => pathToFileURL(fork.entryPath).href, fork.nodePath),
+      resolvePinnedPiRuntime(() => pathToFileURL(fork.entryPath).href, fork.nodePath, "linux"),
     ).toThrow(/not owned by/);
   });
 
@@ -94,7 +103,11 @@ describe("Pi runtime resolution", () => {
     rmSync(manifest);
     symlinkSync(outside, manifest);
     expect(() =>
-      resolvePinnedPiRuntime(() => pathToFileURL(fixture.entryPath).href, fixture.nodePath),
+      resolvePinnedPiRuntime(
+        () => pathToFileURL(fixture.entryPath).href,
+        fixture.nodePath,
+        "linux",
+      ),
     ).toThrow();
   });
 });
