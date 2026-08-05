@@ -8,6 +8,7 @@ const input = process.argv.slice(2);
 const args = [];
 const deferredNetworkBinds = [];
 const createdMaskDestinations = [];
+const socketMaskFds = [];
 const srtRuntimeEtcSelfBindPaths = new Set([
   "/etc/hosts",
   "/etc/resolv.conf",
@@ -146,7 +147,7 @@ for (let index = 0; index < input.length; index += 1) {
     isSrtNetworkSocketPath(input[index + 1]) &&
     input[index + 1] === input[index + 2]
   ) {
-    deferredNetworkBinds.push(input[index], input[index + 1], input[index + 2]);
+    deferredNetworkBinds.push({ source: input[index + 1], target: input[index + 2] });
     index += 2;
     continue;
   }
@@ -167,13 +168,36 @@ if (commandIndex === -1) {
   process.stderr.write("piwork-bwrap: missing command separator\n");
   process.exit(2);
 }
-args.splice(commandIndex, 0, ...deferredNetworkBinds);
+const hasTmpfsTmp = args.some(
+  (value, index) => value === "--tmpfs" && args[index + 1] === "/tmp",
+);
+const networkBindArgs = [];
+try {
+  for (const { source, target } of deferredNetworkBinds) {
+    if (hasTmpfsTmp) {
+      // A generated proxy socket is intentionally kept as the original bind.
+      // The --file placeholder only gives bwrap a destination inside its fresh
+      // /tmp tmpfs; the real socket bind remains immediately after it.
+      const fd = openSync("/dev/null", constants.O_RDONLY);
+      const childFd = 3 + socketMaskFds.length;
+      socketMaskFds.push(fd);
+      networkBindArgs.push("--perms", "0400", "--file", String(childFd), target);
+    }
+    networkBindArgs.push("--bind", source, target);
+  }
+} catch (error) {
+  for (const fd of socketMaskFds) closeSync(fd);
+  throw error;
+}
+args.splice(commandIndex, 0, ...networkBindArgs);
 
 let result;
 try {
-  result = spawnSync("/usr/bin/bwrap", args, { stdio: "inherit" });
+  const stdio = ["inherit", "inherit", "inherit", ...socketMaskFds];
+  result = spawnSync("/usr/bin/bwrap", args, { stdio });
 } finally {
   cleanupCreatedMaskDestinations();
+  for (const fd of socketMaskFds) closeSync(fd);
 }
 if (result.error) {
   process.stderr.write(`${result.error.message}\n`);
