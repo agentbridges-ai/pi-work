@@ -148,7 +148,8 @@ jobs:
         # surface changes; deep verification still runs its portable suite and
         # coverage once.
         run: |
-          onlyoffice_release_verify_args="--online"
+          ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
+          onlyoffice_release_verify_args="${ONLYOFFICE_RELEASE_VERIFY_ARGS}"
           # Pull requests may validate a staged candidate online. Main pushes
           # remain strict and require a supported release with a promotion receipt.
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && node -e '
