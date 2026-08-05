@@ -187,8 +187,13 @@ function isolateSrtSeccompShell(args, commandIndex) {
   if (nestedShellIndex >= 0) {
     args[commandIndex + 3] =
       script.slice(0, nestedShellIndex) +
-      `/usr/bin/setsid ${nestedShell}` +
+      `/usr/bin/setsid --wait ${nestedShell}` +
       script.slice(nestedShellIndex + nestedShell.length);
+    // bwrap's --new-session can leave the generated outer Bash attached to a
+    // process group that is invisible after the PID namespace transition.
+    // Start that SRT-owned wrapper in its own session too; this does not alter
+    // the user's final shell or command payload.
+    args.splice(commandIndex + 1, 0, "/usr/bin/setsid", "--wait");
   }
 }
 
@@ -278,12 +283,6 @@ isolateSrtSeccompShell(args, args.indexOf("--"));
 
 let result;
 try {
-  if (process.env.PIWORK_BWRAP_DEBUG === "1") {
-    const debugCommandIndex = args.indexOf("--");
-    process.stderr.write(
-      `piwork-bwrap: commandIndex=${debugCommandIndex} commandArgs=${JSON.stringify(args.slice(debugCommandIndex))}\n`,
-    );
-  }
   const stdio = ["inherit", "inherit", "inherit", ...proxyDirectoryFds];
   result = spawnSync("/usr/bin/bwrap", args, { stdio });
 } finally {

@@ -15,10 +15,10 @@ const isolateSrtSeccompShell = vm.runInNewContext(
   `${wrapperSource.slice(functionStart, functionEnd)}; isolateSrtSeccompShell`,
 ) as IsolateSrtSeccompShell;
 
-function transform(script: string): string {
+function transform(script: string): string[] {
   const args = ["--", "/usr/bin/bash", "-c", script];
   isolateSrtSeccompShell(args, 0);
-  return args[3];
+  return args;
 }
 
 describe("compose bwrap wrapper SRT shell isolation", () => {
@@ -31,13 +31,20 @@ describe("compose bwrap wrapper SRT shell isolation", () => {
   ])("starts the generated %s shell in a new session", (_label, script) => {
     const transformed = transform(script);
 
-    expect(transformed).toContain("/usr/bin/setsid /usr/bin/bash -c");
-    expect(transformed).toContain("'printf %s user-command'");
+    expect(transformed.slice(0, 5)).toEqual([
+      "--",
+      "/usr/bin/setsid",
+      "--wait",
+      "/usr/bin/bash",
+      "-c",
+    ]);
+    expect(transformed[5]).toContain("/usr/bin/setsid --wait /usr/bin/bash -c");
+    expect(transformed[5]).toContain("'printf %s user-command'");
   });
 
   it("does not rewrite a user shell that merely mentions apply-seccomp", () => {
     const script = "/usr/bin/bash -c 'printf %s apply-seccomp /usr/bin/bash -c payload'";
 
-    expect(transform(script)).toBe(script);
+    expect(transform(script)).toEqual(["--", "/usr/bin/bash", "-c", script]);
   });
 });
