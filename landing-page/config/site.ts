@@ -2,7 +2,8 @@ export type SiteConfig = typeof siteConfig;
 
 export const siteConfig = {
   name: "piwork",
-  description: "All-in-One Paperwork Agent Workspace",
+  description:
+    "A local workspace for documents, spreadsheets, presentations, research, and everyday office work.",
   navItems: [
     {
       label: "Home",
