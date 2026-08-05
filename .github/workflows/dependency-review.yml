@@ -2,6 +2,7 @@ name: dependency review
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
     paths:
@@ -69,8 +70,11 @@ jobs:
       - name: Dependency review no-op for bootstrap
         if: ${{ github.event_name == 'pull_request' && steps.dependency_graph.outputs.enabled != 'true' }}
         run: echo "Dependency Review is a controlled no-op until the repository Dependency Graph is enabled."
+      - name: Dependency review no-op for merge group
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "merge_group has no pull_request metadata; the PR-scoped dependency review was required before queue admission, while dependency audits still run below."
       - name: Dependency review no-op for non-PR refs
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
         run: echo "Dependency Review runs only for pull requests; this ref is a deterministic no-op."
       - name: Audit web dependencies
         working-directory: web

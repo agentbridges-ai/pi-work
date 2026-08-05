@@ -2,6 +2,7 @@ name: deep verify
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
     tags: ["v*"]
@@ -72,6 +73,14 @@ jobs:
             echo "srt=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # A merge_group event has no pull_request metadata. Test the
+          # synthetic queue commit as SRT-sensitive so the required verify
+          # status is deterministic and never relies on an empty base SHA.
+          if [[ "$EVENT_NAME" == "merge_group" ]]; then
+            echo "merge_group has no pull_request metadata; running the full SRT-sensitive lane."
+            echo "srt=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           base="$PR_BASE_SHA"
           if [[ "$EVENT_NAME" == "push" ]]; then base="$PUSH_BEFORE_SHA"; fi
           # A repository's first push has GitHub's all-zero before SHA. Diff it
@@ -91,8 +100,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+      ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -100,6 +109,10 @@ jobs:
           submodules: recursive
 
       - uses: ./.github/actions/setup-toolchain
+
+      - name: Record merge-group PR metadata boundary
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "merge_group has no pull_request metadata; PR-only coverage and explicit candidate integration remain intentionally skipped, while staged candidate verification stays deterministic."
 
       - name: Install PostgreSQL and SRT runtime dependencies
         run: |
@@ -153,8 +166,11 @@ jobs:
           # Pull requests and the main integration push may validate a staged
           # candidate online. Release tags and every other event remain strict;
           # a candidate never moves stable or satisfies promotion evidence.
+          # Merge-group synthetic commits also validate the staged candidate
+          # online, but never run the explicit candidate integration job.
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ||
-                ( "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ) ]] && node -e '
+                "${GITHUB_EVENT_NAME}" == "merge_group" ||
+               ( "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ) ]] && node -e '
             const fs = require("node:fs");
             const manifest = JSON.parse(fs.readFileSync("release/onlyoffice-release-manifest.json", "utf8"));
             process.exit(manifest.lifecycle === "candidate" ? 0 : 1);
