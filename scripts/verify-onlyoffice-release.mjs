@@ -95,7 +95,7 @@ function requiredArtifact(manifest, repository, kind) {
 
 export function validateOnlyOfficeIntegrationBase(
   manifest,
-  { headCommit, eventBaseCommit, eventHeadCommit, isAncestor, mergeBase },
+  { headCommit, eventBaseCommit, eventHeadCommit, isAncestor, mergeBase, manifestChanged = true },
 ) {
   const integrationBaseCommit = requireCommit(
     manifest.repositories?.Piwork?.integrationBaseCommit,
@@ -135,10 +135,17 @@ export function validateOnlyOfficeIntegrationBase(
       "checked-out commit is neither the pull request head nor its synthetic merge commit",
     );
     assert(typeof mergeBase === "function", "integration merge-base resolver is missing");
-    assert(
-      mergeBase(eventBaseCommit, eventHeadCommit) === integrationBaseCommit,
-      "descriptor integration base does not match the pull request merge base",
-    );
+    if (manifestChanged) {
+      assert(
+        mergeBase(eventBaseCommit, eventHeadCommit) === integrationBaseCommit,
+        "descriptor integration base does not match the pull request merge base",
+      );
+    } else {
+      assert(
+        isAncestor(integrationBaseCommit, eventBaseCommit),
+        "unchanged descriptor integration base is not an ancestor of the pull request base",
+      );
+    }
   }
   return integrationBaseCommit;
 }
@@ -178,6 +185,19 @@ function gitMergeBase(left, right) {
       cause: error,
     });
   }
+}
+
+function gitPathChanged(left, right, path) {
+  const result = spawnSync("git", ["diff", "--quiet", left, right, "--", path], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status === 0) return false;
+  if (result.status === 1) return true;
+  fail(
+    `cannot inspect pull request path changes: ${result.stderr.trim() || `exit ${result.status}`}`,
+  );
 }
 
 export function validatePiworkReleaseInputs(manifest, repositoryRoot = root) {
@@ -719,12 +739,17 @@ if (isMain) {
     allowCandidate,
   });
   validatePiworkReleaseInputs(manifest);
+  const eventBaseCommit = process.env.ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA?.trim();
+  const eventHeadCommit = process.env.ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA?.trim();
   validateOnlyOfficeIntegrationBase(manifest, {
     headCommit: resolveGitCommit("HEAD"),
-    eventBaseCommit: process.env.ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA?.trim(),
-    eventHeadCommit: process.env.ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA?.trim(),
+    eventBaseCommit,
+    eventHeadCommit,
     isAncestor: gitIsAncestor,
     mergeBase: gitMergeBase,
+    manifestChanged:
+      Boolean(eventBaseCommit && eventHeadCommit) &&
+      gitPathChanged(eventBaseCommit, eventHeadCommit, relative(root, manifestPath)),
   });
   const expectedReleaseId = process.env.ONLYOFFICE_EXPECTED_RELEASE_ID?.trim();
   if (expectedReleaseId) {
