@@ -64,6 +64,9 @@ if (bwrap.status !== 0) {
 
 const dataRoot = realpathSync(process.env.PIWORK_DATA_ROOT || "/var/lib/piwork/data");
 const canaryRoot = mkdtempSync(join(dataRoot, ".runtime", "security-canary-"));
+const proxyRoot = realpathSync(mkdtempSync(join(tmpdir(), "piwork-pi-")));
+const proxyDir = join(proxyRoot, "proxy");
+mkdirSync(proxyDir, { mode: 0o700 });
 let settingsPath: string | undefined;
 try {
   const tenantRoot = join(canaryRoot, "tenants", "tenant-a");
@@ -154,14 +157,13 @@ echo CANARY_STAGE=done
       env: {
         PATH: "/usr/local/bin:/usr/bin:/bin",
         HOME: layout.homeDir,
-        TMPDIR: "/tmp",
+        TMPDIR: proxyDir,
         OWN: layout.sessionRoot,
         OTHER: otherLayout.sessionRoot,
         TENANT: tenantRoot,
         LANG: "C",
         LC_ALL: "C",
         SRT_DEBUG: process.env.SRT_DEBUG || "",
-        PIWORK_BWRAP_DEBUG: "1",
       },
       encoding: "utf8",
       timeout: 15_000,
@@ -239,4 +241,5 @@ echo CANARY_STAGE=done
 } finally {
   if (settingsPath) rmSync(settingsPath, { force: true });
   rmSync(canaryRoot, { recursive: true, force: true });
+  rmSync(proxyRoot, { recursive: true, force: true });
 }

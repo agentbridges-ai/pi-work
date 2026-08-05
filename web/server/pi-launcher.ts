@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -284,10 +285,16 @@ function childEnvironment(
   sandbox: PiLaunchSandbox,
   sessionBinDir?: string,
   caCertPath?: string,
+  srtProxyDir?: string,
+  runtimeMode?: PiLaunchOptions["runtimeMode"],
 ): NodeJS.ProcessEnv {
   return {
     HOME: layout.homeDir,
-    TMPDIR: "/tmp",
+    // Keep SRT's host-side manager sockets in a short, launch-private
+    // directory. The child sandbox still receives SRT's explicit
+    // TMPDIR=/tmp/claude setting; the short host path stays below Unix's
+    // socket limit and is rebound as one directory by the Compose wrapper.
+    TMPDIR: runtimeMode === "compose-nested" ? srtProxyDir || "/tmp" : "/tmp",
     XDG_CACHE_HOME: join(layout.homeDir, ".cache"),
     PATH: [sessionBinDir, "/usr/bin", "/bin"].filter(Boolean).join(":"),
     SHELL: "/bin/bash",
@@ -649,6 +656,8 @@ export class PiLauncher implements PiRuntimeBackend {
     const srt = this.dependencies.resolveSrtRuntime();
     const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "piwork-pi-")));
     chmodSync(tempDir, 0o700);
+    const srtProxyDir = join(tempDir, "proxy");
+    mkdirSync(srtProxyDir, { mode: 0o700 });
     const socketPath = join(tempDir, "bootstrap.sock");
     const bootstrap = this.dependencies.createBootstrapServer({
       socketPath,
@@ -735,7 +744,14 @@ export class PiLauncher implements PiRuntimeBackend {
     try {
       child = this.dependencies.spawnProcess(pi.nodePath, [srt.entryPath, ...command], {
         cwd: workingDirectory,
-        env: childEnvironment(layout, options.sandbox, managedResources.sessionBinDir, caCertPath),
+        env: childEnvironment(
+          layout,
+          options.sandbox,
+          managedResources.sessionBinDir,
+          caCertPath,
+          srtProxyDir,
+          options.runtimeMode,
+        ),
         detached: process.platform !== "win32",
         shell: false,
         stdio: ["pipe", "pipe", "pipe"],

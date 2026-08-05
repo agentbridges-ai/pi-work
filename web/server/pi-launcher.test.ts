@@ -215,6 +215,7 @@ describe("PiLauncher security boundary", () => {
 
     const launching = launcher.launch({
       sessionId: SESSION_ID,
+      runtimeMode: "compose-nested",
       sessionRoot,
       workingDirectory,
       trustedExtensionPath,
@@ -274,8 +275,8 @@ describe("PiLauncher security boundary", () => {
     expect(options.cwd).toBe(workingDirectory);
     expect(options.env.PATH).toMatch(new RegExp(`^${sessionBinDir}:`));
     expect(options.env.HOME).toBe(join(sessionRoot, "home"));
-    expect(options.env.TMPDIR).toBe("/tmp");
-    expect(options.env.TMPDIR).toBe("/tmp");
+    expect(options.env.TMPDIR).toMatch(/\/piwork-pi-[^/]+\/proxy$/u);
+    expect(existsSync(options.env.TMPDIR)).toBe(true);
     expect(options.env.PI_CODING_AGENT_DIR).toBe(join(sessionRoot, "pi-config", "runtime"));
     expect(options.env.PI_CODING_AGENT_SESSION_DIR).toBe(join(sessionRoot, "pi-sessions"));
     expect(options.env.SSL_CERT_FILE).toMatch(/cert/);
