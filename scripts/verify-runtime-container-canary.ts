@@ -164,7 +164,6 @@ echo CANARY_STAGE=done
         LANG: "C",
         LC_ALL: "C",
         SRT_DEBUG: process.env.SRT_DEBUG || "",
-        PIWORK_BWRAP_DEBUG: "1",
       },
       encoding: "utf8",
       timeout: 15_000,
@@ -180,9 +179,6 @@ echo CANARY_STAGE=done
         (sandbox.stdout?.trim() ? ` stdout=${sandbox.stdout.trim().slice(0, 2_000)}` : "") +
         (sandbox.stderr?.trim() ? ` stderr=${sandbox.stderr.trim().slice(0, 4_000)}` : ""),
     );
-  }
-  if (sandbox.stderr?.trim()) {
-    process.stderr.write(sandbox.stderr);
   }
   if (readFileSync(existingGitConfig, "utf8") !== "existing-git-config\n") {
     throw new Error("Existing deny mask was modified");

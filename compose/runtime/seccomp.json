@@ -78,6 +78,7 @@
         "getpid",
         "getppid",
         "getpgid",
+        "getpgrp",
         "getrandom",
         "getrlimit",
         "getsockname",

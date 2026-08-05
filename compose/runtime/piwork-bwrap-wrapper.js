@@ -1,14 +1,12 @@
 #!/usr/local/bin/node
 
 const { spawnSync } = require("node:child_process");
-const { createHash } = require("node:crypto");
 const {
   closeSync,
   constants,
   fstatSync,
   lstatSync,
   openSync,
-  readFileSync,
   realpathSync,
   unlinkSync,
 } = require("node:fs");
@@ -285,13 +283,6 @@ isolateSrtSeccompShell(args, args.indexOf("--"));
 
 let result;
 try {
-  if (process.env.PIWORK_BWRAP_DEBUG === "1") {
-    const debugCommandIndex = args.indexOf("--");
-    const wrapperHash = createHash("sha256").update(readFileSync(__filename)).digest("hex");
-    process.stderr.write(
-      `piwork-bwrap: revision=outer-setsid-wait-4a4f8d6 sha256=${wrapperHash} commandIndex=${debugCommandIndex} commandArgs=${JSON.stringify(args.slice(debugCommandIndex))}\n`,
-    );
-  }
   const stdio = ["inherit", "inherit", "inherit", ...proxyDirectoryFds];
   result = spawnSync("/usr/bin/bwrap", args, { stdio });
 } finally {
