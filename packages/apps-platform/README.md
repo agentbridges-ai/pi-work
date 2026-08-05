@@ -47,3 +47,18 @@ bun run wrangler:check
 ```
 
 See [`docs/byoc-wrapper.md`](docs/byoc-wrapper.md) for the deployment boundary.
+
+## Local Worker tracing
+
+The example Worker can be run in Cloudflare's local runtime with automatic
+Local Explorer tracing:
+
+```sh
+bun run dev:trace
+```
+
+Wrangler prints the local URL and an `e` shortcut for Local Explorer. It is
+also available at `/cdn-cgi/explorer` on that URL, with the read-only local
+observability API under `/cdn-cgi/explorer/api`. This command is an opt-in
+developer tool; it does not start Pi, the Pi RPC runtime, or the Piwork Web
+server, and it does not use remote Cloudflare bindings.
