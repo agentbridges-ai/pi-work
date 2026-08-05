@@ -165,7 +165,9 @@ if (policy.mergeQueue?.recommendedConfiguration?.mergeMethod !== "SQUASH") {
   failures.push("github-policy.json: merge queue recommendation must use SQUASH");
 }
 if (policy.stackedPullRequests?.dependencyOrder?.join("->") !== "mise->feature->release") {
-  failures.push("github-policy.json: stacked PR dependency order must remain mise -> feature -> release");
+  failures.push(
+    "github-policy.json: stacked PR dependency order must remain mise -> feature -> release",
+  );
 }
 
 if (failures.length) {
