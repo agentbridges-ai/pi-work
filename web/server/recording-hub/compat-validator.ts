@@ -44,6 +44,8 @@ const PI_BROWSER_TYPES = new Set([
   "session_name_update",
   "session_lifecycle_update",
   "mcp_status",
+  "pi_queue",
+  "pi_extension_event",
   "user_space_request",
   "user_space_mutation_request",
   "user_space_mutation_authorization",
@@ -56,6 +58,7 @@ const RUN_STATES = new Set([
   "starting",
   "ready",
   "running",
+  "settling",
   "awaiting_interaction",
   "compacting",
   "reconnecting",
@@ -437,6 +440,45 @@ function validateMessageStructure(
     case "mcp_status":
       if (!Array.isArray(msg.servers)) {
         issues.push(issue(index, type, msg, "servers", "mcp_status missing 'servers' array"));
+      }
+      break;
+    case "pi_queue":
+      if (
+        typeof msg.generation !== "number" ||
+        !Array.isArray(msg.steering) ||
+        !msg.steering.every((item) => typeof item === "string") ||
+        !Array.isArray(msg.followUp) ||
+        !msg.followUp.every((item) => typeof item === "string") ||
+        typeof msg.timestamp !== "number"
+      ) {
+        issues.push(
+          issue(
+            index,
+            type,
+            msg,
+            "steering",
+            "pi_queue requires generation, steering, followUp, and timestamp",
+          ),
+        );
+      }
+      break;
+    case "pi_extension_event":
+      if (
+        typeof msg.generation !== "number" ||
+        typeof msg.event !== "string" ||
+        msg.event.length === 0 ||
+        !isRecord(msg.payload) ||
+        typeof msg.timestamp !== "number"
+      ) {
+        issues.push(
+          issue(
+            index,
+            type,
+            msg,
+            "event",
+            "pi_extension_event requires generation, event, payload, and timestamp",
+          ),
+        );
       }
       break;
     case "event_replay":

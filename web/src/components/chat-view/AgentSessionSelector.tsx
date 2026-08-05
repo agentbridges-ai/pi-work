@@ -149,6 +149,7 @@ export function AgentSessionSelector({
   const sessionNames = useStore((state) => state.sessionNames);
   const runStateById = useStore((state) => state.runStates);
   const runActiveById = useStore((state) => state.runActive);
+  const activityById = useStore((state) => state.agentActivity);
   const runtimeConnectedById = useStore((state) => state.runtimeConnected);
   const pendingInteractionsById = useStore((state) => state.pendingInteractions);
   const agentUserSpaces = useStore((state) => state.agentUserSpaces);
@@ -875,6 +876,18 @@ export function AgentSessionSelector({
                       pendingInteractionsById,
                       runActiveById,
                     );
+                    const activity = activityById.get(session.sessionId);
+                    const attentionLabel = meta.needsConfirmation
+                      ? uiCopy.chat.waitingReply
+                      : activity?.attention === "blocked"
+                        ? uiCopy.activity.status.blocked
+                        : activity?.attention === "review_ready"
+                          ? uiCopy.activity.status.reviewReady
+                          : activity?.operation === "retrying"
+                            ? uiCopy.activity.status.retrying
+                            : activity?.operation === "compacting"
+                              ? uiCopy.activity.status.compacting
+                              : "";
                     return (
                       <div
                         key={session.sessionId}
@@ -911,7 +924,7 @@ export function AgentSessionSelector({
                               onClick={() =>
                                 handleSelectHistory(session.sessionId, focusedAgent.id)
                               }
-                              aria-label={`${uiCopy.chat.selectSession} ${title}`}
+                              aria-label={`${uiCopy.chat.selectSession} ${title}${attentionLabel ? ` · ${attentionLabel}` : ""}`}
                               title={title}
                               className="absolute inset-0 z-0 rounded-[var(--piwork-control-radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             />
@@ -920,9 +933,17 @@ export function AgentSessionSelector({
                                 <span className="block min-w-0 truncate text-xs font-semibold overflow-visible">
                                   {title}
                                 </span>
-                                {meta.needsConfirmation && (
-                                  <span className="shrink-0 rounded-[var(--piwork-control-radius)] bg-accent px-1.5 py-0.5 text-xs font-semibold leading-3 text-accent-foreground">
-                                    {uiCopy.chat.waitingReply}
+                                {attentionLabel && (
+                                  <span
+                                    className={`shrink-0 rounded-[var(--piwork-control-radius)] px-1.5 py-0.5 text-xs font-semibold leading-3 ${
+                                      activity?.attention === "blocked"
+                                        ? "bg-danger/10 text-danger"
+                                        : activity?.attention === "review_ready"
+                                          ? "bg-success/10 text-success"
+                                          : "bg-accent text-accent-foreground"
+                                    }`}
+                                  >
+                                    {attentionLabel}
                                   </span>
                                 )}
                               </span>

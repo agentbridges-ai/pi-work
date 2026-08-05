@@ -368,6 +368,7 @@ function toChatMessage(message: AgentMessage): ChatMessage {
     parentToolCallId: message.parentToolCallId,
     model: message.model,
     stopReason: message.stopReason,
+    error: message.error,
   };
 }
 
@@ -485,14 +486,16 @@ function applyToolExecution(sessionId: string, event: ToolExecutionEvent): void 
     store.upsertProcess(sessionId, {
       taskId: event.task.taskId,
       toolCallId: event.toolCallId,
+      originatingToolCallId: event.task.originatingToolCallId ?? event.toolCallId,
       name: event.task.name,
       description: event.task.description || "",
       execution: event.task.execution,
       depth: event.task.depth,
       status: event.task.status,
       progress: event.task.progress,
-      summary: typeof event.output === "string" ? event.output : undefined,
-      startedAt: event.timestamp - (event.elapsedMs || 0),
+      summary: event.task.summary ?? (typeof event.output === "string" ? event.output : undefined),
+      durationMs: event.task.durationMs,
+      startedAt: event.timestamp - (event.task.durationMs ?? event.elapsedMs ?? 0),
       completedAt: event.task.status === "running" ? undefined : event.timestamp,
     });
   }
@@ -506,7 +509,12 @@ function staleGeneration(sessionId: string, generation: number): boolean {
 function noteGeneration(sessionId: string, generation: number): void {
   const store = useStore.getState();
   const current = store.sessions.get(sessionId);
-  if (current && generation > current.generation) store.updateSession(sessionId, { generation });
+  if (current && generation > current.generation) {
+    // A new Pi process cannot acknowledge a response submitted to its predecessor.
+    // Keep the interaction itself so history/replay can decide whether it is still pending.
+    store.clearInteractionSubmission(sessionId);
+    store.updateSession(sessionId, { generation });
+  }
 }
 
 type CoreEvent = Extract<
@@ -530,6 +538,7 @@ function applyCoreEvent(
   const store = useStore.getState();
   if (!options.fromHistory && staleGeneration(sessionId, event.generation)) return;
   if (!options.fromHistory) noteGeneration(sessionId, event.generation);
+  if (!options.fromHistory) store.projectAgentActivity(sessionId, event);
   switch (event.type) {
     case "agent_message":
       clearStreaming(sessionId);
@@ -541,6 +550,11 @@ function applyCoreEvent(
       break;
     case "message_delta": {
       if (event.delta.kind === "tool_arguments") break;
+      const terminalMessage = (store.messages.get(sessionId) || []).some(
+        (message) =>
+          message.id === event.messageId && message.role === "assistant" && !message.isStreaming,
+      );
+      if (terminalMessage) break;
       const parts = streamingPartsBySession.get(sessionId) || { text: "", thinking: "" };
       if (event.delta.kind === "text") parts.text += event.delta.delta;
       else parts.thinking += event.delta.delta;
@@ -589,9 +603,13 @@ function applyCoreEvent(
       );
       break;
     case "run_state": {
-      const active = ["starting", "running", "awaiting_interaction", "compacting"].includes(
-        event.state,
-      );
+      const active = [
+        "starting",
+        "running",
+        "settling",
+        "awaiting_interaction",
+        "compacting",
+      ].includes(event.state);
       store.setRunState(sessionId, event.state);
       store.setRunActive(sessionId, active);
       store.setRuntimeConnected(
@@ -622,6 +640,7 @@ function applyHistory(sessionId: string, entries: PiHistoryEntry[], reset: boole
   const messages: ChatMessage[] = [];
   const activities: ToolActivityEntry[] = [];
   if (reset) {
+    clearStreaming(sessionId);
     store.setTasks(sessionId, []);
     store.setProcesses(sessionId, []);
     store.setToolActivity(sessionId, []);
@@ -776,6 +795,8 @@ function handleParsedMessage(
       ) {
         store.clearPendingInteractions(sessionId);
       }
+      if ((store.sessions.get(sessionId)?.generation ?? -1) < message.session.generation)
+        store.clearInteractionSubmission(sessionId);
       store.addSession(message.session);
       syncSessionUserSpaces(sessionId, message.session.userSpaces);
       store.setRuntimeConnected(sessionId, true);
@@ -784,6 +805,7 @@ function handleParsedMessage(
       if (sourceSocket?.readyState === WebSocket.OPEN) {
         resendUnacknowledgedAgentMessages(sessionId, sourceSocket, runtimeContext);
       }
+      store.projectAgentActivity(sessionId, message);
       break;
     }
     case "session_update":
@@ -834,6 +856,13 @@ function handleParsedMessage(
         timestamp: Date.now(),
       });
       break;
+    case "pi_queue":
+    case "pi_extension_event":
+      if (!staleGeneration(sessionId, message.generation)) {
+        noteGeneration(sessionId, message.generation);
+        store.projectAgentActivity(sessionId, message);
+      }
+      break;
     case "event_replay": {
       let latest: number | undefined;
       for (const event of message.events) {
@@ -873,6 +902,7 @@ function handleParsedMessage(
         store.setRuntimeReconnecting(message.sessionId, false);
         store.setRunState(message.sessionId, "stopped");
         store.setRunActive(message.sessionId, false);
+        store.setAgentActivityConnection(message.sessionId, "disconnected");
       }
       break;
     case "mcp_status":
@@ -982,6 +1012,18 @@ function handleParsedMessage(
   }
 }
 
+/**
+ * Applies a trusted local fixture through the same browser projection reducer.
+ * The Recording Hub is server-gated; this deliberately bypasses socket sequence
+ * acknowledgement only, not generation or message projection rules.
+ */
+export function projectRecordingHubFixture(
+  sessionId: string,
+  message: BrowserIncomingMessage,
+): void {
+  handleParsedMessage(sessionId, message, { processSeq: false, ackSeqMessage: false });
+}
+
 function handleMessage(
   sessionId: string,
   event: MessageEvent,
@@ -1023,8 +1065,10 @@ function handleMessage(
     return false;
   }
   const store = useStore.getState();
-  if (store.connectionStatus.get(sessionId) === "connecting")
+  if (store.connectionStatus.get(sessionId) === "connecting") {
     store.setConnectionStatus(sessionId, "connected");
+    store.setAgentActivityConnection(sessionId, "connected");
+  }
   handleParsedMessage(sessionId, parsed, { sourceSocket, runtimeContext: expectedContext });
   return true;
 }
@@ -1149,6 +1193,7 @@ export function connectSession(sessionId: string): void {
     connections.remove(sessionId, existing);
   }
   useStore.getState().setConnectionStatus(sessionId, "connecting");
+  useStore.getState().setAgentActivityConnection(sessionId, "connecting");
   const ownerUserKey = currentUserKey();
   const socket = new WebSocket(wsUrl(sessionId, ownerContext));
   let detachOnlyOfficeTransport = () => {};
@@ -1214,6 +1259,7 @@ export function connectSession(sessionId: string): void {
     const store = useStore.getState();
     store.setConnectionStatus(sessionId, "disconnected");
     store.setRuntimeConnected(sessionId, false);
+    store.setAgentActivityConnection(sessionId, "disconnected");
     scheduleReconnect(sessionId);
   };
   socket.onerror = () => socket.close();
@@ -1264,6 +1310,7 @@ export function disconnectSession(sessionId: string): void {
   const store = useStore.getState();
   store.setConnectionStatus(sessionId, "disconnected");
   store.setRuntimeConnected(sessionId, false);
+  store.setAgentActivityConnection(sessionId, "disconnected");
   store.setRunActive(sessionId, false);
   store.setRunState(sessionId, "disconnected");
   store.clearToolProgress(sessionId);

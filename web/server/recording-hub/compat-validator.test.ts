@@ -97,6 +97,13 @@ describe("Pi recording compatibility validator", () => {
     expect(result.messageTypeBreakdown.agent_message.count).toBe(1);
   });
 
+  it("accepts the native agent_end settling run state", () => {
+    const result = validateRecording(
+      makeRecording([{ type: "run_state", generation: 1, state: "settling", timestamp: 1 }]),
+    );
+    expect(result.compatible).toBe(true);
+  });
+
   it("rejects missing Pi core fields", () => {
     const result = validateRecording(
       makeRecording([
@@ -173,6 +180,20 @@ describe("Pi recording compatibility validator", () => {
           reason: "recovery",
         },
         { type: "mcp_status", servers: [] },
+        {
+          type: "pi_queue",
+          generation: 2,
+          steering: ["now"],
+          followUp: ["later"],
+          timestamp: 1,
+        },
+        {
+          type: "pi_extension_event",
+          generation: 2,
+          event: "status",
+          payload: { key: "value" },
+          timestamp: 1,
+        },
         { type: "event_replay", events: [] },
         { type: "error", code: "test", message: "error" },
         { type: "session_name_update", name: "Name" },
@@ -187,7 +208,7 @@ describe("Pi recording compatibility validator", () => {
     );
 
     expect(result.compatible).toBe(true);
-    expect(result.totalMessages).toBe(11);
+    expect(result.totalMessages).toBe(13);
     expect(result.diffs).toEqual([]);
   });
 
@@ -202,6 +223,8 @@ describe("Pi recording compatibility validator", () => {
       { type: "interaction_response", generation: 1 },
       { type: "history_snapshot", generation: 1 },
       { type: "mcp_status" },
+      { type: "pi_queue", generation: 1, steering: [1], followUp: [], timestamp: 1 },
+      { type: "pi_extension_event", generation: 1, event: "", payload: [], timestamp: 1 },
       { type: "event_replay" },
     ]);
     recording.entries.unshift({
@@ -219,7 +242,7 @@ describe("Pi recording compatibility validator", () => {
 
     const result = validateRecording(recording);
     expect(result.compatible).toBe(false);
-    expect(result.totalMessages).toBe(12);
+    expect(result.totalMessages).toBe(14);
     expect(result.diffs.filter((diff) => diff.kind === "missing")).toHaveLength(2);
     expect(result.messageTypeBreakdown.unknown).toEqual({ count: 1, issues: 1 });
     expect(result.diffs.map((diff) => diff.details).join("\n")).toEqual(
@@ -227,6 +250,12 @@ describe("Pi recording compatibility validator", () => {
     );
     expect(result.diffs.map((diff) => diff.details).join("\n")).toEqual(
       expect.stringContaining("mcp_status missing 'servers' array"),
+    );
+    expect(result.diffs.map((diff) => diff.details).join("\n")).toEqual(
+      expect.stringContaining("pi_queue requires generation"),
+    );
+    expect(result.diffs.map((diff) => diff.details).join("\n")).toEqual(
+      expect.stringContaining("pi_extension_event requires generation"),
     );
   });
 

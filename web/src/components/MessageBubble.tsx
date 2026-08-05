@@ -21,7 +21,8 @@ export function MessageBubble({
     message.role === "assistant" &&
     message.content.trim().toLowerCase() === "(no content)" &&
     !message.contentParts?.length &&
-    !message.toolExecutions?.length
+    !message.toolExecutions?.length &&
+    !message.error
   ) {
     return null;
   }
@@ -141,6 +142,11 @@ function AssistantMessage({ message, sessionId }: { message: ChatMessage; sessio
           isStreaming={message.isStreaming && message.streamingPhase !== "thinking"}
         />
       ) : null}
+      {message.error && (
+        <p className="rounded-[var(--piwork-control-radius)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          {message.error}
+        </p>
+      )}
       {imageParts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {imageParts.map((part, index) => (

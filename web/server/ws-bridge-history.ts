@@ -12,13 +12,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function messageHistoryEvent(entry: PiSessionEntry, generation: number): PiHistoryEvent | null {
-  return projectNativeMessage(entry.message, {
+function string(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function toolCallInputs(entry: PiSessionEntry): Map<string, Record<string, unknown>> {
+  const inputs = new Map<string, Record<string, unknown>>();
+  if (!isRecord(entry.message) || !Array.isArray(entry.message.content)) return inputs;
+  for (const part of entry.message.content) {
+    if (!isRecord(part) || (part.type !== "toolCall" && part.type !== "tool_call")) continue;
+    const id = string(part.id) ?? string(part.toolCallId) ?? string(part.tool_call_id);
+    const input = isRecord(part.arguments)
+      ? part.arguments
+      : isRecord(part.args)
+        ? part.args
+        : isRecord(part.input)
+          ? part.input
+          : undefined;
+    if (id && input) inputs.set(id, input);
+  }
+  return inputs;
+}
+
+function messageHistoryEvent(
+  entry: PiSessionEntry,
+  generation: number,
+  inputs: ReadonlyMap<string, Record<string, unknown>>,
+): PiHistoryEvent | null {
+  const event = projectNativeMessage(entry.message, {
     id: entry.id,
     parentId: entry.parentId,
     timestamp: nativeTimestamp(undefined, entry.timestamp),
     generation,
   });
+  if (event?.type === "tool_execution") {
+    const input = inputs.get(event.toolCallId);
+    return input ? { ...event, input } : event;
+  }
+  return event;
 }
 
 function customHistoryEvent(entry: PiSessionEntry, generation: number): PiHistoryEvent | null {
@@ -85,6 +116,7 @@ function systemMessage(
 export function piSessionEntryToHistoryEntry(
   entry: PiSessionEntry | Record<string, unknown>,
   generation: number,
+  toolInputs: ReadonlyMap<string, Record<string, unknown>> = new Map(),
 ): PiHistoryEntry | null {
   if (
     !isRecord(entry) ||
@@ -97,7 +129,7 @@ export function piSessionEntryToHistoryEntry(
   const typed = entry as PiSessionEntry;
   let event: PiHistoryEvent | null = null;
   if (typed.type === "message") {
-    event = messageHistoryEvent(typed, generation);
+    event = messageHistoryEvent(typed, generation, toolInputs);
   } else if (typed.type === "custom") {
     event = customHistoryEvent(typed, generation);
   } else if (typed.type === "custom_message" && typed.display === true) {
@@ -119,9 +151,33 @@ export function piSessionEntryToHistoryEntry(
 export function piSessionEntriesToHistory(
   entries: readonly (PiSessionEntry | Record<string, unknown>)[],
   generation: number,
+  leafId?: string | null,
 ): PiHistoryEntry[] {
-  return entries.flatMap((entry) => {
-    const normalized = piSessionEntryToHistoryEntry(entry, generation);
+  const byId = new Map<string, PiSessionEntry | Record<string, unknown>>();
+  for (const entry of entries) {
+    if (isRecord(entry) && typeof entry.id === "string") byId.set(entry.id, entry);
+  }
+  let selected = entries;
+  if (leafId) {
+    const ancestry = new Set<string>();
+    let current = byId.get(leafId);
+    while (current && isRecord(current) && typeof current.id === "string") {
+      if (ancestry.has(current.id)) break;
+      ancestry.add(current.id);
+      current = typeof current.parentId === "string" ? byId.get(current.parentId) : undefined;
+    }
+    if (ancestry.size > 0) {
+      selected = entries.filter((entry) => isRecord(entry) && ancestry.has(entry.id as string));
+    }
+  }
+  const inputs = new Map<string, Record<string, unknown>>();
+  for (const entry of selected) {
+    if (isRecord(entry) && typeof entry.id === "string") {
+      for (const [id, input] of toolCallInputs(entry as PiSessionEntry)) inputs.set(id, input);
+    }
+  }
+  return selected.flatMap((entry) => {
+    const normalized = piSessionEntryToHistoryEntry(entry, generation, inputs);
     return normalized ? [normalized] : [];
   });
 }

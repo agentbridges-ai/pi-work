@@ -87,6 +87,73 @@ describe("Pi JSONL browser history", () => {
     expect(JSON.stringify(entries).toLowerCase().includes("claude")).toBe(false);
   });
 
+  it("retains tool-call inputs and assistant provider errors from Pi JSONL", () => {
+    const entries = piSessionEntriesToHistory(
+      [
+        {
+          type: "message",
+          id: "assistant",
+          parentId: null,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "toolCall", id: "call-1", name: "read", arguments: { path: "a.txt" } },
+            ],
+            errorMessage: "provider timeout",
+          },
+        },
+        {
+          type: "message",
+          id: "result",
+          parentId: "assistant",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          message: { role: "toolResult", toolCallId: "call-1", toolName: "read", content: "ok" },
+        },
+      ],
+      1,
+    );
+    expect(entries[0]?.event).toMatchObject({
+      type: "agent_message",
+      message: { error: "provider timeout" },
+    });
+    expect(entries[1]?.event).toMatchObject({
+      type: "tool_execution",
+      input: { path: "a.txt" },
+    });
+  });
+
+  it("projects only the ancestry of Pi's active history leaf", () => {
+    const entries = piSessionEntriesToHistory(
+      [
+        {
+          type: "message",
+          id: "root",
+          parentId: null,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          message: { role: "user", content: "root" },
+        },
+        {
+          type: "message",
+          id: "old",
+          parentId: "root",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          message: { role: "assistant", content: "old" },
+        },
+        {
+          type: "message",
+          id: "active",
+          parentId: "root",
+          timestamp: "2026-01-01T00:00:02.000Z",
+          message: { role: "assistant", content: "active" },
+        },
+      ],
+      1,
+      "active",
+    );
+    expect(entries.map((entry) => entry.id)).toEqual(["root", "active"]);
+  });
+
   it("ignores non-display state entries that are not browser history", () => {
     expect(
       piSessionEntryToHistoryEntry(
@@ -404,6 +471,13 @@ describe("Pi JSONL browser history", () => {
           timestamp: 2,
         },
       },
+      {
+        type: "message",
+        id: "m3",
+        parentId: "m2",
+        timestamp: "2026-01-01T00:00:03.000Z",
+        message: { role: "user", content: "three", timestamp: 3 },
+      },
     ];
     await writeFile(
       join(piDir, "session.jsonl"),
@@ -411,7 +485,7 @@ describe("Pi JSONL browser history", () => {
     );
     const bridge = new WsBridge();
     bridge.setStore(new SessionStore(root, { layout: "session-dir" }));
-    bridge.restoreSession(
+    const session = bridge.restoreSession(
       {
         sessionId: "session-1",
         state: "exited",
@@ -432,12 +506,20 @@ describe("Pi JSONL browser history", () => {
         processedClientMessageIds: [],
       },
     );
+    session.historyLeafId = "m2";
+    const internal = bridge as unknown as {
+      handlePiAdapterMessage(
+        target: typeof session,
+        message: { type: "history_leaf"; leaf_id: string },
+      ): void;
+    };
+    internal.handlePiAdapterMessage(session, { type: "history_leaf", leaf_id: "m3" });
     const first = await bridge.getMessageHistoryPage("session-1", {
       cursor: 0,
       limit: 1,
     });
     expect(first).toMatchObject({
-      total: 2,
+      total: 3,
       cursor: 0,
       nextCursor: 1,
       hasMore: true,
@@ -446,5 +528,7 @@ describe("Pi JSONL browser history", () => {
       type: "agent_message",
       message: { role: "user", content: [{ type: "text", text: "one" }] },
     });
+    const all = await bridge.getMessageHistoryPage("session-1", { cursor: 0, limit: 10 });
+    expect(all?.entries.map((entry) => entry.id)).toEqual(["m1", "m2", "m3"]);
   });
 });

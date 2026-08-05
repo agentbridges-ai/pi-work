@@ -124,6 +124,7 @@ export interface ChatMessage {
   streamingPhase?: "thinking" | "text";
   model?: PiModelRef;
   stopReason?: string | null;
+  error?: string;
 }
 
 export interface TaskItem {
@@ -139,6 +140,7 @@ export type ProcessStatus = "running" | "completed" | "failed" | "stopped";
 export interface ProcessItem {
   taskId: string;
   toolCallId: string;
+  originatingToolCallId?: string;
   name: string;
   description: string;
   execution: "foreground" | "background";
@@ -148,6 +150,7 @@ export interface ProcessItem {
   completedAt?: number;
   progress?: string;
   summary?: string;
+  durationMs?: number;
 }
 
 export interface PiSessionInfo {

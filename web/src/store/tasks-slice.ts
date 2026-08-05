@@ -68,8 +68,17 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       const sessionProcesses = new Map(state.sessionProcesses);
       const entries = [...(sessionProcesses.get(sessionId) || [])];
       const index = entries.findIndex((entry) => entry.taskId === process.taskId);
-      if (index >= 0) entries[index] = { ...entries[index], ...process };
-      else entries.push(process);
+      if (index >= 0) {
+        const current = entries[index];
+        entries[index] = {
+          ...current,
+          ...process,
+          toolCallId: current.toolCallId || process.toolCallId,
+          originatingToolCallId: process.originatingToolCallId ?? current.originatingToolCallId,
+          startedAt: current.startedAt,
+          durationMs: Math.max(current.durationMs || 0, process.durationMs || 0),
+        };
+      } else entries.push(process);
       sessionProcesses.set(sessionId, entries);
       return { sessionProcesses };
     }),

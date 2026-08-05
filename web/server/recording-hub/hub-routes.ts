@@ -13,6 +13,7 @@ import type { WsBridge } from "../ws-bridge.js";
 import type { UserDiskQuota } from "../user-disk-quota.js";
 import { readScopedFileSnapshotNoFollow } from "../path-policy.js";
 import { getMaxUploadBytes } from "./hub-config.js";
+import { agentScenarioFixtures } from "../../shared/agent-scenario.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,13 @@ interface HubRoutesOptions {
 export function registerHubRoutes(api: Hono, options: HubRoutesOptions): void {
   const store = new HubStore({ baseDir: options.baseDir, diskQuota: options.diskQuota });
   const replayAdapters = new Map<string, ReplayAdapter>();
+
+  // This entry is deliberately registered with the Recording Hub only. The
+  // enclosing route factory applies PIWORK_RECORDING_HUB and authenticated API
+  // middleware before this handler can be reached.
+  api.get("/hub/projection-lab", (c) =>
+    c.json({ scenarios: agentScenarioFixtures.map(({ id, version }) => ({ id, version })) }),
+  );
 
   // ── Recording CRUD ────────────────────────────────────────────────────
 
