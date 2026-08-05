@@ -74,6 +74,14 @@ if (policy) {
       "github-policy.json: workflow permissions or release automation policy is incomplete",
     );
   }
+  if (policy.leaderApprovals !== 1 || policy.nonLeaderCoreApprovals !== 2) {
+    fail.push(
+      "github-policy.json: Misaka requires one audit and non-Misaka Core authors require two",
+    );
+  }
+  if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
+    fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
+  }
   if (!Array.isArray(policy.securityFeatures) || policy.securityFeatures.length < 5) {
     fail.push("github-policy.json: security feature policy is incomplete");
   }

@@ -6,7 +6,9 @@
   "coreTeam": "piwork-core",
   "leadsTeam": "piwork-leads",
   "ordinaryApprovals": 1,
-  "highRiskApprovals": 2,
+  "highRiskApprovals": 1,
+  "leaderApprovals": 1,
+  "nonLeaderCoreApprovals": 2,
   "productionEnvironment": "production",
   "productionBranch": "main",
   "releaseAutomation": "github-actions",
@@ -14,6 +16,7 @@
     "default": "read",
     "canApprovePullRequestReviews": false
   },
+  "requiredRepositorySecrets": ["PIWORK_RELEASE_TOKEN"],
   "securityFeatures": [
     "private-vulnerability-reporting",
     "secret-scanning",

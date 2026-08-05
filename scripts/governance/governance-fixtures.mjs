@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { findMutableExternalActionUses } from "../verify-github-actions-pinning.mjs";
+import { approvedReviewersForHead, requiredApprovalsForAuthor } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const policy = JSON.parse(readFileSync(join(root, ".governance/github-policy.json"), "utf8"));
@@ -86,6 +87,23 @@ const codeowners = readFileSync(join(root, ".github/CODEOWNERS"), "utf8");
 assert.match(codeowners, /@agentbridges-ai\/piwork-core/);
 assert.match(codeowners, /@Misakago/);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
+assert.equal(policy.leaderApprovals, 1);
+assert.equal(policy.nonLeaderCoreApprovals, 2);
+assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
+assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 1);
+assert.equal(requiredApprovalsForAuthor("another-core-dev", policy), 2);
+assert.deepEqual(
+  approvedReviewersForHead(
+    [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "reviewer-a" } },
+      { state: "APPROVED", commit: { oid: "old" }, author: { login: "reviewer-b" } },
+      { state: "COMMENTED", commit: { oid: "head" }, author: { login: "reviewer-c" } },
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "reviewer-a" } },
+    ],
+    "head",
+  ),
+  ["reviewer-a"],
+);
 
 console.log(
   "[governance-fixtures] exceptions, expansion, path classification, PR title, CODEOWNERS, and Action pin fixtures passed",
