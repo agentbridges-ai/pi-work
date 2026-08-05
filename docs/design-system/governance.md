@@ -27,7 +27,11 @@
 - Web 与 Landing 必须导入共享 theme CSS。
 - HeroUI 只能在 `packages/ui` 内作为实现引擎使用。
 - Web 业务 UI 禁止硬编码色值、非语义色彩 utility、任意圆角、数字 z-index、阴影和玻璃效果。
-- Landing 业务 UI 禁止 raw hex、阴影、玻璃效果和原生 `<button>`。
+- Landing 业务 UI 禁止 raw hex、阴影、玻璃效果、装饰性渐变、外部 Vercel 品牌资源和原生 `<button>`。
+- Landing 首页不得保留框架模板占位文案；公开导航指向的页面必须有真实的标题、说明或明确的未发布状态。
+- 共享 `PageHeader` 不得用全大写 tracking eyebrow 或例行底边框制造层级；页面优先使用语义排版和留白。
+- 不得暴露没有行为的搜索框、快捷键提示、状态颜色或装饰图标。
+- 公开页面需要通过读者任务或证据组织首屏，不能以空白、重复卡片或通用标题代替内容。
 - CSS custom property 引用必须有定义。
 - 公共组件与 Pattern 必须通过键盘与 axe 回归测试。
 

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -88,6 +88,45 @@ describe("Piwork design system package contract", () => {
     }
   });
 
+  it("keeps the landing experience task-led and free of template placeholders", () => {
+    const home = readFileSync(resolve(repositoryRoot, "landing-page/app/page.tsx"), "utf8");
+    const siteConfig = readFileSync(resolve(repositoryRoot, "landing-page/config/site.ts"), "utf8");
+    expect(home).toContain("Keep paperwork work in one place");
+    expect(home).not.toContain("Get started by editing");
+    expect(siteConfig).toContain("A local workspace for documents");
+    expect(siteConfig).not.toContain("All-in-One Paperwork Agent Workspace");
+
+    for (const route of ["docs", "pricing", "blog", "about"]) {
+      const path = resolve(repositoryRoot, `landing-page/app/${route}/page.tsx`);
+      expect(existsSync(path), route).toBe(true);
+      const source = readFileSync(path, "utf8");
+      expect(source, route).toContain("PageHeader");
+      expect(source, route).not.toMatch(/<h1\b/);
+    }
+  });
+
+  it("keeps shared page headers sentence-case and spacing-led", () => {
+    const source = readFileSync(
+      resolve(repositoryRoot, "packages/ui-patterns/src/page-layout.tsx"),
+      "utf8",
+    );
+    expect(source).not.toContain("uppercase");
+    expect(source).not.toContain("tracking-[");
+    expect(source).not.toContain("border-b border-border");
+  });
+
+  it("does not expose unimplemented landing search or decorative status affordances", () => {
+    const source = readFileSync(
+      resolve(repositoryRoot, "landing-page/components/navbar.tsx"),
+      "utf8",
+    );
+    expect(source).not.toContain("Search...");
+    expect(source).not.toContain("⌘K");
+    expect(source).not.toContain("SearchIcon");
+    expect(source).not.toContain("HeartFilledIcon");
+    expect(source).not.toContain("text-danger");
+  });
+
   it("keeps HeroUI behind the shared component package", () => {
     const applicationFiles = [
       ...productionSourceFiles(resolve(repositoryRoot, "web/src")),
@@ -112,6 +151,7 @@ describe("Piwork design system package contract", () => {
     const files = [
       ...productionSourceFiles(resolve(repositoryRoot, "landing-page/app")),
       ...productionSourceFiles(resolve(repositoryRoot, "landing-page/components")),
+      ...productionSourceFiles(resolve(repositoryRoot, "landing-page/styles")),
     ];
     const violations: string[] = [];
     for (const path of files) {
@@ -122,6 +162,10 @@ describe("Piwork design system package contract", () => {
         violations.push(`${name}: backdrop blur`);
       if (/(?:^|[\s"'`])shadow(?:-[a-z0-9[\]-]+)?(?=$|[\s"'`])/m.test(source))
         violations.push(`${name}: elevation shadow`);
+      if (/\bvbg-/.test(source) || /vercel-(?:brand|wordmark|logo)/i.test(source))
+        violations.push(`${name}: external Vercel brand surface`);
+      if (/\b(?:bg|from|via|to|text)-gradient(?:-[a-z0-9[\]-]+)?\b/.test(source))
+        violations.push(`${name}: decorative gradient`);
       if (/<button\b/.test(source)) violations.push(`${name}: native button`);
       if (/\btext-(?:muted|accent)(?![-\w])/.test(source))
         violations.push(`${name}: surface token used as text`);

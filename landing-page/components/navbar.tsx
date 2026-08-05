@@ -4,35 +4,14 @@ import { useState } from "react";
 import NextLink from "next/link";
 import Image from "next/image";
 import clsx from "clsx";
-import { Button, IconButton, TextField } from "@piwork/ui";
+import { IconButton } from "@piwork/ui";
 
 import { siteConfig } from "@/config/site";
 import { ThemeSwitch } from "@/components/theme-switch";
-import {
-  TwitterIcon,
-  GithubIcon,
-  DiscordIcon,
-  HeartFilledIcon,
-  SearchIcon,
-} from "@/components/icons";
+import { TwitterIcon, GithubIcon, DiscordIcon } from "@/components/icons";
 
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const searchInput = (
-    <div className="relative min-w-56">
-      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 z-[var(--piwork-z-base)] -translate-y-1/2 text-base text-muted-foreground" />
-      <TextField
-        inputClassName="pl-9 pr-12"
-        inputProps={{ placeholder: "Search...", type: "search" }}
-        label="Search"
-        labelClassName="sr-only"
-      />
-      <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-[var(--piwork-control-radius)] border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground lg:inline-flex">
-        ⌘K
-      </kbd>
-    </div>
-  );
 
   return (
     <nav className="sticky top-0 z-[var(--piwork-z-sticky)] w-full border-b border-border bg-background">
@@ -100,17 +79,6 @@ export const Navbar = () => {
             <GithubIcon />
           </a>
           <ThemeSwitch />
-          <div className="hidden lg:flex">{searchInput}</div>
-          <div className="hidden md:flex">
-            <Button
-              className="text-sm font-normal"
-              variant="tertiary"
-              onPress={() => window.open(siteConfig.links.twitter, "_blank")}
-            >
-              <HeartFilledIcon className="text-danger" />
-              Follow us
-            </Button>
-          </div>
         </div>
 
         <div className="flex sm:hidden items-center gap-2">
@@ -154,7 +122,6 @@ export const Navbar = () => {
 
       {isMenuOpen && (
         <div className="border-t border-separator sm:hidden">
-          <div className="p-4">{searchInput}</div>
           <ul className="flex flex-col gap-2 px-4 pb-4">
             {siteConfig.navItems.map((item) => (
               <li key={item.href}>

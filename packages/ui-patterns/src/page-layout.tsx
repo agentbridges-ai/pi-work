@@ -48,13 +48,13 @@ export function PageHeader({
     <header
       {...props}
       className={cx(
-        "flex min-w-0 flex-col gap-[var(--piwork-space-4)] border-b border-border pb-[var(--piwork-space-6)] sm:flex-row sm:items-end sm:justify-between",
+        "flex min-w-0 flex-col gap-[var(--piwork-space-4)] sm:flex-row sm:items-end sm:justify-between",
         className,
       )}
     >
       <div className="min-w-0 max-w-3xl">
         {eyebrow ? (
-          <div className="mb-[var(--piwork-space-2)] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="mb-[var(--piwork-space-2)] text-xs font-semibold text-muted-foreground">
             {eyebrow}
           </div>
         ) : null}
