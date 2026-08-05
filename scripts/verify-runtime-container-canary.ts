@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -88,6 +89,8 @@ try {
   });
   const layout = preparePiSessionLayout(sessionRoot);
   const otherLayout = preparePiSessionLayout(otherSessionRoot);
+  const existingGitConfig = join(layout.workspaceDir, ".gitconfig");
+  writeFileSync(existingGitConfig, "existing-git-config\n", { mode: 0o600 });
   settingsPath = join(tmpdir(), `piwork-runtime-canary-${process.pid}.json`);
   const policy = compileSrtPolicy({
     tenantsRoot: join(canaryRoot, "tenants"),
@@ -171,6 +174,54 @@ echo CANARY_STAGE=done
         (sandbox.stderr?.trim() ? ` stderr=${sandbox.stderr.trim().slice(0, 4_000)}` : ""),
     );
   }
+  if (readFileSync(existingGitConfig, "utf8") !== "existing-git-config\n") {
+    throw new Error("Existing deny mask was modified");
+  }
+  if (existsSync(join(layout.workspaceDir, ".gitmodules"))) {
+    throw new Error("Missing deny mask was not cleaned up");
+  }
+
+  const cleanupFailureRoot = join(layout.workspaceDir, ".piwork-mask-cleanup");
+  mkdirSync(cleanupFailureRoot, { mode: 0o700 });
+  const cleanupFailureMask = join(cleanupFailureRoot, ".mask");
+  const cleanupFailure = spawnSync(
+    COMPOSE_NESTED_BWRAP_PATH,
+    [
+      "--ro-bind",
+      "/",
+      "/",
+      "--bind",
+      layout.workspaceDir,
+      layout.workspaceDir,
+      "--ro-bind",
+      "/dev/null",
+      cleanupFailureMask,
+      "--dev",
+      "/dev",
+      "--unshare-pid",
+      "--unshare-user",
+      "--bind",
+      "/proc",
+      "/proc",
+      "--",
+      "/bin/sh",
+      "-eu",
+      "-c",
+      `chmod 0500 ${JSON.stringify(cleanupFailureRoot)}`,
+    ],
+    { encoding: "utf8" },
+  );
+  if (cleanupFailure.status !== 0 || !cleanupFailure.stderr.includes("mask cleanup deferred")) {
+    throw new Error(
+      `Mask cleanup failure contract failed (${cleanupFailure.status ?? cleanupFailure.signal ?? "unknown"})` +
+        (cleanupFailure.stderr?.trim()
+          ? ` stderr=${cleanupFailure.stderr.trim().slice(0, 2_000)}`
+          : ""),
+    );
+  }
+  chmodSync(cleanupFailureRoot, 0o700);
+  if (existsSync(cleanupFailureMask)) rmSync(cleanupFailureMask, { force: true });
+  rmSync(cleanupFailureRoot, { recursive: true, force: true });
   console.log(
     JSON.stringify({
       contract: "piwork-runtime-security-v1",
