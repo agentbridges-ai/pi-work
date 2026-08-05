@@ -11,7 +11,7 @@ function isSrtNetworkSocketPath(value) {
 }
 
 function isRedundantSelfBindPath(value) {
-  return /^\/dev\//u.test(value) || value === "/etc/hosts";
+  return /^\/dev\//u.test(value) || value === "/etc/hosts" || value === "/etc/resolv.conf";
 }
 
 for (let index = 0; index < input.length; index += 1) {
@@ -21,11 +21,12 @@ for (let index = 0; index < input.length; index += 1) {
     isRedundantSelfBindPath(input[index + 1])
   ) {
     // The replacement for SRT's --dev /dev already exposes immutable device
-    // nodes. The outer read-only root also exposes /etc/hosts. Rebinding
-    // either path to itself makes bwrap recreate a mount point inside the
-    // nested namespace, which is denied by the capability-free Compose
-    // boundary on some kernels. Keep ordinary masks (for example
-    // --ro-bind /dev/null <workspace-file>) untouched.
+    // nodes. The outer read-only root also exposes Docker-managed
+    // /etc/hosts and /etc/resolv.conf. Rebinding any of these paths to itself
+    // makes bwrap recreate a mount point inside the nested namespace, which
+    // is denied by the capability-free Compose boundary on some kernels. Keep
+    // ordinary masks (for example --ro-bind /dev/null <workspace-file>)
+    // untouched.
     index += 2;
     continue;
   }
