@@ -7,6 +7,8 @@ Postgres provides authentication; Piwork product state stays in tenant-scoped
 `data/`.
 
 ```bash
+mise trust
+make mise-install
 make install
 make selfhost-init
 make dev
@@ -34,6 +36,36 @@ filesystem rather than a host-mounted path where possible; this avoids VM/WSL
 filesystem performance and path-identity surprises. The browser can still use
 the host's Chrome and File System Access API through the forwarded API/Vite
 ports.
+
+## mise toolchain
+
+`mise.toml` and `mise.lock` define the repository's Bun/Node.js development
+tools. The checked-in configuration pins Bun `1.3.9` and Node.js `26.5.0`; the
+`.tool-versions` PostgreSQL `16.14` entry remains the client verification
+baseline, while the lockfile records platform-specific Bun/Node.js download
+metadata for Linux x64 and macOS arm64. Install mise `2026.8.2` or newer, trust this checkout,
+then run:
+
+```bash
+mise trust
+make mise-install
+```
+
+`make install` also runs the pinned Bun/Node installation before installing
+the Web and Landing dependencies. PostgreSQL client tools remain an external
+dependency; `make verify-toolchain` checks their major version against the
+`.tool-versions` baseline. For an activated shell,
+add `eval "$(mise activate zsh)"` to zsh or `eval "$(mise activate bash)"` to
+Bash. CI uses the same `mise.toml` and `mise.lock` through the pinned
+`jdx/mise-action` composite setup. Repository commands and CI set
+`MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none`, so the asdf-compatible
+`.tool-versions` file cannot cause PostgreSQL to be resolved during Bun/Node
+installation; `make verify-toolchain` still reads and validates its explicit
+PostgreSQL pin.
+
+`.tool-versions` remains an asdf-compatible Bun/Node mirror for older tooling
+and retains the PostgreSQL client verification pin. `make verify-toolchain`
+checks both the mirror and the PostgreSQL baseline.
 
 Do not reuse a host `node_modules` directory inside Linux. Run `make install`
 inside the Linux runtime so Bun installs private package metadata with the
@@ -112,6 +144,7 @@ Filesystem state
 ## Commands
 
 ```bash
+make mise-install
 make dev           # verified Compose source stack
 make dev-fast      # alias for make dev
 make dev-fast-stop # stop local dev processes
@@ -144,8 +177,8 @@ make check        # quality gates + targeted tests + production build
 make verify       # frozen install + all gates + full release verification
 ```
 
-All CI and development Linux runtimes use the same checked-in Node.js `26.5.0`
-and Bun `1.3.9` setup.
+All CI and development Linux runtimes use the same checked-in mise lockfile,
+with Node.js `26.5.0` and Bun `1.3.9`.
 The supported Node.js runtime floor remains `>=22.19.0`, matching the pinned Pi
 package. `make verify-pi-versions` rejects dependency or `rpc-entry` drift
 before the RPC and SRT probes run. `make verify-pi-only-runtime` rejects
