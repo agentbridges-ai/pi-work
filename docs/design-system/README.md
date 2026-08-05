@@ -41,7 +41,7 @@ import { FormSection, PageHeader, PageLayout } from "@piwork/ui-patterns";
 
 ## 文档导航
 
-- [Foundations](./foundations.md)：Token 分层、主题、排版、间距、动效与层级。
+- [Foundations](./foundations.md)：Token 分层、主题、排版、间距、动效、层级与 evidence-first 页面原则。
 - [Components](./components.md)：组件 API、适用场景、Accessibility 与 Do / Don't。
 - [Patterns](./patterns.md)：页面和交互组合规范。
 - [Governance](./governance.md)：贡献、评审、版本、废弃与静态约束。
