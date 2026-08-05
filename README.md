@@ -36,7 +36,7 @@ native macOS or Windows shell.
 
 - mise `2026.8.2`，用于安装和激活仓库锁定的开发工具
 - Bun 1.3.9 和 Node.js >= 22.19.0
-- 外部 Postgres，并通过 `DATABASE_URL` 暴露连接串
+- 外部 Postgres，并通过 `DATABASE_URL` 暴露连接串；`.tool-versions` 保留 PostgreSQL 16.14 客户端校验基线
 - `make install` 会安装精确锁定的 `@earendil-works/pi-coding-agent@0.82.1`、`@modelcontextprotocol/sdk@1.29.0` 与 `@anthropic-ai/sandbox-runtime@0.0.65`
 - Linux 的 SRT 还需要 `bubblewrap`、`socat`、`ripgrep` 及可用的 unprivileged user namespace；这些依赖必须安装在 OrbStack/WSL2 Linux 内
 - Linux 通过真实 Pi RPC smoke 和中性 `user-space.piwork.internal` 受保护文件传输 canary 验证 SRT；该通道不承载模型流量
@@ -55,12 +55,17 @@ make dev
 
 打开脚本输出的 Frontend URL，使用邮箱密码注册或登录。
 
-`mise.toml` 和 `mise.lock` 是开发工具环境的来源。`make mise-install` 会安装
-Piwork 使用的精确 Bun/Node.js 版本；PostgreSQL 客户端版本仍由
-`mise.toml` 提供，需要时可执行 `mise install --locked`。交互式 shell 可按
+`mise.toml` 和 `mise.lock` 是 Bun/Node.js 开发工具环境的来源。
+`make mise-install` 会安装 Piwork 使用的精确 Bun/Node.js 版本；PostgreSQL
+客户端版本仍由 `.tool-versions` 保留为现有校验基线，并由外部 Postgres
+环境提供。交互式 shell 可按
 mise 的说明执行 `eval "$(mise activate zsh)"`（Bash 使用 `bash`），这样进入
-仓库目录时会自动激活锁定版本。`.tool-versions` 仅作为 asdf 兼容镜像，修改
-工具版本时必须与 `mise.toml` 同步。
+仓库目录时会自动激活锁定版本。`.tool-versions` 中的 Bun/Node.js 作为
+asdf 兼容镜像，PostgreSQL 条目作为客户端校验基线；修改工具版本时必须
+同步对应条目。仓库命令和 CI 使用 mise 的
+`MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none` 设置忽略该兼容文件，避免把
+PostgreSQL 客户端 pin 当作 Bun/Node 安装依赖；校验脚本仍显式读取并验证
+PostgreSQL pin。
 
 生产服务默认使用稳定地址 `http://127.0.0.1:3457`。当 Chromium 完成安装条件检查后，工作台会显示“安装桌面应用”；安装版以独立窗口运行。断线页不会缓存或展示账号、会话或文件数据。
 

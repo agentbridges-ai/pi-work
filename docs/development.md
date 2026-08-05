@@ -39,10 +39,11 @@ ports.
 
 ## mise toolchain
 
-`mise.toml` and `mise.lock` define the repository's development tools. The
-checked-in configuration pins Bun `1.3.9`, Node.js `26.5.0`, and PostgreSQL
-`16.14`; the lockfile records platform-specific download metadata for Linux
-x64 and macOS arm64. Install mise `2026.8.2` or newer, trust this checkout,
+`mise.toml` and `mise.lock` define the repository's Bun/Node.js development
+tools. The checked-in configuration pins Bun `1.3.9` and Node.js `26.5.0`; the
+`.tool-versions` PostgreSQL `16.14` entry remains the client verification
+baseline, while the lockfile records platform-specific Bun/Node.js download
+metadata for Linux x64 and macOS arm64. Install mise `2026.8.2` or newer, trust this checkout,
 then run:
 
 ```bash
@@ -51,14 +52,20 @@ make mise-install
 ```
 
 `make install` also runs the pinned Bun/Node installation before installing
-the Web and Landing dependencies. Use `mise install --locked` when the
-PostgreSQL client tools managed by mise are needed. For an activated shell,
+the Web and Landing dependencies. PostgreSQL client tools remain an external
+dependency; `make verify-toolchain` checks their major version against the
+`.tool-versions` baseline. For an activated shell,
 add `eval "$(mise activate zsh)"` to zsh or `eval "$(mise activate bash)"` to
 Bash. CI uses the same `mise.toml` and `mise.lock` through the pinned
-`jdx/mise-action` composite setup.
+`jdx/mise-action` composite setup. Repository commands and CI set
+`MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none`, so the asdf-compatible
+`.tool-versions` file cannot cause PostgreSQL to be resolved during Bun/Node
+installation; `make verify-toolchain` still reads and validates its explicit
+PostgreSQL pin.
 
-`.tool-versions` remains an asdf-compatible mirror for older tooling. Keep
-it synchronized with `mise.toml`; `make verify-toolchain` checks the mirror.
+`.tool-versions` remains an asdf-compatible Bun/Node mirror for older tooling
+and retains the PostgreSQL client verification pin. `make verify-toolchain`
+checks both the mirror and the PostgreSQL baseline.
 
 Do not reuse a host `node_modules` directory inside Linux. Run `make install`
 inside the Linux runtime so Bun installs private package metadata with the

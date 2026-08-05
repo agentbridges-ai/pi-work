@@ -35,13 +35,3 @@ url = "https://nodejs.org/dist/v26.5.0/node-v26.5.0-linux-x64.tar.gz"
 [tools.node."platforms.macos-arm64"]
 checksum = "sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9"
 url = "https://nodejs.org/dist/v26.5.0/node-v26.5.0-darwin-arm64.tar.gz"
-
-[[tools.postgres]]
-version = "16.14"
-backend = "vfox:mise-plugins/vfox-postgres"
-
-[tools.postgres."platforms.linux-x64"]
-url = "https://ftp.postgresql.org/pub/source/v16.14/postgresql-16.14.tar.gz"
-
-[tools.postgres."platforms.macos-arm64"]
-url = "https://ftp.postgresql.org/pub/source/v16.14/postgresql-16.14.tar.gz"

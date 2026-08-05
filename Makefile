@@ -91,8 +91,8 @@ help:
 # canonical dependency tree inside the SRT allow-read root. Shared local packages
 # additionally resolve their peer dependencies through the independent Web tree.
 install: mise-install
-	cd $(WEB_DIR) && mise exec --locked --no-deps -- bun install --backend copyfile --linker hoisted --frozen-lockfile
-	cd landing-page && mise exec --locked --no-deps -- bun install --backend copyfile --linker isolated --frozen-lockfile
+	cd $(WEB_DIR) && mise --no-config exec --locked --no-deps "bun@$$(MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise config get tools.bun --raw)" -- bun install --backend copyfile --linker hoisted --frozen-lockfile
+	cd landing-page && mise --no-config exec --locked --no-deps "bun@$$(MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise config get tools.bun --raw)" -- bun install --backend copyfile --linker isolated --frozen-lockfile
 	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
 	fi
@@ -102,7 +102,7 @@ install: mise-install
 
 mise-install:
 	@command -v mise >/dev/null 2>&1 || (echo 'mise is required; install it from https://mise.jdx.dev/getting-started.html' >&2; exit 1)
-	mise install --locked bun node
+	MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise install --locked bun node
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh

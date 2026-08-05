@@ -65,6 +65,9 @@ describe("GitHub Actions supply-chain pins", () => {
       resolve(root, ".github/actions/setup-toolchain/action.yml"),
       "utf8",
     );
+    const verifyToolchain = readFileSync(resolve(root, "scripts/verify-toolchain.sh"), "utf8");
+    const miseConfig = readFileSync(resolve(root, "mise.toml"), "utf8");
+    const toolVersions = readFileSync(resolve(root, ".tool-versions"), "utf8");
     const makefile = readFileSync(resolve(root, "Makefile"), "utf8");
     const landingLock = readFileSync(resolve(root, "landing-page/bun.lock"), "utf8");
 
@@ -76,9 +79,21 @@ describe("GitHub Actions supply-chain pins", () => {
     expect(makefile).toContain("VERIFY_SRT ?= 1");
     expect(makefile).toContain("$(VERIFY_SRT_TARGETS)");
     expect(toolchain).toContain("path: ~/.bun/install/cache");
+    expect(toolchain).toContain("MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES: none");
+    expect(toolchain).toContain(
+      'echo "MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none" >> "$GITHUB_ENV"',
+    );
     expect(toolchain).toContain(
       "hashFiles('mise.toml', 'mise.lock', 'web/bun.lock', 'landing-page/bun.lock')",
     );
+    expect(makefile).toContain("mise --no-config exec --locked --no-deps");
+    expect(makefile).toContain(
+      "MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise install --locked bun node",
+    );
+    expect(verifyToolchain).toContain("mise --no-config exec --locked --no-deps");
+    expect(verifyToolchain).toContain("MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise config get");
+    expect(miseConfig).not.toContain("postgres");
+    expect(toolVersions).toContain("postgres 16.14");
     expect(verify).toContain("path: ~/.cache/ms-playwright");
     expect(deploy).toContain("bun install --frozen-lockfile --backend copyfile --linker isolated");
     expect(deploy).toContain("bunx --no-install wrangler pages deploy");

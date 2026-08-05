@@ -5,10 +5,18 @@ runs:
   using: composite
   steps:
     - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+      env:
+        # .tool-versions retains the external PostgreSQL client baseline, but
+        # must not expand the CI Bun/Node install set.
+        MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES: none
       with:
         version: 2026.8.2
         install_args: bun node
         cache: true
+
+    - name: Keep mise toolset independent from legacy pins
+      shell: bash
+      run: echo "MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none" >> "$GITHUB_ENV"
 
     # SRT needs a private copyfile node_modules installation, so cache only
     # Bun's immutable package downloads rather than the installed tree.
@@ -22,9 +30,11 @@ runs:
 
     - name: Verify CI toolchain pins
       shell: bash
+      env:
+        MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES: none
       run: |
-        expected_node="$(mise config get tools.node --raw)"
-        expected_bun="$(mise config get tools.bun --raw)"
+        expected_node="$(MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise config get tools.node --raw)"
+        expected_bun="$(MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES=none mise config get tools.bun --raw)"
         actual_node="$(node --version | sed 's/^v//')"
         actual_bun="$(bun --version)"
         test -n "$expected_node"
