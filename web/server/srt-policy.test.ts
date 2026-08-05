@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { compileSrtPolicy, deriveTaskSrtPolicy } from "./srt-policy.js";
+import { COMPOSE_NESTED_BWRAP_PATH, compileSrtPolicy, deriveTaskSrtPolicy } from "./srt-policy.js";
 
 function fixture() {
   const tenantsRoot = mkdtempSync(join(tmpdir(), "piwork-srt-"));
@@ -86,6 +86,25 @@ describe("SRT policy compiler", () => {
     expect(policy.network.allowUnixSockets).toEqual([
       join(realpathSync(paths.tenantsRoot), "user-space.sock"),
     ]);
+  });
+
+  it("enables nested SRT only for the explicit Compose execution mode", () => {
+    const paths = fixture();
+    const native = compileSrtPolicy({
+      ...paths,
+      requiredInternalDomains: [],
+      domainLayers: [],
+    });
+    const nested = compileSrtPolicy({
+      ...paths,
+      requiredInternalDomains: [],
+      domainLayers: [],
+      executionMode: "compose-nested",
+    });
+    expect(native.enableWeakerNestedSandbox).toBe(false);
+    expect(nested.enableWeakerNestedSandbox).toBe(true);
+    expect(native.bwrapPath).toBeUndefined();
+    expect(nested.bwrapPath).toBe(COMPOSE_NESTED_BWRAP_PATH);
   });
 
   it("rejects a knowledge path from another tenant", () => {

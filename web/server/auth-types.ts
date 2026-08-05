@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   tenantName?: string;
   tenantType?: "enterprise" | "team" | "personal";
   membershipId?: string;
+  orgNodeId?: string;
   roles: string[];
   email?: string;
   permissions?: string[];

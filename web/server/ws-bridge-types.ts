@@ -2,6 +2,7 @@ import type { ServerWebSocket } from "bun";
 import type {
   AskInteractionQuestion,
   BufferedBrowserEvent,
+  InteractionRequest,
   SessionState,
 } from "../shared/pi-browser-protocol.js";
 import type { SessionAuthoritySnapshot } from "./control-plane-types.js";
@@ -45,6 +46,7 @@ export interface Session {
   offlineQueue: OfflineQueueEntry[];
   processedClientMessageIds: string[];
   processedClientMessageIdSet: Set<string>;
+  acceptingClientMessageIds: Map<string, symbol>;
 
   /** Ephemeral browser replay state. Pi JSONL owns durable history. */
   nextEventSeq: number;
@@ -65,8 +67,13 @@ export interface Session {
       optionValues: Map<string, string>;
       askQuestions?: AskInteractionQuestion[];
       askBatch?: boolean;
+      generation: number;
+      request: InteractionRequest;
+      timeout?: ReturnType<typeof setTimeout>;
     }
   >;
+  /** Invalidates delayed get_state reconciliation when native Pi activity advances. */
+  piActivityEpoch: number;
   toolStarts: Map<
     string,
     {

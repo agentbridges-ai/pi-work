@@ -233,6 +233,53 @@ export function registerAgentSpaceRoutes(api: Hono, options: AgentSpaceRouteOpti
     }
   });
 
+  api.put("/sessions/:id/agent-space/raw", async (c) => {
+    try {
+      const sessionId = cleanSessionId(c.req.param("id"));
+      const root = await getWorkspaceRoot(options.getCurrentUser(), sessionId);
+      const path = cleanRelativePath(c.req.query("path") || "");
+      if (!path) return c.json({ error: "path required" }, 400);
+      const baselineSha256 = c.req.query("baselineSha256")?.trim().toLowerCase();
+      const create = c.req.query("create") === "1";
+      if (baselineSha256 && !/^[a-f0-9]{64}$/u.test(baselineSha256)) {
+        return c.json({ error: "invalid baselineSha256" }, 400);
+      }
+      const bytes = new Uint8Array(await c.req.raw.arrayBuffer());
+      if (bytes.byteLength > MAX_RAW_BYTES) return c.json({ error: "File too large (>50MB)" }, 413);
+      const result = await withAgentSpaceMutation(root, async () => {
+        const target = await resolveWorkspacePath(root, path, { mustExist: false });
+        if (create) {
+          await ensureParentInside(root, target);
+        } else {
+          const current = await readWorkspaceFileSnapshot(root, target, {
+            maxBytes: MAX_RAW_BYTES,
+            tooLargeMessage: "File too large (>50MB)",
+          });
+          if (baselineSha256 && current.sha256 !== baselineSha256) {
+            throw Object.assign(new Error("Agent Space file changed after native editing began"), {
+              status: 409,
+              publicCode: "native_edit_source_changed",
+            });
+          }
+        }
+        await withDiskReservation(options.diskQuota, bytes.byteLength, async () => {
+          await writeScopedFileNoFollow(target, bytes, [root], { exclusive: create });
+        });
+        const snapshot = await readWorkspaceFileSnapshot(root, target);
+        return {
+          ok: true,
+          path,
+          size: snapshot.size,
+          mtime: snapshot.mtime,
+          sha256: snapshot.sha256,
+        };
+      });
+      return c.json(result);
+    } catch (error) {
+      return jsonRouteError(c, error);
+    }
+  });
+
   api.put("/sessions/:id/agent-space/write", async (c) => {
     try {
       const sessionId = cleanSessionId(c.req.param("id"));

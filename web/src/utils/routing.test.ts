@@ -6,6 +6,7 @@ import {
   sessionPath,
   navigateToSession,
   navigateHome,
+  navigateApps,
   setRouteContext,
 } from "./routing.js";
 
@@ -90,6 +91,10 @@ describe("parseRoute", () => {
   it("maps removed static demo routes to home", () => {
     expect(parseRoute({ pathname: "/theme-demo", search: "", hash: "" })).toEqual({ page: "home" });
     expect(parseRoute({ pathname: "/playground", search: "", hash: "" })).toEqual({ page: "home" });
+  });
+
+  it("parses the Apps resource route", () => {
+    expect(parseRoute({ pathname: "/apps", search: "", hash: "" })).toEqual({ page: "apps" });
   });
 
   it("ignores legacy hash session routes", () => {
@@ -183,6 +188,18 @@ describe("navigateHome", () => {
   it("can navigate to the root route after logout", () => {
     navigateHome(true, { userUuid: null, agentId: null });
     expect(window.location.pathname).toBe("/");
+    expect(window.location.hash).toBe("");
+  });
+});
+
+describe("navigateApps", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/session/test");
+  });
+
+  it("navigates to the Apps resource route", () => {
+    navigateApps();
+    expect(window.location.pathname).toBe("/apps");
     expect(window.location.hash).toBe("");
   });
 });

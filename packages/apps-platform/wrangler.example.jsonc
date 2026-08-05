@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "piwork-app-wrapper-example",
+  "main": "src/example-wrapper.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["disallow_importable_env", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "PIWORK_WRAPPER_CONFIG": "{\"schemaVersion\":1,\"appId\":\"app_example\",\"allowedBindings\":[]}",
+  },
+}

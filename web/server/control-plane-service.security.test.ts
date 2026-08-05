@@ -289,3 +289,123 @@ describe("ControlPlaneService permission membership binding", () => {
     expect(activate).toHaveBeenCalledWith("tenant-1", "target");
   });
 });
+
+describe("ControlPlaneService tenant scope persistence", () => {
+  it("initializes personal org scope, persists onboarding, and exposes the raw projection pool", async () => {
+    const userId = "user-scope";
+    const personalTenantId = `personal-${userId}`;
+    const membership = {
+      id: `membership-${personalTenantId}-${userId}`,
+      tenant_id: personalTenantId,
+      tenant_name: "Scope Workspace",
+      tenant_type: "personal",
+      user_id: userId,
+      status: "active",
+      is_default: true,
+      org_node_id: `${personalTenantId}-root`,
+    };
+    let onboardingExists = false;
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized === "begin" || normalized === "commit" || normalized === "rollback") {
+          return queryResult();
+        }
+        if (normalized.startsWith("select current_version_id, draft")) {
+          return queryResult([
+            {
+              current_version_id: null,
+              draft: {
+                knowledgeRootIds: [],
+                skillPackageIds: [],
+                mcpConnectionIds: [],
+                modelAllowlist: ["*/*"],
+                defaultThinkingLevel: "medium",
+              },
+            },
+          ]);
+        }
+        if (normalized.includes("coalesce(max(version)")) return queryResult([{ version: 1 }]);
+        if (normalized.includes("from user_onboarding")) {
+          return onboardingExists
+            ? queryResult([
+                {
+                  registration_type: "personal",
+                  id: personalTenantId,
+                  name: "Scope Workspace",
+                  type: "personal",
+                },
+              ])
+            : queryResult();
+        }
+        if (
+          normalized.includes("from tenant_memberships m join tenants") ||
+          normalized.includes("from tenant_memberships m\n") ||
+          normalized.includes("from tenant_memberships m")
+        ) {
+          return queryResult([membership]);
+        }
+        return queryResult();
+      }),
+      release: vi.fn(),
+    };
+    const pool = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("scoped_role_assignments a join scoped_role_permissions")) {
+          return queryResult([{ allowed: 1 }]);
+        }
+        if (sql.includes("from tenant_memberships m")) return queryResult([membership]);
+        return queryResult();
+      }),
+      connect: vi.fn(async () => client),
+    } as unknown as Pool;
+    const service = new ControlPlaneService(pool);
+
+    expect(service.getDatabasePool()).toBe(pool);
+    await expect(
+      service.completeOnboarding(userId, "Scope", { type: "personal" }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        tenantId: personalTenantId,
+        tenantName: "Scope Workspace",
+        tenantType: "personal",
+        completed: true,
+      }),
+    );
+    onboardingExists = true;
+    await expect(
+      service.completeOnboarding(userId, "Scope", { type: "personal" }),
+    ).resolves.toEqual(expect.objectContaining({ tenantId: personalTenantId, completed: true }));
+    await expect(service.ensurePersonalTenant(userId, "Scope")).resolves.toMatchObject({
+      id: membership.id,
+      primaryOrgNodeId: membership.org_node_id,
+    });
+    await expect(service.getActiveMembership(userId)).resolves.toMatchObject({
+      id: membership.id,
+      primaryOrgNodeId: membership.org_node_id,
+    });
+    await expect(service.switchTenant(userId, personalTenantId)).resolves.toMatchObject({
+      id: membership.id,
+      tenantId: personalTenantId,
+    });
+
+    onboardingExists = false;
+    await expect(
+      service.completeOnboarding(userId, "Scope", {
+        type: "team",
+        workspaceName: "Team Space",
+      }),
+    ).resolves.toMatchObject({ tenantType: "team", tenantName: "Team Space", completed: true });
+
+    const created = await service.createTenant(userId, { name: "Team Space", type: "team" });
+    expect(created).toMatchObject({ type: "team", name: "Team Space" });
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining("insert into membership_org_nodes"),
+      expect.any(Array),
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining("set_config('piwork.membership_id'"),
+      expect.any(Array),
+    );
+  });
+});

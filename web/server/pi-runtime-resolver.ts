@@ -18,6 +18,25 @@ export const PINNED_SRT_PACKAGE = "@anthropic-ai/sandbox-runtime";
 export const PINNED_SRT_VERSION = "0.0.65";
 export const MINIMUM_NODE_VERSION = "22.19.0";
 
+/**
+ * SRT's filesystem/network policy is useful on macOS, but only Linux gives
+ * Piwork a kernel-owned PID namespace for the complete Pi descendant tree.
+ * Keep the execution boundary explicit: host macOS/Windows development must
+ * run the whole local server inside OrbStack Linux or WSL2 Linux.
+ */
+export function assertSupportedPiExecutionPlatform(platform = process.platform): void {
+  if (platform === "linux") return;
+  const runtime =
+    platform === "darwin"
+      ? "an OrbStack Linux VM"
+      : platform === "win32"
+        ? "a WSL2 Linux distribution"
+        : "a Linux VM";
+  throw new Error(
+    `Native Pi SRT execution requires Linux; run Piwork inside ${runtime} instead of the ${platform} host.`,
+  );
+}
+
 export interface RuntimePackage {
   entryPath: string;
   packageRoot: string;
@@ -149,7 +168,9 @@ function assertPiExport(runtime: RuntimePackage): void {
 export function resolvePinnedPiRuntime(
   resolveModule: (specifier: string) => string = (specifier) => import.meta.resolve(specifier),
   nodePath = resolveBinary("node") || "",
+  platform = process.platform,
 ): PiRuntime {
+  assertSupportedPiExecutionPlatform(platform);
   assertSupportedNodeVersion();
   if (!nodePath) throw new Error(`Node.js >=${MINIMUM_NODE_VERSION} is required`);
   const resolvedUrl = resolveModule(`${PINNED_PI_PACKAGE}/rpc-entry`);
@@ -168,7 +189,11 @@ export function resolvePinnedPiRuntime(
   return { ...runtime, nodePath: canonicalNode };
 }
 
-export function resolvePinnedSrtRuntime(binary = resolveBinary("srt")): RuntimePackage {
+export function resolvePinnedSrtRuntime(
+  binary = resolveBinary("srt"),
+  platform = process.platform,
+): RuntimePackage {
+  assertSupportedPiExecutionPlatform(platform);
   if (!binary) throw new Error(`${PINNED_SRT_PACKAGE}@${PINNED_SRT_VERSION} is required`);
   return findPackage(binary, PINNED_SRT_PACKAGE, PINNED_SRT_VERSION);
 }

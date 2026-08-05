@@ -5,13 +5,15 @@ import type {
   UserSpaceMount,
 } from "../shared/pi-browser-protocol.js";
 import type { SessionTitleGenerator } from "./auto-namer.js";
-import type { PiLaunchOptions, PiLauncher, PiSessionInfo } from "./pi-launcher.js";
+import type { PiLaunchOptions, PiSessionInfo } from "./pi-launcher.js";
+import type { PiRuntimeBackend } from "./pi-runtime-backend.js";
 import type { SessionNameStore } from "./session-names.js";
 import type { SessionStore, PersistedSession } from "./session-store.js";
 import type { SessionRuntimeSnapshot } from "./session-runtime-state.js";
 import type { CreationStepId } from "./session-types.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { ResolvedSessionLaunch, SessionAuthoritySnapshot } from "./control-plane-types.js";
+import type { RuntimeSessionIndexStore } from "./runtime-session-index.js";
 
 /** The exact immutable control-plane policy materialized for one Pi launch. */
 export type ResolvedPiSandbox = ResolvedSessionLaunch;
@@ -36,7 +38,7 @@ export interface SessionLaunchContext {
 }
 
 export interface SessionOrchestratorDeps {
-  launcher: PiLauncher;
+  launcher: PiRuntimeBackend;
   wsBridge: WsBridge;
   sessionStore: SessionStore;
   buildLaunchOptions(
@@ -52,6 +54,8 @@ export interface SessionOrchestratorDeps {
     generation: number,
     reason: "exit" | "kill" | "delete" | "shutdown",
   ) => void | Promise<void>;
+  /** Optional non-authoritative DB projection for Runtime diagnostics. */
+  runtimeSessionIndex?: RuntimeSessionIndexStore;
 }
 
 export type CreateSessionResult =

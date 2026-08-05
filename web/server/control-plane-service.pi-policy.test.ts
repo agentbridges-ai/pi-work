@@ -78,6 +78,19 @@ describe("Agent Pi publication policy", () => {
     const client = {
       query: vi.fn(async (sql: string, _params?: unknown[]) => {
         const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized.includes("from tenant_memberships m join tenants")) {
+          return queryResult([
+            {
+              id: "membership-1",
+              tenant_id: "tenant-1",
+              tenant_name: "Tenant",
+              tenant_type: "personal",
+              user_id: "user-1",
+              status: "active",
+              is_default: true,
+            },
+          ]);
+        }
         if (normalized.startsWith("select * from agent_definitions")) {
           return queryResult([{ id: "agent-1", owner_membership_id: "membership-1", draft }]);
         }
@@ -254,6 +267,8 @@ describe("pinned Pi session authority", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-2",
       effectivePolicyHash: hash,
@@ -414,6 +429,8 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-2",
         effectivePolicyHash: hash,
@@ -432,6 +449,8 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-1",
         effectivePolicyHash: "not-a-sha256",
@@ -499,6 +518,8 @@ describe("pinned Pi session authority", () => {
     const authority = {
       tenantId: "tenant-1",
       userId: "user-1",
+      membershipId: "membership-1",
+      orgNodeId: "org-root",
       agentDefinitionId: "agent-1",
       agentVersionId: "version-1",
       effectivePolicyHash: hash,
@@ -609,10 +630,107 @@ describe("pinned Pi session authority", () => {
       service.resolvePinnedSessionAuthority({
         tenantId: "tenant-1",
         userId: "user-1",
+        membershipId: "membership-1",
+        orgNodeId: "org-root",
         agentDefinitionId: "agent-1",
         agentVersionId: "version-1",
         effectivePolicyHash: hash,
       }),
     ).rejects.toThrow(error);
+  });
+});
+
+describe("ControlPlaneService scoped helpers", () => {
+  it("uses query-only doubles without leaking membership or role scope", async () => {
+    const membershipRow = {
+      id: "membership-1",
+      tenant_id: "tenant-1",
+      tenant_name: "Tenant",
+      tenant_type: "team",
+      user_id: "user-1",
+      status: "active",
+      is_default: true,
+      org_node_id: "org-root",
+    };
+    const query = vi.fn(async (sql: string) => {
+      const normalized = sql.replace(/\s+/gu, " ").trim();
+      if (normalized.includes("tenant_memberships")) return queryResult([membershipRow]);
+      if (normalized.includes("scoped_role_assignments")) return queryResult([{}]);
+      return queryResult();
+    });
+    const pool = { query } as unknown as Pool;
+    const service = new ControlPlaneService(pool);
+    const activator = vi.fn(async () => undefined);
+    const revoker = vi.fn(async () => undefined);
+    service.setMembershipActivator(activator);
+    service.setMembershipRevoker(revoker);
+
+    expect(service.getDatabasePool()).toBe(pool);
+    await expect(service.listMemberships("user-1")).resolves.toEqual([
+      {
+        id: "membership-1",
+        tenantId: "tenant-1",
+        tenantName: "Tenant",
+        tenantType: "team",
+        userId: "user-1",
+        status: "active",
+        isDefault: true,
+        primaryOrgNodeId: "org-root",
+      },
+    ]);
+    await expect(service.getActiveMembership("user-1")).resolves.toMatchObject({
+      tenantId: "tenant-1",
+      primaryOrgNodeId: "org-root",
+    });
+    await expect(service.can("user-1", "tenant-1", "agent:create")).resolves.toBe(true);
+    await service.syncLegacySystemAdmin("user-1", true);
+    await service.syncLegacySystemAdmin("user-1", false);
+    expect(activator).not.toHaveBeenCalled();
+    expect(revoker).not.toHaveBeenCalled();
+  });
+
+  it("scopes personal tenant initialization and tenant switching through the user authority", async () => {
+    const membershipRow = {
+      id: "membership-personal-user-1",
+      tenant_id: "personal-user-1",
+      tenant_name: "Alice Workspace",
+      tenant_type: "personal",
+      user_id: "user-1",
+      status: "active",
+      is_default: true,
+      org_node_id: "personal-user-1-root",
+    };
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        const normalized = sql.replace(/\s+/gu, " ").trim();
+        if (normalized.includes("select current_version_id, draft")) {
+          return queryResult([{ current_version_id: "version-1", draft: {} }]);
+        }
+        if (normalized.includes("from tenant_memberships m join tenants")) {
+          return queryResult([membershipRow]);
+        }
+        return queryResult();
+      }),
+      release: vi.fn(),
+    };
+    const pool = {
+      query: client.query,
+      connect: vi.fn(async () => client),
+    } as unknown as Pool;
+    const service = new ControlPlaneService(pool);
+
+    await expect(service.ensurePersonalTenant("user-1", "Alice")).resolves.toMatchObject({
+      tenantId: "personal-user-1",
+      primaryOrgNodeId: "personal-user-1-root",
+    });
+    await expect(service.switchTenant("user-1", "personal-user-1")).resolves.toMatchObject({
+      tenantId: "personal-user-1",
+      primaryOrgNodeId: "personal-user-1-root",
+    });
+    expect(
+      client.query.mock.calls.some(([sql]) =>
+        String(sql).includes("set_config('piwork.org_node_id'"),
+      ),
+    ).toBe(true);
   });
 });
