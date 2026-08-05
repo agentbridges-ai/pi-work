@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store.js";
 import { ProjectionLab } from "./ProjectionLab.js";
@@ -37,6 +37,41 @@ describe("ProjectionLab", () => {
     );
     render(<ProjectionLab />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/未启用|not enabled/);
+  });
+
+  it("fails closed when the hub capability probe errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    render(<ProjectionLab />);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/未启用|not enabled/);
+  });
+
+  it("drives playback, pause, seek, speed, and reset controls", async () => {
+    render(<ProjectionLab />);
+    await screen.findByRole("heading", { name: /投影视验室|Projection Lab/ });
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /播放|Play/ }));
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+      fireEvent.click(screen.getByRole("button", { name: /暂停|Pause/ }));
+      fireEvent.change(screen.getByRole("combobox", { name: /速度|Speed/ }), {
+        target: { value: "2" },
+      });
+      fireEvent.change(screen.getByRole("slider", { name: /定位|Seek/ }), {
+        target: { value: "100" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /单步|Step/ }));
+      fireEvent.click(screen.getByRole("button", { name: /重置|Reset/ }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("recovers a dropped final message through the shared gap history snapshot", async () => {

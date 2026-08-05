@@ -1458,6 +1458,21 @@ describe("Pi-only WsBridge", () => {
       handlePiAdapterMessage(target: Session, message: PiBrowserIncomingMessage): void;
     };
     internal.handlePiAdapterMessage(session, {
+      type: "queue_update",
+      steering: ["steer this"],
+      follow_up: ["follow up"],
+    });
+    expect(payloads(ws)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "pi_queue",
+          generation: 3,
+          steering: ["steer this"],
+          followUp: ["follow up"],
+        }),
+      ]),
+    );
+    internal.handlePiAdapterMessage(session, {
       type: "pi_state",
       sessionId: "wrong-session",
     });

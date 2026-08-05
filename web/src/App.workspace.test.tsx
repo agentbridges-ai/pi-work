@@ -39,6 +39,10 @@ vi.mock("./components/AppsPage.js", () => ({
   AppsPage: () => <main data-testid="apps-page" />,
 }));
 
+vi.mock("./components/ProjectionLab.js", () => ({
+  ProjectionLab: () => <main data-testid="projection-lab-page" />,
+}));
+
 import App from "./App.js";
 import { api, type CurrentUser } from "./api.js";
 import { runtimeContextCoordinator } from "./runtime-context.js";
@@ -104,6 +108,16 @@ describe("automatic Pi workspace creation", () => {
     const view = render(createElement(App));
     try {
       await waitFor(() => expect(screen.getByTestId("apps-page")).toBeInTheDocument());
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("loads the development-only projection lab route", async () => {
+    window.history.replaceState({}, "", "/lab/projection");
+    const view = render(createElement(App));
+    try {
+      await waitFor(() => expect(screen.getByTestId("projection-lab-page")).toBeInTheDocument());
     } finally {
       view.unmount();
     }
