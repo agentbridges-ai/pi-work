@@ -5,7 +5,10 @@ import type {
   PiRpcNotification,
   PiThinkingLevel,
 } from "./pi-rpc-contract.js";
-import type { PiRpcTransport } from "./pi-rpc-transport.js";
+import { PiRpcRemoteError, type PiRpcTransportLike } from "./pi-rpc-transport.js";
+
+export type PiAgentMessageDelivery = "accepted" | "rejected" | "unknown";
+export type PiSettlementStatus = "settled" | "busy" | "unavailable";
 
 export type PiBrowserOutgoingMessage =
   | {
@@ -112,7 +115,7 @@ export type PiBrowserIncomingMessage =
     };
 
 export interface PiAdapterOptions {
-  transport: PiRpcTransport;
+  transport: PiRpcTransportLike;
   sessionId: string;
   generation: number;
 }
@@ -182,7 +185,7 @@ function interactionRequest(request: PiExtensionUiRequest): PiBrowserIncomingMes
 export class PiAdapter {
   readonly sessionId: string;
   readonly generation: number;
-  private readonly transport: PiRpcTransport;
+  private readonly transport: PiRpcTransportLike;
   private browserMessage?: (message: PiBrowserIncomingMessage) => void;
   private sessionMeta?: (meta: {
     sessionId?: string;
@@ -194,6 +197,7 @@ export class PiAdapter {
   private activeMessageId: string | null = null;
   private messageCounter = 0;
   private pendingInteractions = new Map<string, PiExtensionUiRequest["method"]>();
+  private stateMutationTail: Promise<void> = Promise.resolve();
   private disconnected = false;
 
   constructor(options: PiAdapterOptions) {
@@ -244,21 +248,89 @@ export class PiAdapter {
     this.initError?.("Pi RPC command failed.");
   }
 
+  private agentMessageOperation(
+    message: Extract<PiBrowserOutgoingMessage, { type: "agent_message" }>,
+    options: { streamingBehavior?: "steer" | "followUp" } = {},
+  ): Promise<void> {
+    if (message.delivery === "steer") return this.transport.steer(message.content);
+    if (message.delivery === "follow_up") return this.transport.followUp(message.content);
+    return this.transport.prompt(message.content, {
+      images: message.images,
+      ...(options.streamingBehavior ? { streamingBehavior: options.streamingBehavior } : {}),
+    });
+  }
+
+  /**
+   * Resolves only after stock Pi has accepted the prompt RPC preflight.
+   * Browser delivery acknowledgement is intentionally built on this result.
+   */
+  async sendAgentMessage(
+    message: Extract<PiBrowserOutgoingMessage, { type: "agent_message" }>,
+    options: { streamingBehavior?: "steer" | "followUp" } = {},
+  ): Promise<PiAgentMessageDelivery> {
+    if (!this.isConnected()) return "rejected";
+    try {
+      await this.agentMessageOperation(message, options);
+      return "accepted";
+    } catch (error) {
+      this.reportFailure();
+      return error instanceof PiRpcRemoteError ? "rejected" : "unknown";
+    }
+  }
+
+  forgetInteraction(requestId: string): void {
+    this.pendingInteractions.delete(requestId);
+  }
+
+  clearPendingInteractions(): void {
+    this.pendingInteractions.clear();
+  }
+
+  async settlementStatus(): Promise<PiSettlementStatus> {
+    if (!this.isConnected()) return "unavailable";
+    try {
+      const state = await this.transport.getState();
+      return !state.isStreaming && !state.isCompacting && state.pendingMessageCount === 0
+        ? "settled"
+        : "busy";
+    } catch {
+      return "unavailable";
+    }
+  }
+
+  private async reconcilePiState(fallbackModel?: PiModel): Promise<void> {
+    let state: Awaited<ReturnType<PiRpcTransportLike["getState"]>> | undefined;
+    try {
+      state = await this.transport.getState();
+    } catch {
+      // The state query is best-effort; the successful set_model response is
+      // still authoritative for its returned model.
+    }
+    const model = state?.model ?? fallbackModel;
+    const normalizedModel = model ? modelRef(model) : undefined;
+    if (normalizedModel) this.sessionMeta?.({ model: normalizedModel });
+    if (normalizedModel || state?.thinkingLevel) {
+      this.emit({
+        type: "pi_state",
+        ...(normalizedModel ? { model: normalizedModel } : {}),
+        ...(state?.thinkingLevel ? { thinkingLevel: state.thinkingLevel } : {}),
+      });
+    }
+  }
+
+  private enqueueStateMutation(operation: () => Promise<void>): Promise<void> {
+    const queued = this.stateMutationTail.then(operation);
+    this.stateMutationTail = queued.catch(() => undefined);
+    return queued;
+  }
+
   send(message: PiBrowserOutgoingMessage): boolean {
     if (!this.isConnected()) return false;
     let operation: Promise<unknown>;
     switch (message.type) {
       case "agent_message":
-        if (message.delivery === "steer") {
-          operation = this.transport.steer(message.content);
-        } else if (message.delivery === "follow_up") {
-          operation = this.transport.followUp(message.content);
-        } else {
-          operation = this.transport.prompt(message.content, {
-            images: message.images,
-          });
-        }
-        break;
+        void this.sendAgentMessage(message);
+        return true;
       case "interaction_response": {
         const method = this.pendingInteractions.get(message.request_id);
         if (!method) return false;
@@ -296,18 +368,29 @@ export class PiAdapter {
         operation = this.transport.compact(message.instructions);
         break;
       case "set_model":
-        operation = this.transport
-          .setModel(message.model.provider, message.model.modelId)
-          .then((model) => {
-            const normalized = modelRef(model);
-            this.sessionMeta?.({ model: normalized });
-            this.emit({ type: "pi_state", model: normalized });
-          });
+        operation = this.enqueueStateMutation(async () => {
+          try {
+            const model = await this.transport.setModel(
+              message.model.provider,
+              message.model.modelId,
+            );
+            await this.reconcilePiState(model);
+          } catch (error) {
+            await this.reconcilePiState();
+            throw error;
+          }
+        });
         break;
       case "set_thinking":
-        operation = this.transport
-          .setThinkingLevel(message.level)
-          .then(() => this.emit({ type: "pi_state", thinkingLevel: message.level }));
+        operation = this.enqueueStateMutation(async () => {
+          try {
+            await this.transport.setThinkingLevel(message.level);
+            await this.reconcilePiState();
+          } catch (error) {
+            await this.reconcilePiState();
+            throw error;
+          }
+        });
         break;
       case "history_request":
         operation = this.transport.replayHistory(message.since).then((history) =>
@@ -419,6 +502,7 @@ export class PiAdapter {
         }
         return;
       case "agent_settled":
+        this.pendingInteractions.clear();
         this.emit({ type: "run_state", state: "idle" });
         return;
       case "message_start":
@@ -489,15 +573,25 @@ export class PiAdapter {
         });
         return;
       case "compaction_end":
-        this.emit({
-          type: "run_state",
-          state: notification.aborted ? "aborted" : "idle",
-          detail: {
-            reason: notification.reason,
-            willRetry: notification.willRetry,
-            error: notification.errorMessage,
-          },
-        });
+        if (notification.reason === "manual") {
+          this.emit({
+            type: "run_state",
+            state: notification.aborted ? "aborted" : "idle",
+            detail: {
+              reason: notification.reason,
+              error: notification.errorMessage,
+            },
+          });
+        } else if (notification.willRetry) {
+          this.emit({
+            type: "run_state",
+            state: "retrying",
+            detail: {
+              reason: notification.reason,
+              error: notification.errorMessage,
+            },
+          });
+        }
         return;
       case "auto_retry_start":
         this.emit({

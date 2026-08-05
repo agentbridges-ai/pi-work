@@ -408,6 +408,8 @@ export function isBrowserIncomingMessage(
       return isSessionUpdate(value.session);
     case "agent_message":
       return isAgentMessage(value);
+    case "agent_message_accepted":
+      return isGeneration(value.generation) && isNonEmptyString(value.clientMsgId);
     case "message_delta":
       return isDelta(value);
     case "tool_execution":
@@ -417,6 +419,12 @@ export function isBrowserIncomingMessage(
         isGeneration(value.generation) &&
         isInteractionRequest(value.request) &&
         typeof value.timestamp === "number"
+      );
+    case "interaction_snapshot":
+      return (
+        isGeneration(value.generation) &&
+        Array.isArray(value.requests) &&
+        value.requests.every(isInteractionRequest)
       );
     case "interaction_response":
       return isInteractionResponse(value);

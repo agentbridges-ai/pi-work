@@ -1,0 +1,11 @@
+enabled                        = false
+account_id                     = "replace-with-piwork-cloudflare-account-id"
+oauth_client_name              = "Piwork Apps Staging"
+oauth_client_uri               = "https://staging.example.com"
+oauth_redirect_uri             = "https://staging.example.com/api/cloudflare/oauth/callback"
+oauth_post_logout_redirect_uri = "https://staging.example.com/apps"
+oauth_scope_ids                = ["replace-with-scope-id-from-oauth-scopes-api"]
+oauth_logo_uri                 = "https://staging.example.com/logo.png"
+oauth_policy_uri               = "https://staging.example.com/privacy"
+oauth_tos_uri                  = "https://staging.example.com/terms"
+oauth_visibility               = null

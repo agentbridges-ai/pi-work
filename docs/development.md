@@ -1,47 +1,126 @@
 # Development Workflow
 
-Piwork runs as a single local Bun server plus Vite. Better Auth + Postgres
-provides authentication; Piwork product state stays in `data/`.
+Piwork's default local deployment is a fixed single-node Compose stack. Bun
+runs Web/Hono and Vite, while a separate non-root Runtime container launches
+the pinned Node + native Pi process inside one SRT per session. Better Auth +
+Postgres provides authentication; Piwork product state stays in tenant-scoped
+`data/`.
 
 ```bash
 make install
-install -m 600 .env.example .env
-# edit DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
-make auth-migrate
+make selfhost-init
 make dev
 ```
 
 Open the Frontend URL printed by `make dev`.
 
+## Linux execution host
+
+Piwork's complete local runtime must run on Linux. The SRT policy can enforce
+filesystem and network rules on macOS, but only Linux provides the PID namespace
+needed to contain every Pi descendant process. Keep the entire local runtime in
+one Linux environment so session paths, one-use Unix sockets, process signals,
+and the protected User Space transport never cross a host/guest boundary.
+
+| Host OS | Linux development runtime | Host responsibilities          |
+| ------- | ------------------------- | ------------------------------ |
+| macOS   | OrbStack Linux machine    | IDE, browser, Chrome extension |
+| Windows | WSL2 Linux distribution   | IDE, browser, Chrome extension |
+| Linux   | Native Linux              | IDE, browser, Chrome extension |
+
+Inside Linux, run Bun, Node, SRT, Pi, Postgres, `make install`, `make migrate`,
+`make dev`, and the SRT canaries. Keep the checkout and `data/` on the Linux
+filesystem rather than a host-mounted path where possible; this avoids VM/WSL
+filesystem performance and path-identity surprises. The browser can still use
+the host's Chrome and File System Access API through the forwarded API/Vite
+ports.
+
+Do not reuse a host `node_modules` directory inside Linux. Run `make install`
+inside the Linux runtime so Bun installs private package metadata with the
+repository's SRT trust settings.
+
+On macOS, open the checkout from an OrbStack Linux shell and run the commands
+there. On Windows, verify the distribution is WSL2 with `wsl -l -v`, then open a
+WSL2 shell and run the commands there. WSL2 forwards Linux listening ports to
+Windows `localhost` on supported Windows versions; OrbStack should expose the
+configured API/Vite ports to the host as part of its Linux machine networking.
+
+For a new Windows host, the Microsoft-documented starting point is
+`wsl --install -d Ubuntu`; confirm the result with `wsl -l -v` and convert the
+distribution with `wsl --set-version <Distro> 2` when necessary. For a new
+macOS host, create/start an OrbStack Linux machine and use its Linux shell for
+the checkout and all commands below.
+
+The Chrome extension bridge is also a host/guest boundary: keep
+`PIWORK_AGENT_BROWSER_BRIDGE_PORT` stable and verify that the Linux bridge port
+is reachable from host Chrome. Do not weaken the bridge or SRT policy by binding
+internal capability transports to a public interface. macOS Keychain is not
+available inside the Linux runtime, so use the documented one-use provider
+bootstrap from inside Linux rather than forwarding Keychain credentials.
+
+Useful host references: [OrbStack](https://orbstack.dev/) and Microsoft's
+[WSL installation guide](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+## Official Pi development guide
+
+The only normative Agent/runtime guide is the official `earendil-works/pi`
+repository pinned at [`docs/upstream/pi`](upstream/pi). Initialize it after
+cloning Piwork:
+
+```bash
+git submodule update --init docs/upstream/pi
+make verify-pi-upstream
+```
+
+Use `make sync-pi-upstream` to advance the gitlink to the latest official
+`main`, then review that dependency-pin diff before adapting Piwork. For RPC
+work, begin with
+[`packages/coding-agent/docs/rpc.md`](upstream/pi/packages/coding-agent/docs/rpc.md),
+but use the rest of the same upstream repository when the behavior crosses
+extensions, Skills, packages, sessions, compaction, providers, or tools.
+Community projects may identify cases worth testing; they are not protocol or
+product authorities.
+
 ## Service Split
 
 ```text
 Browser
-  -> Vite dev server
-  -> /api/* and /ws/* to local Bun server
+  -> Caddy (only published port)
+  -> Vite source frontend / Web API
 
-Local Bun server
+Web container (Bun/Hono, OrbStack/WSL2 on non-Linux hosts)
   -> Better Auth routes at /api/auth/*
   -> /api/auth/mode and /api/me app routes
   -> per-user runtime registry keyed by Better Auth user.id
   -> Pi-shaped browser WebSocket
-  -> PiAdapter and strict LF JSONL RPC
-  -> one SRT-contained Node + Pi rpc-entry per session
+  -> private HMAC Unix JSONL Runtime socket
+
+Runtime container (Node >=22.19 + Pi + SRT)
+  -> one Pi rpc-entry generation per session
+  -> tenant/user/membership/org/session/generation scope
+  -> no Postgres, TCP listener, or Docker Socket
 
 Postgres
-  -> Better Auth users/accounts/sessions
+  -> Better Auth users/accounts/sessions and tenant control plane
+  -> RLS through the non-owner Web role
 
 Filesystem state
-  -> data/<betterAuthUserId>/...
-  -> data/<betterAuthUserId>/<sessionId>/...
+  -> data/tenants/<tenantId>/users/<userId>/...
+  -> data/tenants/<tenantId>/users/<userId>/sessions/<sessionId>/...
 ```
 
 ## Commands
 
 ```bash
-make dev           # local API + Vite
+make dev           # verified Compose source stack
 make dev-fast      # alias for make dev
 make dev-fast-stop # stop local dev processes
+make dev-native    # explicit in-process native Pi debug path
+make selfhost-doctor
+make selfhost-up
+make selfhost-down
+make selfhost-backup
+make selfhost-upgrade
 make status        # check local API and frontend
 make agent-browser-e2e # real Mac Chrome extension bridge smoke test
 
@@ -54,6 +133,7 @@ make format-check
 make deadcode
 make dry-check
 make test-targeted
+make verify-pi-upstream
 make verify-pi-only-runtime
 make test-pi-rpc-contract
 make test-srt-pi
@@ -64,7 +144,8 @@ make check        # quality gates + targeted tests + production build
 make verify       # frozen install + all gates + full release verification
 ```
 
-All CI jobs use the same checked-in Node.js `26.5.0` and Bun `1.3.9` setup.
+All CI and development Linux runtimes use the same checked-in Node.js `26.5.0`
+and Bun `1.3.9` setup.
 The supported Node.js runtime floor remains `>=22.19.0`, matching the pinned Pi
 package. `make verify-pi-versions` rejects dependency or `rpc-entry` drift
 before the RPC and SRT probes run. `make verify-pi-only-runtime` rejects
@@ -75,7 +156,29 @@ Run `make format` to apply the repository Prettier configuration. Generated,
 vendored, runtime, and policy-owned files are excluded explicitly; CI and the
 pre-commit hook use `make format-check` and never rewrite files.
 
-`make dev` writes process ids and logs under `.runtime/`:
+`make dev-native` writes process ids and logs under `.runtime/`. Compose state is
+managed by `scripts/selfhost.sh`; use `selfhost status` rather than treating
+container PIDs as application authority.
+
+## Compose release and security gate
+
+Source mode builds only the fixed Web and Runtime images and keeps Vite HMR
+inside the stack. Release mode reads `release/piwork-compose-release-manifest.json`
+(or `PIWORK_RELEASE_MANIFEST`) as its single image source and requires every
+image reference to be an immutable `@sha256:` digest. Run
+`make selfhost-release-validate` before a release deployment. Caddy
+is the only service with a host port; Runtime is non-root, read-only-rootfs,
+`cap_drop: ALL`, `no-new-privileges`, bounded by PID/memory limits, and uses the
+checked-in seccomp profile. `doctor --require-verified` rejects privileged mode,
+host networking, extra capabilities, writable rootfs, unconfined seccomp, and
+Docker Socket mounts, then runs the nested-SRT and per-session isolation canary.
+
+`selfhost backup` stops Web/Runtime before writing a pg_dump and data snapshot;
+the manifest and SHA-256 file never include the Runtime control key, database
+application password, or other secret files. `selfhost restore` verifies both
+before replacing the fixed data volume and restoring the database.
+
+The old native process files are still used by `make dev-native`:
 
 - `.runtime/server.log`
 - `.runtime/vite.log`
@@ -90,11 +193,13 @@ Start from `.env.example` and copy only the values you need.
 Important variables:
 
 - `DATABASE_URL` - required Postgres connection string for Better Auth.
-- `PIWORK_POSTGRES_DATA_DIR` - explicit local Postgres data directory used by
-  `make dev` auto-start.
+- `PIWORK_POSTGRES_DATA_DIR` - explicit local Postgres data directory used only
+  by the optional `make dev-native` auto-start path; Compose uses its Postgres
+  service volume.
 - `PIWORK_PG_CTL_BIN` - explicit absolute path to the matching `pg_ctl`
-  executable. Both Postgres path variables are required for auto-start; the
-  launcher does not infer `PGDATA`, `PATH`, or a package-manager installation.
+  executable. Both Postgres path variables are required for the native path;
+  the launcher does not infer `PGDATA`, `PATH`, or a package-manager
+  installation.
 - `BETTER_AUTH_SECRET` - required in shared/dev-like environments; generate with `openssl rand -base64 32`.
 - `BETTER_AUTH_URL` - API base URL, usually `http://127.0.0.1:3457`.
 - `PORT` - Bun API port, default `3457`.
@@ -105,7 +210,8 @@ Important variables:
 - `PIWORK_AGENT_BROWSER_BRIDGE_PORT` - loopback bridge port; defaults to `19826`.
 - `PIWORK_SESSION_SANDBOX` - defaults to `srt`; the launcher accepts only the
   repo-local pinned package and a server-generated principal policy. Enforced
-  session launch currently requires Linux.
+  session launch requires Linux. Native macOS and Windows entrypoints fail
+  closed and direct development must move into OrbStack Linux or WSL2 Linux.
 - `PIWORK_PI_MODEL_ALLOWLIST` - platform-level `provider/model` glob
   allowlist. The final visible set is its intersection with Agent policy,
   injectable providers, and the Agent network policy.
@@ -123,12 +229,12 @@ kernel-owned lifetime boundary for every descendant. Pinned SRT 0.0.65 on
 macOS provides Seatbelt filesystem/network rules but no equivalent descendant
 process boundary: a process can create a new session and survive the SRT CLI.
 Piwork therefore refuses macOS and Windows SRT session launches before the
-Pi process is spawned. The server and frontend can still be developed on
-macOS, but a security-enforced Pi session needs a Linux host until a trusted
-macOS supervisor is available.
+Pi process is spawned. The server, frontend, and Pi session are developed
+together inside OrbStack Linux or WSL2 Linux on those host operating systems.
 
 There is no unsandboxed Agent runtime escape hatch. Development that needs to
-execute a Pi session uses the supported Linux SRT path.
+execute a Pi session uses the supported Linux SRT path inside the host's Linux
+VM or WSL2 distribution.
 
 The browser ownership state machine, page boundary, dual dispatch fences, and
 real-browser verification obligations are defined in
@@ -142,16 +248,17 @@ provider or carries model traffic. The generation-scoped User Space capability
 remains mandatory, and the ordinary browser listener does not serve
 `/internal/*`.
 
-`make dev` sources root `.env` if present, validates `DATABASE_URL` with
-`select 1`, then starts detached local API and Vite processes. When that check
-fails for a loopback/localhost URL, it starts `pg_ctl` using the explicitly
-configured `PIWORK_POSTGRES_DATA_DIR` and
-`PIWORK_PG_CTL_BIN`, then waits up to 10 seconds for the connection. There is
-no `PGDATA`, `PATH`, or Homebrew fallback. A failed start can recover a stale
-`postmaster.pid` only after confirming its PID is not Postgres and the configured
-endpoint is not accepting connections; the lock is moved to `.runtime/` rather
-than deleted. It never installs Postgres or attempts to start a service for a
-remote database URL.
+`make dev` and `make dev-compose` run the fixed Compose source stack through
+`scripts/selfhost.sh`; Caddy is the only published port and the Web/Runtime/
+Postgres services stay on the Compose networks. `make dev-native` is the
+explicit Linux-only debug path: it sources root `.env`, validates
+`DATABASE_URL`, and may start local Postgres with the explicitly configured
+`PIWORK_POSTGRES_DATA_DIR` and `PIWORK_PG_CTL_BIN`. There is no `PGDATA`,
+`PATH`, or Homebrew fallback. A failed native start can recover a stale
+`postmaster.pid` only after confirming its PID is not Postgres and the
+configured endpoint is not accepting connections; the lock is moved to
+`.runtime/` rather than deleted. It never installs Postgres or attempts to
+start a service for a remote database URL.
 
 ## Agent browser bridge
 

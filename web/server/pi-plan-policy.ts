@@ -319,7 +319,17 @@ const READ_ONLY_COMMAND_POLICIES: Readonly<Record<string, ReadOnlyCommandPolicy>
   },
 };
 
-const PLAN_NATIVE_TOOLS = new Set(["read", "bash", "ask", "todo_write", "task", "propose_plan"]);
+const PLAN_NATIVE_TOOLS = new Set([
+  "read",
+  "bash",
+  "ask",
+  "todo_write",
+  "todo_read",
+  "task",
+  "propose_plan",
+  "list_apps",
+  "list_app_versions",
+]);
 
 function reject(reason: string): PiPlanBashDecision {
   return { allowed: false, reason };

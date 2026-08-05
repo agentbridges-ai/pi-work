@@ -24,6 +24,9 @@ export const CONTROL_PLANE_PERMISSIONS = [
   "session:view",
   "session:terminate",
   "audit:view",
+  "app:publish",
+  "app:manage-own",
+  "app:manage-all",
 ] as const;
 export type ControlPlanePermission = (typeof CONTROL_PLANE_PERMISSIONS)[number];
 
@@ -35,6 +38,7 @@ export interface TenantMembership {
   userId: string;
   status: "invited" | "active" | "suspended" | "removed";
   isDefault: boolean;
+  primaryOrgNodeId?: string;
 }
 
 export interface AgentDraftConfig {
@@ -67,6 +71,9 @@ export interface AgentModelPolicySnapshot {
 export interface SessionAuthoritySnapshot {
   tenantId: string;
   userId: string;
+  /** The membership and org scope selected when the session was created. */
+  membershipId: string;
+  orgNodeId: string;
   agentDefinitionId: string;
   agentVersionId: string;
   effectivePolicyHash: string;

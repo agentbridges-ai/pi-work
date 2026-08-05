@@ -21,8 +21,11 @@ export async function handleSessionSubscribe(
 ): Promise<void> {
   if (!socket || !session.browserSockets.has(socket)) return;
   const normalized = Math.max(0, Math.floor(lastSeq));
+  const latest = Math.max(0, session.nextEventSeq - 1);
+  const cursorAhead = normalized > latest;
+  const replayFrom = cursorAhead ? 0 : normalized;
   socket.data.subscribed = true;
-  socket.data.lastAckSeq = normalized;
+  socket.data.lastAckSeq = replayFrom;
 
   const sendHistory = async (reason: HistorySnapshotEvent["reason"]) => {
     try {
@@ -37,13 +40,13 @@ export async function handleSessionSubscribe(
     }
   };
 
-  const sentHistory = normalized === 0;
+  const sentHistory = replayFrom === 0;
   if (sentHistory) {
-    await sendHistory("initial");
+    await sendHistory(cursorAhead ? "recovery" : "initial");
   }
 
   if (session.eventBuffer.length === 0) {
-    if (normalized > 0) await sendHistory("recovery");
+    if (replayFrom > 0) await sendHistory("recovery");
     send(socket, {
       type: "run_state",
       state: session.state.runState,
@@ -54,14 +57,13 @@ export async function handleSessionSubscribe(
     return;
   }
 
-  if (normalized >= session.nextEventSeq - 1) return;
   const earliest = session.eventBuffer[0]?.seq ?? session.nextEventSeq;
-  const hasGap = normalized > 0 && normalized < earliest - 1;
+  const hasGap = replayFrom > 0 && replayFrom < earliest - 1;
   if (hasGap) await sendHistory("gap");
 
   const missed = session.eventBuffer.filter(
     (event) =>
-      event.seq > normalized && (!(hasGap || sentHistory) || !isHistoryBackedEvent(event.message)),
+      event.seq > replayFrom && (!(hasGap || sentHistory) || !isHistoryBackedEvent(event.message)),
   );
   if (missed.length > 0) {
     send(socket, { type: "event_replay", events: missed });

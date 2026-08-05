@@ -95,6 +95,11 @@ const RbacAdminPage = lazyRoute(
   "/src/components/RbacAdminPage.tsx",
   "RbacAdminPage",
 );
+const AppsPage = lazyRoute(
+  () => import("./components/AppsPage.js").then((m) => ({ default: m.AppsPage })),
+  "/src/components/AppsPage.tsx",
+  "AppsPage",
+);
 
 function LazyFallback() {
   return (
@@ -875,6 +880,11 @@ export default function App() {
           {route.page === "rbacAdmin" && (
             <Suspense fallback={<LazyFallback />}>
               <RbacAdminPage />
+            </Suspense>
+          )}
+          {route.page === "apps" && (
+            <Suspense fallback={<LazyFallback />}>
+              <AppsPage />
             </Suspense>
           )}
           {isSessionView && (

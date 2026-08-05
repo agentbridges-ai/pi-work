@@ -416,7 +416,7 @@ describe("Cookie API request security", () => {
     expect(json.ok).toBe(true);
   });
 
-  it("allows only the explicit bounded User Space binary upload exception", async () => {
+  it("allows only the explicit bounded file-transfer binary upload exceptions", async () => {
     const upload = await secureCookieApiRequest(
       apiRequest("/api/user-space-transfer/session/blob/checkout/transfer/upload", {
         method: "PUT",
@@ -431,6 +431,17 @@ describe("Cookie API request security", () => {
       expect(new Uint8Array(await upload.request.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
     }
 
+    const nativeReclaim = await secureCookieApiRequest(
+      apiRequest("/api/sessions/session-a/agent-space/raw?path=artifact.bin", {
+        method: "PUT",
+        origin: TRUSTED_ORIGIN,
+        headers: { "Content-Type": "application/octet-stream" },
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      { trustedOrigins: TRUSTED_ORIGINS, limits: { userSpaceBinaryBytes: 3 } },
+    );
+    expect(nativeReclaim.ok).toBe(true);
+
     const oversized = await secureCookieApiRequest(
       apiRequest("/api/user-space-transfer/session/blob/checkout/transfer/upload", {
         method: "PUT",
@@ -442,6 +453,17 @@ describe("Cookie API request security", () => {
     );
     expect(oversized.ok).toBe(false);
     if (!oversized.ok) expect(oversized.response.status).toBe(413);
+
+    const nativeAction = await secureCookieApiRequest(
+      apiRequest("/api/sessions/session-a/native-file-actions?action=file.share", {
+        method: "POST",
+        origin: TRUSTED_ORIGIN,
+        headers: { "Content-Type": "application/octet-stream" },
+        body: new Uint8Array([4, 5, 6]),
+      }),
+      { trustedOrigins: TRUSTED_ORIGINS, limits: { userSpaceBinaryBytes: 3 } },
+    );
+    expect(nativeAction.ok).toBe(true);
   });
 
   it("allows only bounded text or multipart Recording Hub uploads", async () => {
@@ -615,5 +637,19 @@ describe("tenant-bound runtime API requests", () => {
     );
 
     expect(result).toEqual({ ok: true, user: tenantAUser });
+  });
+
+  it("allows OAuth callbacks without browser tenant headers because state is server-bound", async () => {
+    for (const path of [
+      "/api/cloudflare/oauth/callback?state=opaque",
+      "/api/apps/cloudflare/oauth/callback?state=opaque",
+    ]) {
+      const result = await resolveTenantBoundRuntimePrincipal(
+        apiRequest(path),
+        authenticatedUser,
+        async () => tenantAUser,
+      );
+      expect(result).toEqual({ ok: true, user: tenantAUser });
+    }
   });
 });

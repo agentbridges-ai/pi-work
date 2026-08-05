@@ -44,6 +44,7 @@ function publicUser(user: AuthenticatedUser): AuthenticatedUser {
     tenantName: user.tenantName,
     tenantType: user.tenantType,
     membershipId: user.membershipId,
+    orgNodeId: user.orgNodeId,
     roles: user.roles,
     email: user.email,
     permissions: user.permissions || [],

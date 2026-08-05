@@ -23,6 +23,7 @@ import type {
   SessionLifecycleState,
   SessionOrchestratorDeps,
 } from "./session-orchestrator-contract.js";
+import type { RuntimeIndexLifecycle, RuntimeSessionIndexStore } from "./runtime-session-index.js";
 
 export type {
   ActivateSessionResult,
@@ -104,6 +105,7 @@ export class SessionOrchestrator {
     SessionOrchestratorDeps["browserSessionCleanup"]
   >;
   private readonly onRuntimeStopped: NonNullable<SessionOrchestratorDeps["onRuntimeStopped"]>;
+  private readonly runtimeSessionIndex?: RuntimeSessionIndexStore;
   private readonly runtimeStates = new SessionRuntimeStateRegistry();
   private readonly operations = new Map<string, Promise<unknown>>();
   private readonly intentionalStops = new Set<string>();
@@ -120,6 +122,29 @@ export class SessionOrchestrator {
       deps.sessionTitleGenerator || new DeterministicSessionTitleGenerator();
     this.browserSessionCleanup = deps.browserSessionCleanup || (async () => undefined);
     this.onRuntimeStopped = deps.onRuntimeStopped || (async () => undefined);
+    this.runtimeSessionIndex = deps.runtimeSessionIndex;
+  }
+
+  private async projectRuntimeIndex(
+    persisted: PersistedSession | undefined,
+    generation: number,
+    lifecycle: RuntimeIndexLifecycle,
+  ): Promise<void> {
+    const authority = persisted?.authority;
+    if (!authority || generation < 1 || !this.runtimeSessionIndex) return;
+    try {
+      await this.runtimeSessionIndex.upsert(
+        { ...authority, sessionId: persisted.id, generation },
+        lifecycle,
+      );
+    } catch (error) {
+      // The index is explicitly non-authoritative; DB outages must not turn a
+      // valid session.json/Pi launch into a failed Agent session.
+      log.warn("orchestrator", "Runtime session index projection failed", {
+        sessionId: persisted.id,
+        error: errorMessage(error),
+      });
+    }
   }
 
   initialize(): void {
@@ -132,6 +157,7 @@ export class SessionOrchestrator {
         const info = placeholderInfo(persisted, directory);
         this.launcher.restoreSession(info);
         this.wsBridge.restoreSession?.(info, persisted);
+        void this.projectRuntimeIndex(persisted, Math.max(info.generation, 1), "stopped");
         this.runtimeStates.ensure(persisted.id, {
           state: "stopped",
           generation: info.generation,
@@ -225,6 +251,7 @@ export class SessionOrchestrator {
   ): Promise<PiSessionInfo> {
     if (this.shuttingDown) throw new Error("Native Pi runtime is shutting down");
     const generation = this.launcher.nextLaunchGeneration(sessionId);
+    await this.projectRuntimeIndex(context.persisted, generation, "preparing");
     this.runtimeStates.begin(sessionId, generation, "preparing", "launch_requested");
     await onProgress?.("launching_pi", "Starting native Pi", "in_progress");
     const options = await this.buildLaunchOptions(sessionId, generation, context);
@@ -246,11 +273,18 @@ export class SessionOrchestrator {
         state,
         this.intentionalStops.has(sessionId) ? "intentional_stop" : "pi_process_exit",
       );
+      void this.projectRuntimeIndex(
+        context.persisted,
+        generation,
+        this.intentionalStops.has(sessionId) ? "stopped" : "failed",
+      );
       void this.onRuntimeStopped(sessionId, generation, "exit");
     };
     this.runtimeStates.transition(sessionId, generation, "starting", "srt_spawn_requested");
+    await this.projectRuntimeIndex(context.persisted, generation, "starting");
     const info = await this.launcher.launch(options);
     this.runtimeStates.transition(sessionId, generation, "connecting", "pi_rpc_connected");
+    await this.projectRuntimeIndex(context.persisted, generation, "connecting");
     const transport = this.launcher.getTransport(sessionId);
     if (!transport) throw new Error("Native Pi transport disappeared before attachment");
     adapter = new PiAdapter({ transport, sessionId, generation });
@@ -264,14 +298,13 @@ export class SessionOrchestrator {
       this.sessionStore.setPiSessionRelativePath(sessionId, info.piSessionRelativePath);
     }
     this.runtimeStates.transition(sessionId, generation, "ready", "pi_readiness_complete");
+    await this.projectRuntimeIndex(context.persisted, generation, "ready");
     this.intentionalStops.delete(sessionId);
     await onProgress?.("launching_pi", "Native Pi started", "done");
     await onProgress?.("restoring_history", "Pi history restored", "done");
     await onProgress?.("waiting_for_ready", "Session ready", "done");
     this.wsBridge.broadcastLifecycleUpdate(sessionId, "enabled");
-    for (const queued of this.sessionStore.drainOffline(sessionId)) {
-      this.wsBridge.injectUserMessage(sessionId, queued.message);
-    }
+    await this.wsBridge.flushOfflineQueue(sessionId);
     return info;
   }
 
@@ -298,13 +331,16 @@ export class SessionOrchestrator {
         info.generation + 1,
         (this.runtimeStates.get(sessionId)?.generation || 0) + 1,
       );
+      const persisted = this.sessionStore.load(sessionId);
       this.runtimeStates.begin(sessionId, generation, "stopping", "kill_requested");
+      await this.projectRuntimeIndex(persisted || undefined, generation, "stopping");
       this.intentionalStops.add(sessionId);
       const killed = await this.launcher.kill(sessionId);
       await this.onRuntimeStopped(sessionId, info.generation, "kill");
       await this.cleanupBrowserSession(sessionId);
       if (!killed) return { ok: false };
       this.runtimeStates.transition(sessionId, generation, "stopped", "kill_complete");
+      await this.projectRuntimeIndex(persisted || undefined, generation, "stopped");
       this.wsBridge.detachPiAdapter?.(sessionId, info.generation);
       this.wsBridge.broadcastLifecycleUpdate(sessionId, "closed");
       return { ok: true };

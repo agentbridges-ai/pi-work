@@ -860,3 +860,41 @@ export class PiRpcTransport {
     return this.successData<Record<string, unknown>>({ type: "get_session_stats" }, options);
   }
 }
+
+/**
+ * Transport surface consumed by PiAdapter and the orchestration layer. The
+ * native child transport and the authenticated Unix Runtime transport both
+ * implement this exact surface; neither side owns browser protocol state.
+ */
+export type PiRpcTransportLike = Pick<
+  PiRpcTransport,
+  | "sessionId"
+  | "generation"
+  | "isClosed"
+  | "pendingRequestCount"
+  | "getStderr"
+  | "waitForClose"
+  | "invalidateGeneration"
+  | "dispose"
+  | "sendInput"
+  | "sendExtensionUiResponse"
+  | "request"
+  | "prompt"
+  | "steer"
+  | "followUp"
+  | "abort"
+  | "getState"
+  | "getAvailableModels"
+  | "setModel"
+  | "setThinkingLevel"
+  | "getAvailableThinkingLevels"
+  | "compact"
+  | "setAutoRetry"
+  | "retry"
+  | "abortRetry"
+  | "getEntries"
+  | "replayHistory"
+  | "getMessages"
+  | "getCommands"
+  | "getSessionStats"
+>;

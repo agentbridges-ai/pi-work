@@ -1,0 +1,13 @@
+{
+  "format": "piwork-compose-release-v1",
+  "releaseId": "REPLACE_WITH_RELEASE_ID",
+  "createdAt": "REPLACE_WITH_UTC_TIMESTAMP",
+  "images": {
+    "caddy": "caddy:2.10.2@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "web": "piwork-web:release@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "runtime": "piwork-runtime:release@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "postgres": "postgres:16.4@sha256:REPLACE_WITH_64_HEX_DIGEST"
+  },
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "source": "compose/docker-compose.source.yml"
+}

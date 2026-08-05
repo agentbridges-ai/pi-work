@@ -1,0 +1,13 @@
+{
+  auto_https off
+  admin off
+}
+
+:80 {
+  encode gzip
+  header X-Piwork-Edge "piwork-caddy"
+  reverse_proxy /api/* web:3457
+  reverse_proxy /ws/* web:3457
+  reverse_proxy /build-info web:3457
+  reverse_proxy /* web:3458
+}
