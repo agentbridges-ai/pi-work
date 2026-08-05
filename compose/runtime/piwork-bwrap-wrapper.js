@@ -10,16 +10,22 @@ function isSrtNetworkSocketPath(value) {
   return /^\/tmp\/claude-(?:http|socks)-[^/]+\.sock$/u.test(value);
 }
 
+function isRedundantSelfBindPath(value) {
+  return /^\/dev\//u.test(value) || value === "/etc/hosts";
+}
+
 for (let index = 0; index < input.length; index += 1) {
   if (
     input[index] === "--ro-bind" &&
     input[index + 1] === input[index + 2] &&
-    /^\/dev\//u.test(input[index + 1])
+    isRedundantSelfBindPath(input[index + 1])
   ) {
-    // The replacement for SRT's --dev /dev already exposes these immutable
-    // device nodes. Rebinding /dev/null (and friends) to itself makes
-    // bwrap try to recreate a device inside the nested namespace, which is
-    // denied by the capability-free Compose boundary on some kernels.
+    // The replacement for SRT's --dev /dev already exposes immutable device
+    // nodes. The outer read-only root also exposes /etc/hosts. Rebinding
+    // either path to itself makes bwrap recreate a mount point inside the
+    // nested namespace, which is denied by the capability-free Compose
+    // boundary on some kernels. Keep ordinary masks (for example
+    // --ro-bind /dev/null <workspace-file>) untouched.
     index += 2;
     continue;
   }
