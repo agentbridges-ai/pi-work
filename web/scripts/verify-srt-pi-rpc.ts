@@ -29,6 +29,16 @@ if (piPackage.version !== "0.82.1") {
 }
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piwork-srt-pi-rpc-")));
+// SRT creates its proxy sockets under the host-side TMPDIR. Keep that manager
+// directory short and launch-private so the Compose wrapper can rebind the
+// whole directory with its existing directory-FD rule. The sandbox still
+// receives SRT's normal /tmp setting through the generated policy.
+const proxyRoot = realpathSync(mkdtempSync(join(tmpdir(), "piwork-pi-rpc-")));
+const proxyDir = join(proxyRoot, "proxy");
+mkdirSync(proxyDir, { mode: 0o700 });
+if (!/^\/tmp\/piwork-pi-[^/]+\/proxy$/u.test(proxyDir)) {
+  throw new Error(`Pi RPC probe proxy directory escaped the Compose socket contract: ${proxyDir}`);
+}
 try {
   const tenantsRoot = join(root, "tenants");
   const tenantRoot = join(tenantsRoot, "tenant");
@@ -67,6 +77,7 @@ try {
     {
       executable: srt,
       prefixArgs: ["--settings", settingsPath, node, rpcEntry],
+      env: { TMPDIR: proxyDir },
     },
     layout,
   );
@@ -77,4 +88,5 @@ try {
   );
 } finally {
   rmSync(root, { recursive: true, force: true });
+  rmSync(proxyRoot, { recursive: true, force: true });
 }
