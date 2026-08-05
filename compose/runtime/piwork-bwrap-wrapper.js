@@ -238,7 +238,9 @@ try {
 args.splice(commandIndex, 0, ...networkBindArgs);
 
 if (process.env.PIWORK_BWRAP_DEBUG === "1") {
-  process.stderr.write(`piwork-bwrap: transformed argv=${JSON.stringify(args)}\n`);
+  process.stderr.write(
+    `piwork-bwrap: command argv=${JSON.stringify(args.slice(commandIndex + 1))}\n`,
+  );
 }
 
 let result;
