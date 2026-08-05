@@ -200,6 +200,31 @@ describe("published OnlyOffice descriptor verification", () => {
     ).toThrow("promotion receipt Piwork integration commit");
   });
 
+  it("keeps an unchanged descriptor on its verified integration ancestry", () => {
+    const integrationBase = base.repositories.Piwork.integrationBaseCommit;
+    const eventBase = "a".repeat(40);
+    const eventHead = "b".repeat(40);
+    const checkedOutMerge = "c".repeat(40);
+    const ancestors = new Set([
+      `${integrationBase}:${eventBase}`,
+      `${integrationBase}:${checkedOutMerge}`,
+      `${eventBase}:${checkedOutMerge}`,
+      `${eventHead}:${checkedOutMerge}`,
+    ]);
+
+    expect(
+      validateOnlyOfficeIntegrationBase(base, {
+        headCommit: checkedOutMerge,
+        eventBaseCommit: eventBase,
+        eventHeadCommit: eventHead,
+        isAncestor: (ancestor: string, descendant: string) =>
+          ancestors.has(`${ancestor}:${descendant}`),
+        mergeBase: () => "d".repeat(40),
+        manifestChanged: false,
+      }),
+    ).toBe(integrationBase);
+  });
+
   it("requires the Piwork lockfile pin and rejects the removed self commit", () => {
     expect(() => validatePiworkReleaseInputs({ ...base, lockfiles: [] }, root)).toThrow(
       "web/bun.lock",
