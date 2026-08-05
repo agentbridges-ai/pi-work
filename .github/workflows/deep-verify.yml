@@ -147,7 +147,21 @@ jobs:
         # Linux SRT owns the native RPC/SRT canaries whenever its protected
         # surface changes; deep verification still runs its portable suite and
         # coverage once.
-        run: make verify VERIFY_SRT=${{ needs.changes.outputs.srt == 'true' && '0' || '1' }} ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
+        run: |
+          ONLYOFFICE_RELEASE_VERIFY_ARGS=--online
+          onlyoffice_release_verify_args="${ONLYOFFICE_RELEASE_VERIFY_ARGS}"
+          # Pull requests may validate a staged candidate online. Main pushes
+          # remain strict and require a supported release with a promotion receipt.
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("release/onlyoffice-release-manifest.json", "utf8"));
+            process.exit(manifest.lifecycle === "candidate" ? 0 : 1);
+          '; then
+            onlyoffice_release_verify_args+=" --allow-candidate"
+          fi
+          make verify \
+            VERIFY_SRT=${{ needs.changes.outputs.srt == 'true' && '0' || '1' }} \
+            ONLYOFFICE_RELEASE_VERIFY_ARGS="${onlyoffice_release_verify_args}"
 
       - name: Verify the explicit candidate descriptor before integration
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.onlyoffice_candidate_integration == true }}

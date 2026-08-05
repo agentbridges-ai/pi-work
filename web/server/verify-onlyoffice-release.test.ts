@@ -15,24 +15,36 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const base = JSON.parse(
   readFileSync(resolve(root, "release/onlyoffice-release-manifest.json"), "utf8"),
 );
+// The checked-in descriptor may intentionally be a staged candidate.  Keep
+// published-release tests independent from that lifecycle so candidate PRs do
+// not turn the supported-release fixture into an accidental production gate.
+const supportedBase = {
+  ...base,
+  schemaVersion: 4,
+  lifecycle: "supported",
+  releaseManifest: {
+    ...base.releaseManifest,
+    releaseId: "v0.5.12-fd3fbc60abd50785",
+  },
+};
 const rootPackage = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const webPackage = JSON.parse(readFileSync(resolve(root, "web/package.json"), "utf8"));
 const runtimeManifest = {
   version: 5,
-  releaseId: base.releaseManifest.releaseId,
-  packageVersion: base.npmPackage.version,
-  hostBuildId: base.releaseManifest.hostBuildId,
-  runtimeManifestSha256: base.runtimeIdentity.assetManifestDigest,
+  releaseId: supportedBase.releaseManifest.releaseId,
+  packageVersion: supportedBase.npmPackage.version,
+  hostBuildId: supportedBase.releaseManifest.hostBuildId,
+  runtimeManifestSha256: supportedBase.runtimeIdentity.assetManifestDigest,
   x2t: {
-    version: base.repositories["onlyoffice-x2t-wasm"].version,
-    commit: base.repositories["onlyoffice-x2t-wasm"].commitSha,
-    sha256: base.artifacts.find((entry: any) => entry.kind === "x2t-wasm").sha256,
+    version: supportedBase.repositories["onlyoffice-x2t-wasm"].version,
+    commit: supportedBase.repositories["onlyoffice-x2t-wasm"].commitSha,
+    sha256: supportedBase.artifacts.find((entry: any) => entry.kind === "x2t-wasm").sha256,
   },
 };
 const pinned = {
-  ...base,
+  ...supportedBase,
   releaseManifest: {
-    ...base.releaseManifest,
+    ...supportedBase.releaseManifest,
     sha256: createHash("sha256").update(JSON.stringify(runtimeManifest)).digest("hex"),
   },
 };
@@ -323,35 +335,43 @@ describe("published OnlyOffice descriptor verification", () => {
   });
 
   it("keeps schema 4 supported releases compatible and reserves receipts for schema 5", () => {
-    expect(validateOnlyOfficeDescriptor(base, { rootPackage, webPackage }).schemaVersion).toBe(4);
+    expect(
+      validateOnlyOfficeDescriptor(supportedBase, { rootPackage, webPackage }).schemaVersion,
+    ).toBe(4);
     expect(() =>
       validateOnlyOfficeDescriptor(
         {
-          ...base,
-          releaseManifest: { ...base.releaseManifest, releaseId: "future-without-receipt" },
+          ...supportedBase,
+          releaseManifest: {
+            ...supportedBase.releaseManifest,
+            releaseId: "future-without-receipt",
+          },
         },
         { rootPackage, webPackage },
       ),
     ).toThrow("allowlisted legacy");
     expect(
       validateOnlyOfficeDescriptor(
-        { ...base, schemaVersion: 5, lifecycle: "candidate" },
+        { ...supportedBase, schemaVersion: 5, lifecycle: "candidate" },
         { rootPackage, webPackage, allowCandidate: true },
       ).lifecycle,
     ).toBe("candidate");
     expect(() =>
-      validateOnlyOfficeDescriptor({ ...base, schemaVersion: 5 }, { rootPackage, webPackage }),
+      validateOnlyOfficeDescriptor(
+        { ...supportedBase, schemaVersion: 5 },
+        { rootPackage, webPackage },
+      ),
     ).toThrow("promotion receipt");
     expect(
       validateOnlyOfficeDescriptor(
         {
-          ...base,
+          ...supportedBase,
           schemaVersion: 5,
           promotionReceipt: {
             version: 1,
-            path: `/promotions/${base.releaseManifest.releaseId}/${base.runtimeIdentity.sourceCommit}-${"f".repeat(64)}.json`,
+            path: `/promotions/${supportedBase.releaseManifest.releaseId}/${supportedBase.runtimeIdentity.sourceCommit}-${"f".repeat(64)}.json`,
             sha256: "f".repeat(64),
-            piworkIntegrationCommit: base.repositories.Piwork.integrationBaseCommit,
+            piworkIntegrationCommit: supportedBase.repositories.Piwork.integrationBaseCommit,
             deepVerifyRunId: 101,
             deepVerifyRunAttempt: 1,
             stagingRunId: 102,

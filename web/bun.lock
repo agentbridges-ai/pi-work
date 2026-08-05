@@ -5,7 +5,7 @@
     "": {
       "name": "piwork",
       "dependencies": {
-        "@agentbridges-ai/onlyoffice-browser": "0.5.12",
+        "@agentbridges-ai/onlyoffice-browser": "0.5.13",
         "@anthropic-ai/sandbox-runtime": "0.0.65",
         "@codemirror/commands": "^6.10.3",
         "@codemirror/lang-cpp": "^6.0.3",
@@ -118,7 +118,7 @@
 
     "@adobe/react-spectrum-workflow": ["@adobe/react-spectrum-workflow@2.3.5", "", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0" } }, "sha512-b53VIPwPWKb/T5gzE3qs+QlGP5gVrw/LnWV3xMksDU+CRl3rzOKUwxIGiZO8ICyYh1WiyqY4myGlPU/nAynBUg=="],
 
-    "@agentbridges-ai/onlyoffice-browser": ["@agentbridges-ai/onlyoffice-browser@0.5.12", "", { "dependencies": { "@noble/hashes": "^2.2.0", "workbox-window": "^7.4.1" }, "bin": { "onlyoffice-browser-build-runtime-assets": "scripts/build-onlyoffice-runtime-assets.mjs", "onlyoffice-browser-generate-font-assets": "scripts/generate-onlyoffice-font-assets.mjs", "onlyoffice-browser-verify-font-assets": "scripts/verify-onlyoffice-font-assets.mjs" } }, "sha512-WZBwiss68Glrac+GrM7qVxDwDvLgCcIg8m2nbbjmNbtUZYoK+aZSy0IbMN7PITGWb02CXFtxsImpM4xRj0FIXQ=="],
+    "@agentbridges-ai/onlyoffice-browser": ["@agentbridges-ai/onlyoffice-browser@0.5.13", "", { "dependencies": { "@noble/hashes": "^2.2.0", "workbox-window": "^7.4.1" }, "bin": { "onlyoffice-browser-build-runtime-assets": "scripts/build-onlyoffice-runtime-assets.mjs", "onlyoffice-browser-generate-font-assets": "scripts/generate-onlyoffice-font-assets.mjs", "onlyoffice-browser-verify-font-assets": "scripts/verify-onlyoffice-font-assets.mjs" } }, "sha512-00SSlMuSqLk4khEiVN+oaMEXfgC9FpMpczYJ0Yl/9xucqR8HWLY2ffc+yHRg2H7zpvljq7txIngWCMauzxy/uw=="],
 
     "@ant-design/colors": ["@ant-design/colors@8.0.1", "", { "dependencies": { "@ant-design/fast-color": "^3.0.0" } }, "sha512-foPVl0+SWIslGUtD/xBr1p9U4AKzPhNYEseXYRRo5QSzGACYZrQbe11AYJbYfAWnWSpGBx6JjBmSeugUsD9vqQ=="],
 
