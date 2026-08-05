@@ -90,7 +90,7 @@ export type PiBrowserIncomingMessage =
     }
   | {
       type: "run_state";
-      state: "idle" | "running" | "compacting" | "retrying" | "aborted" | "error";
+      state: "idle" | "running" | "settling" | "compacting" | "retrying" | "aborted" | "error";
       detail?: unknown;
     }
   | {
@@ -98,6 +98,7 @@ export type PiBrowserIncomingMessage =
       entries: Record<string, unknown>[];
       leaf_id: string | null;
     }
+  | { type: "history_leaf"; leaf_id: string }
   | {
       type: "pi_state";
       model?: { key: string; provider: string; modelId: string };
@@ -109,7 +110,8 @@ export type PiBrowserIncomingMessage =
       type: "extension_event";
       event: "notify" | "status" | "widget" | "title" | "editor_text" | "error";
       payload: Record<string, unknown>;
-    };
+    }
+  | { type: "queue_update"; steering: string[]; follow_up: string[] };
 
 export interface PiAdapterOptions {
   transport: PiRpcTransport;
@@ -194,6 +196,8 @@ export class PiAdapter {
   private activeMessageId: string | null = null;
   private messageCounter = 0;
   private pendingInteractions = new Map<string, PiExtensionUiRequest["method"]>();
+  private activeCompaction = false;
+  private summarizationRetrySource?: "branchSummary" | "compaction";
   private disconnected = false;
 
   constructor(options: PiAdapterOptions) {
@@ -347,8 +351,8 @@ export class PiAdapter {
         ...(optionalString(message.stopReason)
           ? { stopReason: optionalString(message.stopReason) }
           : {}),
-        ...(optionalString(message.errorMessage)
-          ? { error: optionalString(message.errorMessage) }
+        ...(optionalString(message.errorMessage) || optionalString(message.error)
+          ? { error: optionalString(message.errorMessage) ?? optionalString(message.error) }
           : {}),
         ...(message.usage !== undefined ? { usage: message.usage } : {}),
       },
@@ -416,9 +420,13 @@ export class PiAdapter {
       case "agent_end":
         if (notification.willRetry) {
           this.emit({ type: "run_state", state: "retrying" });
+        } else {
+          this.emit({ type: "run_state", state: "settling" });
         }
         return;
       case "agent_settled":
+        this.activeCompaction = false;
+        this.summarizationRetrySource = undefined;
         this.emit({ type: "run_state", state: "idle" });
         return;
       case "message_start":
@@ -450,7 +458,9 @@ export class PiAdapter {
         return;
       }
       case "message_end":
-        this.emitFinalMessage(notification.message);
+        // Pi emits message_end for user and toolResult records too. Only the
+        // completed assistant message belongs on the browser message stream.
+        if (notification.message.role === "assistant") this.emitFinalMessage(notification.message);
         return;
       case "tool_execution_start":
         this.emit({
@@ -482,18 +492,30 @@ export class PiAdapter {
         });
         return;
       case "compaction_start":
+        this.activeCompaction = true;
         this.emit({
           type: "run_state",
           state: "compacting",
-          detail: { reason: notification.reason },
+          detail: { kind: "compaction", phase: "start", reason: notification.reason },
         });
         return;
       case "compaction_end":
+        this.activeCompaction = false;
+        this.summarizationRetrySource = undefined;
         this.emit({
           type: "run_state",
-          state: notification.aborted ? "aborted" : "idle",
+          // A compaction abort is not an agent abort: Pi resumes the turn (or
+          // retries compaction) after this notification.
+          state: notification.willRetry
+            ? "compacting"
+            : notification.aborted && notification.reason !== "manual"
+              ? "settling"
+              : "idle",
           detail: {
+            kind: "compaction",
+            phase: "end",
             reason: notification.reason,
+            aborted: notification.aborted,
             willRetry: notification.willRetry,
             error: notification.errorMessage,
           },
@@ -504,32 +526,89 @@ export class PiAdapter {
           type: "run_state",
           state: "retrying",
           detail: {
+            kind: "provider_retry",
+            phase: "start",
             attempt: notification.attempt,
             maxAttempts: notification.maxAttempts,
             delayMs: notification.delayMs,
+            error: notification.errorMessage,
           },
         });
         return;
-      case "auto_retry_end":
+      case "auto_retry_end": {
+        const cancelled =
+          notification.success === false && notification.finalError === "Retry cancelled";
         this.emit({
           type: "run_state",
-          state: notification.success ? "running" : "error",
-          detail: { attempt: notification.attempt },
+          state: notification.success ? "running" : cancelled ? "settling" : "error",
+          detail: {
+            kind: "provider_retry",
+            phase: "end",
+            attempt: notification.attempt,
+            success: notification.success,
+            ...(cancelled ? { cancelled: true } : {}),
+            ...(!cancelled && notification.finalError ? { error: notification.finalError } : {}),
+          },
         });
         return;
+      }
       case "thinking_level_changed":
         this.emit({ type: "pi_state", thinkingLevel: notification.level });
         return;
       case "session_info_changed":
-      case "entry_appended":
-      case "queue_update":
       case "turn_start":
       case "turn_end":
       case "bash_execution_update":
-      case "summarization_retry_scheduled":
-      case "summarization_retry_attempt_start":
-      case "summarization_retry_finished":
         return;
+      case "entry_appended":
+        if (typeof notification.entry.id === "string" && notification.entry.id.length > 0) {
+          this.emit({ type: "history_leaf", leaf_id: notification.entry.id });
+        }
+        return;
+      case "queue_update":
+        this.emit({
+          type: "queue_update",
+          steering: notification.steering,
+          follow_up: notification.followUp,
+        });
+        return;
+      case "summarization_retry_scheduled":
+        this.emit({
+          type: "run_state",
+          state: "compacting",
+          detail: {
+            kind: "summarization_retry",
+            phase: "scheduled",
+            attempt: notification.attempt,
+            maxAttempts: notification.maxAttempts,
+            delayMs: notification.delayMs,
+            error: notification.errorMessage,
+          },
+        });
+        return;
+      case "summarization_retry_attempt_start":
+        this.summarizationRetrySource = notification.source;
+        this.emit({
+          type: "run_state",
+          state: "compacting",
+          detail: { kind: "summarization_retry", phase: "attempt", source: notification.source },
+        });
+        return;
+      case "summarization_retry_finished": {
+        const source = this.summarizationRetrySource;
+        const remainsCompacting = this.activeCompaction || source === "compaction";
+        this.summarizationRetrySource = undefined;
+        this.emit({
+          type: "run_state",
+          state: remainsCompacting ? "compacting" : "idle",
+          detail: {
+            kind: "summarization_retry",
+            phase: "finished",
+            ...(source ? { source } : {}),
+          },
+        });
+        return;
+      }
       case "extension_error":
         this.emit({
           type: "extension_event",

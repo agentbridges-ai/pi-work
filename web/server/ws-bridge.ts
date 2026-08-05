@@ -280,6 +280,7 @@ function phaseForRunState(runState: PiRunState): SessionPhase {
     case "ready":
       return "ready";
     case "running":
+    case "settling":
       return "streaming";
     case "awaiting_interaction":
       return "awaiting_permission";
@@ -401,6 +402,7 @@ export class WsBridge {
         existing.piSessionRelativePath;
       existing.archived = persisted?.archived ?? info.archived;
       existing.archivedAt = persisted?.archivedAt ?? info.archivedAt;
+      if (info.readiness) existing.historyLeafId = info.readiness.history.leafId;
       existing.state = stateFromInfo(
         info,
         info.readiness,
@@ -423,7 +425,11 @@ export class WsBridge {
     const storeDir = this.store?.getSessionDirectory(info.sessionId) ?? undefined;
     const inferredSessionDir = basename(info.cwd) === "workspace" ? dirname(info.cwd) : undefined;
     const historyEntries = info.readiness
-      ? piSessionEntriesToHistory(info.readiness.history.entries, info.generation)
+      ? piSessionEntriesToHistory(
+          info.readiness.history.entries,
+          info.generation,
+          info.readiness.history.leafId,
+        )
       : [];
     const session: Session = {
       id: info.sessionId,
@@ -446,6 +452,7 @@ export class WsBridge {
       firstUserPromptSeen: historyEntries.some(
         (entry) => entry.event.type === "agent_message" && entry.event.message.role === "user",
       ),
+      historyLeafId: info.readiness?.history.leafId,
       stateMachine: new SessionStateMachine(info.sessionId, phaseForRunState(state.runState)),
     };
     this.wireStateMachine(session);
@@ -871,7 +878,12 @@ export class WsBridge {
     }
   }
 
-  private publishRunState(session: Session, runState: PiRunState, reason?: string): void {
+  private publishRunState(
+    session: Session,
+    runState: PiRunState,
+    reason?: string,
+    detail?: Extract<BrowserIncomingMessage, { type: "run_state" }>["detail"],
+  ): void {
     session.state.runState = runState;
     session.state.isCompacting = runState === "compacting";
     this.projectRunState(session, runState, `pi_${runState}`);
@@ -881,6 +893,7 @@ export class WsBridge {
       generation: session.state.generation,
       timestamp: Date.now(),
       reason,
+      detail,
       usage: session.state.usage,
     };
     this.broadcastToSession(session.id, event);
@@ -964,6 +977,7 @@ export class WsBridge {
                   }
                 : undefined,
             stopReason: message.message.stopReason ?? null,
+            ...(message.message.error ? { error: message.message.error } : {}),
           },
         };
         const nextUsage = usageFromPiMessage(message.message.usage);
@@ -1158,17 +1172,21 @@ export class WsBridge {
           message.state === "idle" || message.state === "aborted"
             ? "ready"
             : message.state === "retrying"
-              ? "reconnecting"
+              ? "running"
               : message.state;
         this.publishRunState(
           session,
           state,
           typeof message.detail === "string" ? message.detail : undefined,
+          typeof message.detail === "object" && message.detail !== null
+            ? (message.detail as Extract<BrowserIncomingMessage, { type: "run_state" }>["detail"])
+            : undefined,
         );
         return;
       }
       case "history_snapshot": {
-        const entries = piSessionEntriesToHistory(message.entries, generation);
+        session.historyLeafId = message.leaf_id;
+        const entries = piSessionEntriesToHistory(message.entries, generation, message.leaf_id);
         this.broadcastToSession(session.id, {
           type: "history_snapshot",
           generation,
@@ -1181,6 +1199,9 @@ export class WsBridge {
         });
         return;
       }
+      case "history_leaf":
+        session.historyLeafId = message.leaf_id;
+        return;
       case "pi_state": {
         if (message.sessionId && message.sessionId !== session.id) {
           this.publishError(
@@ -1214,6 +1235,13 @@ export class WsBridge {
         return;
       }
       case "extension_event":
+        this.broadcastToSession(session.id, {
+          type: "pi_extension_event",
+          generation,
+          event: message.event,
+          payload: message.payload,
+          timestamp: Date.now(),
+        });
         if (message.event === "error") {
           this.publishError(
             session,
@@ -1222,6 +1250,15 @@ export class WsBridge {
             false,
           );
         }
+        return;
+      case "queue_update":
+        this.broadcastToSession(session.id, {
+          type: "pi_queue",
+          generation,
+          steering: message.steering,
+          followUp: message.follow_up,
+          timestamp: Date.now(),
+        });
         return;
     }
   }
@@ -1621,7 +1658,11 @@ export class WsBridge {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const document = await readPiSessionDocument(options);
-        return piSessionEntriesToHistory(document.entries, session.state.generation);
+        return piSessionEntriesToHistory(
+          document.entries,
+          session.state.generation,
+          session.historyLeafId ?? document.entries.at(-1)?.id,
+        );
       } catch (error) {
         if (
           attempt === 0 &&

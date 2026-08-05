@@ -169,6 +169,65 @@ describe("Pi WebSocket transport", () => {
     ).toMatchObject({ toolName: "read", status: "completed" });
   });
 
+  it("retains provider errors on terminal assistant messages", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "agent_message",
+      generation: 1,
+      message: {
+        id: "assistant-error",
+        role: "assistant",
+        content: [],
+        error: "Provider request failed",
+        timestamp: 10,
+      },
+      seq: 2,
+    });
+    expect(useStore.getState().messages.get("s1")?.[0]).toMatchObject({
+      id: "assistant-error",
+      error: "Provider request failed",
+    });
+  });
+
+  it("ignores a late delta after the authoritative terminal assistant message", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "message_delta",
+      generation: 1,
+      messageId: "assistant-1",
+      role: "assistant",
+      delta: { kind: "text", contentIndex: 0, delta: "draft" },
+      timestamp: 10,
+      seq: 2,
+    });
+    fireMessage({
+      type: "agent_message",
+      generation: 1,
+      message: {
+        id: "assistant-1",
+        role: "assistant",
+        content: [{ type: "text", text: "Final answer" }],
+        timestamp: 11,
+      },
+      seq: 3,
+    });
+    fireMessage({
+      type: "message_delta",
+      generation: 1,
+      messageId: "assistant-1",
+      role: "assistant",
+      delta: { kind: "text", contentIndex: 0, delta: " late" },
+      timestamp: 12,
+      seq: 4,
+    });
+
+    expect(useStore.getState().messages.get("s1")?.[0]).toMatchObject({
+      id: "assistant-1",
+      content: "Final answer",
+    });
+    expect(useStore.getState().messages.get("s1")?.[0]?.isStreaming).not.toBe(true);
+  });
+
   it("tracks ask interactions and submitted responses", () => {
     fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
     fireMessage({
@@ -212,6 +271,42 @@ describe("Pi WebSocket transport", () => {
     });
     expect(useStore.getState().pendingInteractions.has("s1")).toBe(false);
     expect(useStore.getState().completedInteractions.get("s1")).toHaveLength(1);
+  });
+
+  it("projects Pi queues and trusted extension events while rejecting stale generations", () => {
+    fireMessage({ type: "session_init", session: makeSession(2), seq: 1 });
+    fireMessage({
+      type: "pi_queue",
+      generation: 2,
+      steering: ["answer current question"],
+      followUp: ["continue after approval"],
+      timestamp: 10,
+      seq: 2,
+    });
+    fireMessage({
+      type: "pi_extension_event",
+      generation: 2,
+      event: "error",
+      payload: { error: "extension failed" },
+      timestamp: 11,
+      seq: 3,
+    });
+    fireMessage({
+      type: "pi_queue",
+      generation: 1,
+      steering: ["stale"],
+      followUp: [],
+      timestamp: 12,
+      seq: 4,
+    });
+
+    expect(useStore.getState().agentActivity.get("s1")).toMatchObject({
+      generation: 2,
+      queue: { steering: ["answer current question"], followUp: ["continue after approval"] },
+      extensionEvent: { event: "error" },
+      latestError: "extension failed",
+      attention: "blocked",
+    });
   });
 
   it("rebuilds pending interactions from a reset Pi history snapshot", () => {
@@ -282,6 +377,48 @@ describe("Pi WebSocket transport", () => {
       seq: 2,
     });
     expect(useStore.getState().messages.get("s1") ?? []).toHaveLength(0);
+  });
+
+  it("does not render managed task extension or queue envelopes as chat messages", () => {
+    fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
+    fireMessage({
+      type: "pi_extension_event",
+      generation: 1,
+      event: "notify",
+      payload: { message: "managed task progress" },
+      timestamp: 10,
+      seq: 2,
+    });
+    fireMessage({
+      type: "pi_queue",
+      generation: 1,
+      steering: ["managed task progress"],
+      followUp: [],
+      timestamp: 11,
+      seq: 3,
+    });
+
+    expect(useStore.getState().messages.get("s1") ?? []).toEqual([]);
+  });
+
+  it("re-enables a pending interaction when a new Pi generation replaces its sender", () => {
+    fireMessage({ type: "session_init", session: makeSession(1), seq: 1 });
+    useStore.getState().addInteraction("s1", {
+      id: "ask-retry",
+      kind: "ask",
+      toolCallId: "tool-retry",
+      questions: [],
+    });
+    useStore.getState().markInteractionSubmitting("s1", "ask-retry", {
+      clientMsgId: "client-retry",
+      generation: 1,
+      submittedAt: 1,
+    });
+
+    fireMessage({ type: "session_init", session: makeSession(2), seq: 2 });
+
+    expect(useStore.getState().pendingInteractions.get("s1")?.has("ask-retry")).toBe(true);
+    expect(useStore.getState().interactionSubmissions.has("s1")).toBe(false);
   });
 
   it("rejects the removed browser protocol instead of decoding it", () => {
@@ -372,6 +509,15 @@ describe("Pi WebSocket transport", () => {
       execution: "background",
       status: "running",
     });
+
+    fireMessage({
+      type: "run_state",
+      generation: 1,
+      state: "settling",
+      timestamp: 12.5,
+    });
+    expect(useStore.getState().runActive.get("s1")).toBe(true);
+    expect(useStore.getState().sessions.get("s1")?.runState).toBe("settling");
 
     fireMessage({
       type: "run_state",

@@ -237,6 +237,40 @@ describe("InteractionCard", () => {
       }),
     );
     expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().pendingInteractions.has("session-1")).toBe(false);
+  });
+
+  it("keeps a submitted interaction visible until a matching runtime acknowledgement arrives", () => {
+    const interaction: InteractionRequest = {
+      id: "ask-ack",
+      kind: "ask",
+      toolCallId: "tool-ack",
+      questions: [
+        {
+          id: "question-0",
+          question: "Choose",
+          options: [{ id: "yes", label: "Yes" }],
+          allowMultiple: false,
+          allowFreeText: true,
+        },
+      ],
+    };
+    useStore.getState().addInteraction("session-1", interaction);
+    render(<InteractionCard interaction={interaction} sessionId="session-1" inline />);
+    fireEvent.click(screen.getByRole("radio", { name: /Yes$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /提交|Submit/ }));
+
+    expect(useStore.getState().pendingInteractions.get("session-1")?.has("ask-ack")).toBe(true);
+    expect(useStore.getState().interactionSubmissions.get("session-1")?.has("ask-ack")).toBe(true);
+
+    useStore.getState().completeInteraction("session-1", {
+      requestId: "ask-ack",
+      kind: "ask",
+      status: "submitted",
+      answers: [{ questionId: "question-0", selectedOptionIds: ["yes"] }],
+    });
+    expect(useStore.getState().pendingInteractions.has("session-1")).toBe(false);
+    expect(useStore.getState().interactionSubmissions.has("session-1")).toBe(false);
   });
 
   it("updates the default plan title when the mounted UI language changes", () => {

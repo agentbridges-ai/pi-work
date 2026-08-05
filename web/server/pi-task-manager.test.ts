@@ -1,4 +1,13 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -38,9 +47,17 @@ const managers: PiTaskManager[] = [];
 afterEach(async () => {
   await Promise.allSettled(managers.splice(0).map((manager) => manager.dispose()));
   for (const root of roots.splice(0)) {
+    restoreWriteAccess(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function restoreWriteAccess(path: string): void {
+  const entry = lstatSync(path);
+  chmodSync(path, entry.isDirectory() ? 0o700 : 0o600);
+  if (!entry.isDirectory()) return;
+  for (const child of readdirSync(path)) restoreWriteAccess(join(path, child));
+}
 
 function brokerContext(signal = new AbortController().signal): PiBrokerRequestContext {
   return {
@@ -87,7 +104,9 @@ function sealManagedResources(path: string): void {
 }
 
 function fixture(rootMode: "agent" | "plan" = "agent") {
-  const root = mkdtempSync(join(tmpdir(), "piwork-task-manager-"));
+  // macOS exposes /tmp as a symlink to /private/tmp. The production layout
+  // guard correctly rejects symlink aliases, so canonicalize the test root.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "piwork-task-manager-")));
   roots.push(root);
   const dataRoot = join(root, "data");
   const tenantRoot = join(dataRoot, "tenant");
@@ -266,6 +285,7 @@ describe("PiTaskManager", () => {
         depth: 1,
         prompt: "inspect the workspace",
         background: true,
+        originToolCallId: "task-call-1",
         model: {
           key: "forged/model",
           provider: "forged",
@@ -333,6 +353,16 @@ describe("PiTaskManager", () => {
     expect(launch.sandbox.settings.network).toEqual(context.sandboxSettings.network);
 
     await context.manager.stopTask(result.taskId);
+    expect(context.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          taskId: result.taskId,
+          originToolCallId: "task-call-1",
+          durationMs: expect.any(Number),
+          description: "inspect the workspace",
+        }),
+      ]),
+    );
   });
 
   it("locks inherited Plan tasks to read-only Agent Space", async () => {
@@ -483,6 +513,13 @@ describe("PiTaskManager", () => {
       } as unknown as PiRpcNotification,
       {} as PiSessionInfo,
     );
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    notify({ type: "agent_settled" } as unknown as PiRpcNotification, {} as PiSessionInfo);
 
     await expect(pending).resolves.toMatchObject({
       status: "completed",

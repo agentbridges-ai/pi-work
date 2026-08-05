@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../types.js";
 import { useStore } from "../store.js";
@@ -78,7 +79,37 @@ describe("Composer Pi protocol", () => {
       session.sessionId,
       expect.objectContaining({ type: "set_mode", mode: "plan" }),
     );
-    expect(useStore.getState().sessions.get(session.sessionId)?.mode).toBe("plan");
+    expect(useStore.getState().sessions.get(session.sessionId)?.mode).toBe("agent");
+    expect(screen.getByTestId("composer-plan-toggle")).toHaveAttribute("aria-pressed", "false");
+
+    act(() => useStore.getState().updateSession(session.sessionId, { mode: "plan" }));
+
+    expect(screen.getByTestId("composer-plan-toggle")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("offers an explicit acknowledgement-driven Plan control", () => {
+    render(<Composer sessionId={session.sessionId} />);
+    const toggle = screen.getByRole("button", { name: /进入计划模式|Enter plan mode/ });
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("composer-plan-status")).toHaveTextContent(/切换中|Switching/);
+  });
+
+  it("does not carry a pending mode acknowledgement into another session", () => {
+    const otherSession = { ...session, sessionId: "session-2" };
+    useStore.getState().addSession(otherSession);
+    useStore.getState().setConnectionStatus(otherSession.sessionId, "connected");
+    const view = render(<Composer sessionId={session.sessionId} />);
+
+    fireEvent.click(screen.getByTestId("composer-plan-toggle"));
+    expect(screen.getByTestId("composer-plan-toggle")).toBeDisabled();
+
+    view.rerender(<Composer sessionId={otherSession.sessionId} />);
+
+    expect(screen.getByTestId("composer-plan-toggle")).not.toBeDisabled();
+    expect(screen.getByTestId("composer-plan-status")).toHaveTextContent(/计划|Plan/);
   });
 
   it("uses abort for active runs", () => {

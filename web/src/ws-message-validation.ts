@@ -17,6 +17,7 @@ const RUN_STATES = new Set<PiRunState>([
   "starting",
   "ready",
   "running",
+  "settling",
   "awaiting_interaction",
   "compacting",
   "reconnecting",
@@ -171,15 +172,32 @@ function isTaskExecution(value: unknown): boolean {
     isRecord(value) &&
     hasOnlyKeys(
       value,
-      new Set(["taskId", "name", "description", "execution", "status", "depth", "progress"]),
+      new Set([
+        "taskId",
+        "originatingToolCallId",
+        "name",
+        "description",
+        "execution",
+        "status",
+        "depth",
+        "progress",
+        "durationMs",
+        "summary",
+      ]),
     ) &&
     isNonEmptyString(value.taskId) &&
+    (value.originatingToolCallId === undefined || isNonEmptyString(value.originatingToolCallId)) &&
     isNonEmptyString(value.name) &&
     (value.description === undefined || isString(value.description)) &&
     (value.execution === "foreground" || value.execution === "background") &&
     ["running", "completed", "failed", "stopped"].includes(String(value.status)) &&
     isGeneration(value.depth) &&
-    (value.progress === undefined || isString(value.progress))
+    (value.progress === undefined || isString(value.progress)) &&
+    (value.durationMs === undefined ||
+      (typeof value.durationMs === "number" &&
+        Number.isFinite(value.durationMs) &&
+        value.durationMs >= 0)) &&
+    (value.summary === undefined || isString(value.summary))
   );
 }
 
@@ -446,6 +464,22 @@ export function isBrowserIncomingMessage(
       );
     case "mcp_status":
       return Array.isArray(value.servers) && value.servers.every(isMcpServer);
+    case "pi_queue":
+      return (
+        isGeneration(value.generation) &&
+        Array.isArray(value.steering) &&
+        value.steering.every(isString) &&
+        Array.isArray(value.followUp) &&
+        value.followUp.every(isString) &&
+        typeof value.timestamp === "number"
+      );
+    case "pi_extension_event":
+      return (
+        isGeneration(value.generation) &&
+        isNonEmptyString(value.event) &&
+        isRecord(value.payload) &&
+        typeof value.timestamp === "number"
+      );
     case "user_space_request":
     case "user_space_mutation_request":
       return (

@@ -586,6 +586,7 @@ describe("Piwork trusted Pi extension runtime", () => {
         operation: "task.start",
         payload: expect.objectContaining({
           background: true,
+          originToolCallId: "call-1",
           depth: 1,
           maxDepth: 2,
           maxParallel: 4,

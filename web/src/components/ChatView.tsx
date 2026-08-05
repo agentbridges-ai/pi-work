@@ -18,6 +18,7 @@ import { disconnectAll } from "../ws.js";
 import { MessageFeed } from "./MessageFeed.js";
 import { Composer } from "./Composer.js";
 import { InteractionCard } from "./InteractionCard.js";
+import { AgentActivityBar } from "./AgentActivityBar.js";
 import { BrowserBridgePanel } from "./BrowserBridgePanel.js";
 import { UserSettingsDialog } from "./UserSettingsDialog.js";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog.js";
@@ -1018,6 +1019,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
               className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
             >
               <div className="pointer-events-auto">
+                <AgentActivityBar sessionId={sessionId} />
                 {interactions.length > 0 ? (
                   <div className="shrink-0 px-3 pb-4 pt-3 sm:px-6 sm:pb-5">
                     <div className="mx-auto w-full max-w-[var(--piwork-composer-width)] space-y-2">

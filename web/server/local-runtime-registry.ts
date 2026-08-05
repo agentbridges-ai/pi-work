@@ -445,14 +445,18 @@ export class LocalRuntimeRegistry {
         wsBridge.broadcastToSession(sessionId, {
           type: "tool_execution",
           generation: typeof event.generation === "number" ? event.generation : 0,
-          toolCallId: `task:${String(event.taskId || "unknown")}`,
+          toolCallId: String(event.originToolCallId || event.taskId || "unknown"),
           toolName: "task",
           status,
           timestamp: Date.now(),
           progress: typeof event.progress === "string" ? event.progress : undefined,
           task: {
             taskId: String(event.taskId || ""),
+            ...(typeof event.originToolCallId === "string"
+              ? { originatingToolCallId: event.originToolCallId }
+              : {}),
             name: "Managed Pi task",
+            ...(typeof event.description === "string" ? { description: event.description } : {}),
             execution: event.background ? "background" : "foreground",
             status:
               event.status === "starting"
@@ -460,6 +464,8 @@ export class LocalRuntimeRegistry {
                 : (event.status as "running" | "completed" | "failed" | "stopped"),
             depth: typeof event.depth === "number" ? event.depth : 1,
             progress: typeof event.progress === "string" ? event.progress : undefined,
+            ...(typeof event.durationMs === "number" ? { durationMs: event.durationMs } : {}),
+            ...(typeof event.summary === "string" ? { summary: event.summary } : {}),
           },
         });
       },

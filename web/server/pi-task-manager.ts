@@ -35,6 +35,7 @@ interface ParentContext {
 
 interface ActiveTask {
   taskId: string;
+  originToolCallId?: string;
   parent: ParentContext;
   sessionId: string;
   generation: number;
@@ -42,7 +43,9 @@ interface ActiveTask {
   launcher: PiTaskLauncher;
   background: boolean;
   status: "starting" | "running" | "completed" | "failed" | "stopped";
+  description: string;
   finalText: string;
+  startedAt: number;
   completion: Promise<unknown>;
   finish(value: unknown): void;
   fail(error: Error): void;
@@ -154,10 +157,14 @@ export class PiTaskManager {
       rootSessionId: task.parent.rootSessionId,
       generation: this.options.rootGeneration,
       taskId: task.taskId,
+      ...(task.originToolCallId ? { originToolCallId: task.originToolCallId } : {}),
       parentSessionId: task.parent.sessionId,
       status: task.status,
       background: task.background,
       depth: task.parent.depth + 1,
+      description: task.description,
+      durationMs: Math.max(0, Date.now() - task.startedAt),
+      ...(task.finalText ? { summary: task.finalText } : {}),
       ...(progress ? { progress } : {}),
     });
   }
@@ -208,6 +215,10 @@ export class PiTaskManager {
       throw new Error("Managed task parallel limit reached");
     }
     const prompt = requiredString(payload.prompt, "prompt");
+    const originToolCallId =
+      typeof payload.originToolCallId === "string" && payload.originToolCallId.length > 0
+        ? requiredString(payload.originToolCallId, "originToolCallId", 256)
+        : undefined;
     const background = payload.background === true;
     const readOnly = parent.mode === "plan" || payload.readOnly === true || payload.mode === "plan";
     const mode: AgentMode = readOnly ? "plan" : "agent";
@@ -246,6 +257,7 @@ export class PiTaskManager {
     });
     const task: ActiveTask = {
       taskId,
+      originToolCallId,
       parent,
       sessionId,
       generation,
@@ -253,7 +265,9 @@ export class PiTaskManager {
       launcher,
       background,
       status: "starting",
+      description: prompt,
       finalText: "",
+      startedAt: Date.now(),
       completion,
       finish,
       fail,
@@ -307,7 +321,10 @@ export class PiTaskManager {
         }
       } else if (notification.type === "tool_execution_update") {
         this.emit(task, `tool:${notification.toolName}`);
-      } else if (notification.type === "agent_end" && !notification.willRetry) {
+      } else if (
+        notification.type === "agent_settled" &&
+        (task.status === "starting" || task.status === "running")
+      ) {
         task.status = "completed";
         this.emit(task, task.finalText || "completed");
         task.finish({

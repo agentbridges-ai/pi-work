@@ -177,6 +177,26 @@ describe("Pi-only WsBridge", () => {
     expect(session.offlineQueue).toEqual([]);
   });
 
+  it("keeps agent_end settling active until native Pi emits agent_settled", () => {
+    const bridge = new WsBridge();
+    const runtime = adapterFixture();
+    const session = bridge.attachPiAdapter(info(), runtime.adapter, undefined, readiness());
+    const ws = socket();
+    bridge.handleBrowserOpen(ws, "session-1");
+
+    runtime.adapter.handleNotification({ type: "agent_start" });
+    runtime.adapter.handleNotification({ type: "agent_end", messages: [], willRetry: false });
+    expect(session.state.runState).toBe("settling");
+    expect(session.stateMachine.phase).toBe("streaming");
+    expect(payloads(ws)).toContainEqual(
+      expect.objectContaining({ type: "run_state", state: "settling" }),
+    );
+
+    runtime.adapter.handleNotification({ type: "agent_settled" });
+    expect(session.state.runState).toBe("ready");
+    expect(session.stateMachine.phase).toBe("ready");
+  });
+
   it("drops stale generations before de-duplication or Pi delivery", () => {
     const bridge = new WsBridge();
     const runtime = adapterFixture();
@@ -525,6 +545,7 @@ describe("Pi-only WsBridge", () => {
 
     const compacting = readiness();
     compacting.state.isCompacting = true;
+    compacting.history.leafId = "leaf-4";
     const restored = bridge.restoreSession(
       {
         ...info(4),
@@ -544,6 +565,72 @@ describe("Pi-only WsBridge", () => {
     expect(restored.state.runState).toBe("compacting");
     expect(restored.archived).toBe(true);
     expect(restored.archivedAt).toBe(20);
+    expect(restored.historyLeafId).toBe("leaf-4");
+  });
+
+  it("keeps the current native history leaf synchronized across appends and readiness refreshes", () => {
+    const bridge = new WsBridge();
+    const runtime = adapterFixture();
+    const ready = readiness();
+    ready.history.leafId = "leaf-1";
+    const session = bridge.attachPiAdapter(info(), runtime.adapter, undefined, ready);
+
+    runtime.adapter.handleNotification({
+      type: "entry_appended",
+      entry: { id: "leaf-2", parentId: "leaf-1" },
+    });
+    expect(session.historyLeafId).toBe("leaf-2");
+
+    const refreshed = readiness();
+    refreshed.history.leafId = "leaf-3";
+    expect(bridge.restoreSession({ ...info(4), readiness: refreshed })).toBe(session);
+    expect(session.historyLeafId).toBe("leaf-3");
+  });
+
+  it("publishes ready after manual compaction cancellation and preserves retry terminal semantics", () => {
+    const bridge = new WsBridge();
+    const runtime = adapterFixture();
+    const session = bridge.attachPiAdapter(info(), runtime.adapter, undefined, readiness());
+    const ws = socket();
+    bridge.handleBrowserOpen(ws, "session-1");
+
+    runtime.adapter.handleNotification({ type: "compaction_start", reason: "manual" });
+    runtime.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "manual",
+      aborted: true,
+      willRetry: false,
+    });
+    expect(session.state.runState).toBe("ready");
+    expect(payloads(ws).at(-1)).toMatchObject({
+      type: "run_state",
+      state: "ready",
+      detail: {
+        kind: "compaction",
+        phase: "end",
+        reason: "manual",
+        aborted: true,
+        willRetry: false,
+      },
+    });
+
+    runtime.adapter.handleNotification({
+      type: "auto_retry_end",
+      attempt: 1,
+      success: false,
+      finalError: "Retry cancelled",
+    });
+    expect(session.state.runState).toBe("settling");
+    expect(payloads(ws).at(-1)).toMatchObject({
+      type: "run_state",
+      state: "settling",
+      detail: {
+        kind: "provider_retry",
+        phase: "end",
+        success: false,
+        cancelled: true,
+      },
+    });
   });
 
   it("projects every Pi adapter event into Pi-shaped browser state", async () => {

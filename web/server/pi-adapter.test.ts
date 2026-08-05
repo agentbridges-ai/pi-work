@@ -83,6 +83,222 @@ describe("PiAdapter", () => {
     ]);
   });
 
+  it("only projects completed assistant messages and preserves provider failures", () => {
+    const value = fixture();
+    value.adapter.handleNotification({
+      type: "message_end",
+      message: { role: "user", content: "do not echo" },
+    });
+    value.adapter.handleNotification({
+      type: "message_end",
+      message: { role: "toolResult", content: "do not render" },
+    });
+    value.adapter.handleNotification({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [],
+        errorMessage: "provider unavailable",
+      },
+    });
+    expect(value.messages).toEqual([
+      {
+        type: "agent_message",
+        message: {
+          id: "pi-3-message-1",
+          role: "assistant",
+          content: [],
+          error: "provider unavailable",
+        },
+      },
+    ]);
+  });
+
+  it("projects Pi queue, extension, and provider retry events without transport reconnect semantics", () => {
+    const value = fixture();
+    value.adapter.handleNotification({
+      type: "queue_update",
+      steering: ["now"],
+      followUp: ["later"],
+    });
+    value.adapter.handleNotification({
+      type: "auto_retry_start",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 200,
+      errorMessage: "rate limited",
+    });
+    value.adapter.handleNotification({
+      type: "extension_ui_request",
+      id: "notice",
+      method: "notify",
+      message: "hello",
+    });
+    expect(value.messages).toContainEqual({
+      type: "queue_update",
+      steering: ["now"],
+      follow_up: ["later"],
+    });
+    expect(value.messages).toContainEqual({
+      type: "run_state",
+      state: "retrying",
+      detail: {
+        kind: "provider_retry",
+        phase: "start",
+        attempt: 1,
+        maxAttempts: 3,
+        delayMs: 200,
+        error: "rate limited",
+      },
+    });
+    expect(value.messages).toContainEqual({
+      type: "extension_event",
+      event: "notify",
+      payload: expect.objectContaining({ id: "notice", method: "notify" }),
+    });
+  });
+
+  it("keeps compaction abort distinct from an agent abort and completes provider retry without invented fields", () => {
+    const value = fixture();
+    value.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "threshold",
+      aborted: true,
+      willRetry: false,
+    });
+    value.adapter.handleNotification({
+      type: "auto_retry_end",
+      attempt: 2,
+      success: false,
+      finalError: "provider unavailable",
+    });
+    expect(value.messages).toContainEqual({
+      type: "run_state",
+      state: "settling",
+      detail: {
+        kind: "compaction",
+        phase: "end",
+        reason: "threshold",
+        aborted: true,
+        willRetry: false,
+        error: undefined,
+      },
+    });
+    expect(value.messages).toContainEqual({
+      type: "run_state",
+      state: "error",
+      detail: {
+        kind: "provider_retry",
+        phase: "end",
+        attempt: 2,
+        success: false,
+        error: "provider unavailable",
+      },
+    });
+  });
+
+  it("returns to idle when standalone manual compaction is cancelled", () => {
+    const value = fixture();
+    value.adapter.handleNotification({ type: "compaction_start", reason: "manual" });
+    value.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "manual",
+      aborted: true,
+      willRetry: false,
+    });
+
+    expect(value.messages.at(-1)).toEqual({
+      type: "run_state",
+      state: "idle",
+      detail: {
+        kind: "compaction",
+        phase: "end",
+        reason: "manual",
+        aborted: true,
+        willRetry: false,
+        error: undefined,
+      },
+    });
+  });
+
+  it("marks a cancelled provider retry as settling until Pi reports agent_settled", () => {
+    const value = fixture();
+    value.adapter.handleNotification({
+      type: "auto_retry_end",
+      attempt: 2,
+      success: false,
+      finalError: "Retry cancelled",
+    });
+
+    expect(value.messages.at(-1)).toEqual({
+      type: "run_state",
+      state: "settling",
+      detail: {
+        kind: "provider_retry",
+        phase: "end",
+        attempt: 2,
+        success: false,
+        cancelled: true,
+      },
+    });
+    expect(value.messages.at(-1)).not.toHaveProperty("detail.error");
+
+    value.adapter.handleNotification({ type: "agent_settled" });
+    expect(value.messages.at(-1)).toEqual({ type: "run_state", state: "idle" });
+  });
+
+  it("ends branch-summary retry but keeps compaction retry active until compaction_end", () => {
+    const branch = fixture();
+    branch.adapter.handleNotification({
+      type: "summarization_retry_attempt_start",
+      source: "branchSummary",
+    });
+    branch.adapter.handleNotification({ type: "summarization_retry_finished" });
+    expect(branch.messages.at(-1)).toEqual({
+      type: "run_state",
+      state: "idle",
+      detail: {
+        kind: "summarization_retry",
+        phase: "finished",
+        source: "branchSummary",
+      },
+    });
+
+    const compaction = fixture();
+    compaction.adapter.handleNotification({ type: "compaction_start", reason: "threshold" });
+    compaction.adapter.handleNotification({
+      type: "summarization_retry_attempt_start",
+      source: "compaction",
+      reason: "threshold",
+    });
+    compaction.adapter.handleNotification({ type: "summarization_retry_finished" });
+    expect(compaction.messages.at(-1)).toEqual({
+      type: "run_state",
+      state: "compacting",
+      detail: {
+        kind: "summarization_retry",
+        phase: "finished",
+        source: "compaction",
+      },
+    });
+
+    compaction.adapter.handleNotification({
+      type: "compaction_end",
+      reason: "threshold",
+      aborted: false,
+      willRetry: false,
+    });
+    expect(compaction.messages.at(-1)).toMatchObject({ type: "run_state", state: "idle" });
+  });
+
+  it("tracks the latest native Pi history leaf from entry_appended", () => {
+    const value = fixture();
+    value.adapter.handleNotification({ type: "entry_appended", entry: { id: "leaf-2" } });
+    value.adapter.handleNotification({ type: "entry_appended", entry: { id: "" } });
+
+    expect(value.messages).toEqual([{ type: "history_leaf", leaf_id: "leaf-2" }]);
+  });
+
   it("routes extension UI through interaction request/response", () => {
     const value = fixture();
     value.adapter.handleNotification({
@@ -139,6 +355,18 @@ describe("PiAdapter", () => {
       "run_state",
     ]);
     expect(JSON.stringify(value.messages)).not.toMatch(/claude|sdk_message/iu);
+  });
+
+  it("enters settling at agent_end and becomes idle only at agent_settled", () => {
+    const value = fixture();
+    value.adapter.handleNotification({ type: "agent_start" });
+    value.adapter.handleNotification({ type: "agent_end", messages: [], willRetry: false });
+    value.adapter.handleNotification({ type: "agent_settled" });
+    expect(value.messages).toEqual([
+      { type: "run_state", state: "running" },
+      { type: "run_state", state: "settling" },
+      { type: "run_state", state: "idle" },
+    ]);
   });
 
   it("routes every browser command and publishes resulting Pi state", async () => {
@@ -481,6 +709,7 @@ describe("PiAdapter", () => {
     for (const notification of notifications) value.adapter.handleNotification(notification);
 
     expect(value.messages).toContainEqual({ type: "run_state", state: "retrying" });
+    expect(value.messages).toContainEqual({ type: "run_state", state: "settling" });
     expect(value.messages).toContainEqual({
       type: "message_delta",
       message_id: "pi-3-message-1",

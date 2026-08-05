@@ -447,7 +447,7 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
       readOnly: Type.Optional(Type.Boolean()),
     }),
     executionMode: "parallel",
-    async execute(_id, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
       if (!state.taskEndpoint) return failTool("Managed task broker is unavailable.");
       if (params.action === "stop") {
         if (!nonEmpty(params.taskId)) {
@@ -477,6 +477,7 @@ function registerTaskTool(pi: ExtensionAPI, state: ExtensionState): void {
         generation: state.payload.generation,
         operation: "task.start",
         payload: {
+          originToolCallId: toolCallId,
           prompt: params.prompt,
           background: params.background === true,
           readOnly: readOnly === true,

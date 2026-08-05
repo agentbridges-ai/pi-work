@@ -76,6 +76,8 @@ export interface Session {
     }
   >;
   firstUserPromptSeen: boolean;
+  /** Ephemeral Pi-selected history branch; JSONL itself remains authoritative. */
+  historyLeafId?: string | null;
 
   /** Kept as the server lifecycle projection used by routes and metrics. */
   stateMachine: SessionStateMachine;

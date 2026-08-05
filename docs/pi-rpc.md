@@ -196,6 +196,11 @@ There is no pending-permission compatibility state. Execution begins only after
 
 ## Browser protocol and recordings
 
+The exact browser projection, event classification, orthogonal runtime state,
+and development scenario requirements are defined in
+[`pi-native-projection.md`](./pi-native-projection.md). Live events, restored
+history, and recording replay must pass through that same projection contract.
+
 The browser protocol is Pi-shaped and accepts these core events:
 
 - `agent_message`

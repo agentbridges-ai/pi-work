@@ -392,6 +392,7 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
         status,
         taskId: "task-1",
         generation: 3,
+        originToolCallId: "origin-task-tool",
         background: true,
         depth: 2,
         progress: "halfway",
@@ -401,6 +402,7 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
       "session-1",
       expect.objectContaining({
         type: "tool_execution",
+        toolCallId: "origin-task-tool",
         generation: 3,
         task: expect.objectContaining({
           execution: "background",

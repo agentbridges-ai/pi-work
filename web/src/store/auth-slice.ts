@@ -33,6 +33,7 @@ function userScopedStateReset(): Partial<AppState> {
     streamingOutputTokens: new Map(),
     promptSuggestions: new Map(),
     pendingInteractions: new Map(),
+    interactionSubmissions: new Map(),
     completedInteractions: new Map(),
     sessionTasks: new Map(),
     sessionProcesses: new Map(),
@@ -50,6 +51,7 @@ function userScopedStateReset(): Partial<AppState> {
     preferencesLoaded: false,
     preferencesSaving: false,
     preferencesError: "",
+    agentActivity: new Map(),
   };
 }
 
