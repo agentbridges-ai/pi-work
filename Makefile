@@ -58,6 +58,7 @@ help:
 	  '  make verify-pi-only-runtime  Reject legacy Agent runtime surfaces' \
 	  '  make verify-actions-pinning  Reject mutable external GitHub Action references' \
 	  '  make verify-onlyoffice-release  Verify the pinned OnlyOffice descriptor' \
+	  '  make worktree-check       Run isolated worktree harness fixtures and read-only check' \
 	  '  make coverage-diff        Enforce 80% per-file diff coverage; whole-file for additions' \
 	  '  make test-e2e             Run Better Auth Playwright E2E tests' \
 	  '  make check                Run quality gates + targeted tests + production build' \
@@ -205,6 +206,11 @@ test-srt-pi:
 		echo 'Skipping Linux-only native Pi SRT smoke; run this target inside OrbStack/WSL2 Linux.'; \
 	fi
 
+.PHONY: worktree-check
+worktree-check:
+	@node scripts/governance/worktree-harness.test.mjs
+	@node scripts/governance/worktree-harness.mjs check
+
 .PHONY: verify verify-actions-pinning verify-onlyoffice-release verify-toolchain verify-pi-versions verify-pi-only-runtime agent-browser-verify backup-self-test typecheck apps-check test test-coverage test-targeted test-pi-rpc-contract coverage-diff test-e2e lint format format-check deadcode dry-check governance-check security-check landing-check release-check github-governance-check github-governance-apply check
 verify: install verify-toolchain verify-pi-versions verify-pi-upstream verify-pi-only-runtime verify-actions-pinning verify-onlyoffice-release agent-browser-verify governance-check security-check lint format-check deadcode dry-check typecheck test-coverage $(VERIFY_SRT_TARGETS) backup-self-test build
 
@@ -276,7 +282,7 @@ deadcode:
 	cd $(WEB_DIR) && bun run deadcode:check
 dry-check:
 	cd $(WEB_DIR) && bun run dry:check
-governance-check:
+governance-check: worktree-check
 	node ./scripts/governance/check-governance.mjs
 	node ./scripts/governance/governance-fixtures.mjs
 	node ./scripts/verify-github-actions-pinning.mjs

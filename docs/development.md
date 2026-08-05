@@ -6,6 +6,10 @@ the pinned Node + native Pi process inside one SRT per session. Better Auth +
 Postgres provides authentication; Piwork product state stays in tenant-scoped
 `data/`.
 
+并行开发的 worktree、任务 manifest、里程碑证据和主线程收口规则见
+[`docs/engineering/worktree-harness.md`](./engineering/worktree-harness.md)。根
+checkout 必须始终 clean/read-only；初始化和依赖安装都在独立 worktree 内完成。
+
 ```bash
 mise trust
 make mise-install
