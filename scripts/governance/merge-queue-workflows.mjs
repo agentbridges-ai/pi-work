@@ -52,6 +52,25 @@ function requirePattern(file, text, pattern, message) {
   if (!pattern.test(text)) failures.push(file + ": " + message);
 }
 
+function requireOnlyOfficeEventRange(file, text) {
+  for (const [side, pullRequestPath, mergeGroupPath] of [
+    ["BASE", "base.sha", "base_sha"],
+    ["HEAD", "head.sha", "head_sha"],
+  ]) {
+    const expression =
+      `ONLYOFFICE_INTEGRATION_EVENT_${side}_SHA: \${{ ` +
+      `github.event_name == 'pull_request' && github.event.pull_request.${pullRequestPath} || ` +
+      `github.event_name == 'merge_group' && github.event.merge_group.${mergeGroupPath} || ` +
+      "github.sha }}";
+    if (!text.includes(expression)) {
+      failures.push(
+        file +
+          `: OnlyOffice ${side.toLowerCase()} range must use PR metadata, merge-group metadata, or the current commit`,
+      );
+    }
+  }
+}
+
 if (!Array.isArray(policy.requiredChecks)) {
   failures.push("github-policy.json: requiredChecks must be an array");
 } else {
@@ -77,6 +96,7 @@ for (const [check, [file, job]] of Object.entries(requiredWorkflowJobs)) {
 }
 
 const deepVerify = readWorkflow(".github/workflows/deep-verify.yml");
+requireOnlyOfficeEventRange(".github/workflows/deep-verify.yml", deepVerify);
 requirePattern(
   ".github/workflows/deep-verify.yml",
   deepVerify,
@@ -105,6 +125,7 @@ requirePattern(
 );
 
 const verify = readWorkflow(".github/workflows/verify.yml");
+requireOnlyOfficeEventRange(".github/workflows/verify.yml", verify);
 requirePattern(
   ".github/workflows/verify.yml",
   verify,

@@ -237,6 +237,70 @@ describe("published OnlyOffice descriptor verification", () => {
     ).toBe(integrationBase);
   });
 
+  it("keeps OnlyOffice event ranges paired for PR, merge queue, and non-PR fixtures", () => {
+    const eventFixtures = [
+      {
+        name: "pull_request",
+        base: "github.event.pull_request.base.sha",
+        head: "github.event.pull_request.head.sha",
+      },
+      {
+        name: "merge_group",
+        base: "github.event.merge_group.base_sha",
+        head: "github.event.merge_group.head_sha",
+      },
+      { name: "other", base: "github.sha", head: "github.sha" },
+    ];
+    const expressions = {
+      base: eventFixtures
+        .map((fixture) =>
+          fixture.name === "other"
+            ? fixture.base
+            : `github.event_name == '${fixture.name}' && ${fixture.base}`,
+        )
+        .join(" || "),
+      head: eventFixtures
+        .map((fixture) =>
+          fixture.name === "other"
+            ? fixture.head
+            : `github.event_name == '${fixture.name}' && ${fixture.head}`,
+        )
+        .join(" || "),
+    };
+
+    for (const path of [".github/workflows/deep-verify.yml", ".github/workflows/verify.yml"]) {
+      const workflow = readFileSync(resolve(root, path), "utf8");
+      expect(workflow).toContain(
+        `ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA: \${{ ${expressions.base} }}`,
+      );
+      expect(workflow).toContain(
+        `ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA: \${{ ${expressions.head} }}`,
+      );
+    }
+
+    const integrationBase = base.repositories.Piwork.integrationBaseCommit;
+    const currentCommit = "c".repeat(40);
+    expect(
+      validateOnlyOfficeIntegrationBase(base, {
+        headCommit: currentCommit,
+        eventBaseCommit: currentCommit,
+        eventHeadCommit: currentCommit,
+        isAncestor: (ancestor: string, descendant: string) =>
+          ancestor === integrationBase && descendant === currentCommit,
+        mergeBase: () => integrationBase,
+        manifestChanged: false,
+      }),
+    ).toBe(integrationBase);
+    expect(() =>
+      validateOnlyOfficeIntegrationBase(base, {
+        headCommit: currentCommit,
+        eventHeadCommit: currentCommit,
+        isAncestor: (ancestor: string, descendant: string) =>
+          ancestor === integrationBase && descendant === currentCommit,
+      }),
+    ).toThrow("base and head commits must be provided together");
+  });
+
   it("requires the Piwork lockfile pin and rejects the removed self commit", () => {
     expect(() => validatePiworkReleaseInputs({ ...base, lockfiles: [] }, root)).toThrow(
       "web/bun.lock",
