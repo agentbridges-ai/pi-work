@@ -322,6 +322,10 @@ describe("published OnlyOffice descriptor verification", () => {
     expect(workflow).toContain('candidate_base_sha="$(git rev-parse refs/remotes/origin/main)"');
     expect(workflow).toContain('ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA="${candidate_base_sha}"');
     expect(workflow).toContain('ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA="${EXPECTED_HEAD_SHA}"');
+    expect(workflow).toContain('GITHUB_REF}" == "refs/heads/main"');
+    expect(readFileSync(resolve(root, ".github/workflows/verify.yml"), "utf8")).toContain(
+      'GITHUB_REF}" == "refs/heads/main"',
+    );
     expect(workflow).not.toMatch(/pull_request[\s\S]{0,300}--allow-candidate/);
     expect(makefile).toMatch(/^verify:.*verify-onlyoffice-release/m);
     for (const path of [".github/workflows/deep-verify.yml", ".github/workflows/verify.yml"]) {

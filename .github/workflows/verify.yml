@@ -55,10 +55,11 @@ jobs:
         # IPC canary instead of leaving the external coverage contract orphaned.
         run: |
           onlyoffice_release_verify_args=""
-          # Candidate descriptors are valid on pull requests while they are
-          # being staged; pushes to main remain strict and require supported
-          # lifecycle plus an immutable promotion receipt.
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && node -e '
+          # Pull requests and the main integration push may validate a staged
+          # candidate. Release tags and every other event remain strict; a
+          # candidate never moves stable or satisfies promotion evidence.
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ||
+                ( "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ) ]] && node -e '
             const fs = require("node:fs");
             const manifest = JSON.parse(fs.readFileSync("release/onlyoffice-release-manifest.json", "utf8"));
             process.exit(manifest.lifecycle === "candidate" ? 0 : 1);
