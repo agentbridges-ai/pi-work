@@ -8,6 +8,8 @@ on:
     paths:
       - ".github/workflows/deep-verify.yml"
       - ".github/actions/setup-toolchain/action.yml"
+      - "mise.toml"
+      - "mise.lock"
       - "Makefile"
       - "package.json"
       - "pnpm-lock.yaml"

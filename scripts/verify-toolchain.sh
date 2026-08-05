@@ -4,10 +4,34 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSIONS_FILE="$ROOT_DIR/.tool-versions"
 
-expected_version() {
+command -v mise >/dev/null 2>&1 || { echo '[toolchain] mise is required' >&2; exit 1; }
+
+legacy_version() {
   local tool="$1"
   awk -v tool="$tool" '$1 == tool { print $2; exit }' "$VERSIONS_FILE"
 }
+
+mise_version() {
+  local tool="$1"
+  (cd "$ROOT_DIR" && mise config get "tools.$tool" --raw)
+}
+
+expected_version() {
+  local tool="$1"
+  mise_version "$tool"
+}
+
+for tool_pair in 'bun:bun' 'nodejs:node' 'postgres:postgres'; do
+  legacy_tool="${tool_pair%%:*}"
+  mise_tool="${tool_pair##*:}"
+  expected="$(mise_version "$mise_tool")"
+  legacy="$(legacy_version "$legacy_tool")"
+  if [[ -z "$expected" || "$legacy" != "$expected" ]]; then
+    printf '[toolchain] .tool-versions is out of sync with mise.toml for %s: expected %s, got %s\n' \
+      "$mise_tool" "${expected:-<missing pin>}" "${legacy:-<missing mirror>}" >&2
+    exit 1
+  fi
+done
 
 check_exact() {
   local label="$1"
@@ -20,11 +44,9 @@ check_exact() {
   printf '[toolchain] %s %s\n' "$label" "$actual"
 }
 
-command -v bun >/dev/null 2>&1 || { echo '[toolchain] bun is required' >&2; exit 1; }
-command -v node >/dev/null 2>&1 || { echo '[toolchain] node is required' >&2; exit 1; }
 command -v pg_dump >/dev/null 2>&1 || { echo '[toolchain] PostgreSQL client tools are required' >&2; exit 1; }
 
-check_exact bun "$(expected_version bun)" "$(bun --version)"
+check_exact bun "$(expected_version bun)" "$(cd "$ROOT_DIR" && mise exec --locked --no-deps -- bun --version)"
 
 version_at_least() {
   awk -v actual="$1" -v minimum="$2" 'BEGIN {
@@ -37,7 +59,7 @@ version_at_least() {
   }'
 }
 
-actual_node="$(node --version | sed 's/^v//')"
+actual_node="$(cd "$ROOT_DIR" && mise exec --locked --no-deps -- node --version | sed 's/^v//')"
 minimum_node='22.19.0'
 version_at_least "$actual_node" "$minimum_node" || {
   printf '[toolchain] Node.js %s is unsupported; version %s or newer is required\n' "$actual_node" "$minimum_node" >&2
@@ -45,7 +67,7 @@ version_at_least "$actual_node" "$minimum_node" || {
 }
 printf '[toolchain] Node.js %s (supported: >= %s)\n' "$actual_node" "$minimum_node"
 
-node - "$ROOT_DIR/web" <<'NODE'
+mise exec --locked --no-deps -- node - "$ROOT_DIR/web" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 

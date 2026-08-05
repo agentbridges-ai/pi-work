@@ -19,8 +19,9 @@ help:
 	@printf '%s\n' \
 	  'Piwork local development commands' \
 	  '' \
-		  'Development:' \
-		  '  make install              Install web dependencies' \
+	  'Development:' \
+	  '  make mise-install          Install tools pinned by mise.toml and mise.lock' \
+	  '  make install              Install web dependencies' \
 		  '  make agent-browser        Prepare the pinned agent-browser Chrome extension runtime' \
 		  '  make agent-browser-e2e    Run the real Mac Chrome extension bridge smoke test' \
 		  '  make dev                  Start verified Compose source stack (OrbStack/WSL2/Linux)' \
@@ -83,21 +84,25 @@ help:
 	  '  make pi-reset-legacy-sessions  Dry-run the explicit legacy session reset' \
 	  '  make dev-reset-sessions-hard  Hard-delete local data/ session state'
 
-.PHONY: install agent-browser agent-browser-e2e
+.PHONY: install mise-install agent-browser agent-browser-e2e
 # SRT's package trust check rejects shared hardlinks. Bun defaults to hardlinks on
 # Linux, so keep installed package metadata private to this checkout. A hoisted
 # layout also gives the runtime, its transitive Pi modules, and TypeScript one
 # canonical dependency tree inside the SRT allow-read root. Shared local packages
 # additionally resolve their peer dependencies through the independent Web tree.
-install:
-	cd $(WEB_DIR) && bun install --backend copyfile --linker hoisted --frozen-lockfile
-	cd landing-page && bun install --backend copyfile --linker isolated --frozen-lockfile
+install: mise-install
+	cd $(WEB_DIR) && mise exec --locked --no-deps -- bun install --backend copyfile --linker hoisted --frozen-lockfile
+	cd landing-page && mise exec --locked --no-deps -- bun install --backend copyfile --linker isolated --frozen-lockfile
 	@if [ ! -e "$(WEB_DIR)/node_modules" ] && [ ! -L "$(WEB_DIR)/node_modules" ]; then \
 		ln -s ../node_modules "$(WEB_DIR)/node_modules"; \
 	fi
 	@if [ ! -e "packages/node_modules" ] && [ ! -L "packages/node_modules" ]; then \
 		ln -s ../web/node_modules packages/node_modules; \
 	fi
+
+mise-install:
+	@command -v mise >/dev/null 2>&1 || (echo 'mise is required; install it from https://mise.jdx.dev/getting-started.html' >&2; exit 1)
+	mise install --locked bun node
 
 agent-browser:
 	./scripts/ensure-agent-browser.sh

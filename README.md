@@ -34,6 +34,7 @@ native macOS or Windows shell.
 
 依赖：
 
+- mise `2026.8.2`，用于安装和激活仓库锁定的开发工具
 - Bun 1.3.9 和 Node.js >= 22.19.0
 - 外部 Postgres，并通过 `DATABASE_URL` 暴露连接串
 - `make install` 会安装精确锁定的 `@earendil-works/pi-coding-agent@0.82.1`、`@modelcontextprotocol/sdk@1.29.0` 与 `@anthropic-ai/sandbox-runtime@0.0.65`
@@ -44,6 +45,8 @@ native macOS or Windows shell.
 
 ```bash
 # 在 OrbStack Linux、WSL2 Linux 或原生 Linux 终端内执行
+mise trust
+make mise-install
 make install
 # Compose 会生成 0600 配置、Runtime HMAC key、数据库应用角色 secret
 make selfhost-init
@@ -52,12 +55,20 @@ make dev
 
 打开脚本输出的 Frontend URL，使用邮箱密码注册或登录。
 
+`mise.toml` 和 `mise.lock` 是开发工具环境的来源。`make mise-install` 会安装
+Piwork 使用的精确 Bun/Node.js 版本；PostgreSQL 客户端版本仍由
+`mise.toml` 提供，需要时可执行 `mise install --locked`。交互式 shell 可按
+mise 的说明执行 `eval "$(mise activate zsh)"`（Bash 使用 `bash`），这样进入
+仓库目录时会自动激活锁定版本。`.tool-versions` 仅作为 asdf 兼容镜像，修改
+工具版本时必须与 `mise.toml` 同步。
+
 生产服务默认使用稳定地址 `http://127.0.0.1:3457`。当 Chromium 完成安装条件检查后，工作台会显示“安装桌面应用”；安装版以独立窗口运行。断线页不会缓存或展示账号、会话或文件数据。
 
 ## 常用命令
 
 ```bash
 make install
+make mise-install
 make auth-generate
 make auth-migrate
 
