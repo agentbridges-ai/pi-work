@@ -412,9 +412,11 @@ The cross-repository update train is:
    `onlyoffice_candidate_release_id=<releaseId>`. The dedicated job is named
    `OnlyOffice candidate integration / <releaseId>` and runs
    `--online --allow-candidate --candidate-integration`; it verifies the selected
-   checkout equals the workflow run's `head_sha`. Pull-request and normal CI
-   never pass `--allow-candidate`, so their required checks stay red until the
-   descriptor becomes supported.
+   checkout equals the workflow run's `head_sha`. Pull-request and post-merge
+   `main` integration checks pass `--allow-candidate` only when the descriptor
+   explicitly remains a candidate; release tags and promotion checks never do.
+   This keeps the candidate lifecycle visible on `main` without moving the
+   mutable stable pointer or accepting promotion evidence.
 4. After browser production approval advances `stable-v5`, change the Piwork
    descriptor lifecycle to `supported`, rerun the normal online gate, and merge
    the exact npm integrity plus immutable runtime pin. Piwork never follows the
