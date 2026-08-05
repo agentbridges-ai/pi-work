@@ -53,6 +53,7 @@ export interface AppRuntimePrepareResourcesRequest {
   target: AppRuntimeTarget;
   credential: AppCloudflareDeploymentCredential;
   bindings: AppBindingManifest;
+  signal?: AbortSignal;
   existingReceipts?: AppRuntimeResourceReceipt[];
   onReceipt?: (receipt: AppRuntimeResourceReceipt) => Promise<void>;
 }
@@ -728,9 +729,14 @@ export class CloudflareSdkAppRuntimeApi implements CloudflareAppRuntimeApi {
       }),
     );
     const tagged = findDeploymentVersion(versions);
-    const latest = tagged ?? versions[0];
+    if (!tagged) {
+      throw new AppRuntimeProviderError(
+        "cloudflare_worker_version_pending",
+        "Cloudflare did not expose the uploaded deployment version yet",
+      );
+    }
     return {
-      versionId: requiredProviderString(latest?.id, "Cloudflare Worker version id"),
+      versionId: requiredProviderString(tagged.id, "Cloudflare Worker version id"),
       ...(typeof uploaded.migration_tag === "string"
         ? { migrationTag: uploaded.migration_tag }
         : {}),
@@ -922,6 +928,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
   async prepareResources(
     request: AppRuntimePrepareResourcesRequest,
   ): Promise<AppRuntimePreparedResources> {
+    request.signal?.throwIfAborted();
     validateTarget(request.target);
     const api = this.api(request.credential, "byoc");
     const existing = new Map(
@@ -930,6 +937,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
     const output: AppRuntimeResourceReceipt[] = [];
     const touchedCreated = new Map<string, AppRuntimeResourceReceipt>();
     const persist = async (receipt: AppRuntimeResourceReceipt): Promise<void> => {
+      request.signal?.throwIfAborted();
       const key = receiptKey(receipt);
       existing.set(key, receipt);
       if (receipt.ownership === "created") touchedCreated.set(key, receipt);
@@ -957,6 +965,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
       adoptName?: string;
       jurisdiction?: "default" | "eu" | "fedramp";
     }): Promise<void> => {
+      request.signal?.throwIfAborted();
       const key = `${input.kind}:${input.logicalKey}`;
       const prior = existing.get(key);
       const generatedName = stableResourceName(request.target.appId, input.kind, input.logicalKey);
@@ -973,6 +982,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
       };
       await persist(initial);
       try {
+        request.signal?.throwIfAborted();
         let resource: CloudflareNamedResource;
         if (input.kind === "kv") {
           if (input.mode === "adopt") {
@@ -1037,6 +1047,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
           jurisdiction: resource.jurisdiction ?? input.jurisdiction ?? null,
           stepStatus: "ready",
         };
+        request.signal?.throwIfAborted();
         await persist(ready);
         output.push(ready);
       } catch (error) {
@@ -1047,6 +1058,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
 
     try {
       for (const resource of request.bindings.kv) {
+        request.signal?.throwIfAborted();
         await provision({
           logicalKey: resource.key,
           kind: "kv",
@@ -1056,6 +1068,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
         });
       }
       for (const resource of request.bindings.d1) {
+        request.signal?.throwIfAborted();
         await provision({
           logicalKey: resource.key,
           kind: "d1",
@@ -1065,6 +1078,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
         });
       }
       for (const resource of request.bindings.r2) {
+        request.signal?.throwIfAborted();
         await provision({
           logicalKey: resource.key,
           kind: "r2",
@@ -1075,6 +1089,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
         });
       }
       for (const resource of request.bindings.durableObjects) {
+        request.signal?.throwIfAborted();
         const planned: AppRuntimeResourceReceipt = {
           logicalKey: resource.binding,
           kind: "durable_object",
@@ -1191,6 +1206,7 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
   }
 
   async deploy(request: AppRuntimeDeployRequest): Promise<AppRuntimeDeployResult> {
+    request.signal?.throwIfAborted();
     validateTarget(request.target);
     validateCredential(request.credential, request.targetKind);
     await this.validate(request.artifact, request.targetKind);
@@ -1201,7 +1217,9 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
     }
     const api = this.api(request.credential, request.targetKind);
     try {
+      request.signal?.throwIfAborted();
       const assetsJwt = await api.uploadAssets(request.target.workerName, request.artifact.assets);
+      request.signal?.throwIfAborted();
       const migration = this.migration(request);
       const uploaded = await api.uploadWorker({
         appId: request.target.appId,
@@ -1212,7 +1230,9 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
         ...(assetsJwt ? { assetsJwt } : {}),
         ...(migration ? { migration } : {}),
       });
+      request.signal?.throwIfAborted();
       await api.enableWorkersDev(request.target.workerName);
+      request.signal?.throwIfAborted();
       const stableUrl = await this.stableUrl(api, request.target.workerName);
       const ready = await this.urlReady(stableUrl, request.signal);
       const doReceipts = request.resources.receipts.map((receipt) =>
@@ -1259,9 +1279,11 @@ export class CloudflareAppRuntimeDriver implements AppRuntimeDriver {
   }
 
   async rollback(request: AppRuntimeRollbackRequest): Promise<AppRuntimeDeployResult> {
+    request.signal?.throwIfAborted();
     validateTarget(request.target);
     const api = this.api(request.credential);
     await api.rollbackWorker(request.target.workerName, request.providerVersion);
+    request.signal?.throwIfAborted();
     await api.enableWorkersDev(request.target.workerName);
     const stableUrl = await this.stableUrl(api, request.target.workerName);
     const ready = await this.urlReady(stableUrl, request.signal);

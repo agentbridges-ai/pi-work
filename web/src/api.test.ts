@@ -91,6 +91,8 @@ describe("API request contracts", () => {
           authority: {
             tenantId: "tenant-1",
             userId: "user-1",
+            membershipId: "membership-1",
+            orgNodeId: "org-node-1",
             agentDefinitionId: "agent-1",
             agentVersionId: "version-1",
             effectivePolicyHash: "policy-hash",

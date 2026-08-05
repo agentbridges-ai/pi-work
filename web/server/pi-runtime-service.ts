@@ -29,6 +29,8 @@ export interface RuntimeLaunchPreparePayload {
   };
   /** Relative to the session root and restricted to its managed resources. */
   managedSkillPaths: string[];
+  /** Non-secret material for managed helper binaries; credentials are rejected. */
+  toolEnvironment?: Record<string, string>;
   /** Relative to the session root and restricted to pi-sessions/*.jsonl. */
   resumeSessionPath?: string;
   /** Relative to the data root; only server-owned broker paths are accepted. */
@@ -87,6 +89,27 @@ function safeRelative(value: unknown, label: string): string {
 
 function relativePath(value: unknown, label: string): string {
   return safeRelative(value, label);
+}
+
+const SAFE_TOOL_ENV_KEY = /^[A-Z_][A-Z0-9_]*$/u;
+const SENSITIVE_TOOL_ENV_KEY = /(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE)/iu;
+
+function parseToolEnvironment(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Invalid Runtime managed tool environment");
+  const output: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      !SAFE_TOOL_ENV_KEY.test(key) ||
+      SENSITIVE_TOOL_ENV_KEY.test(key) ||
+      typeof item !== "string" ||
+      item.includes("\0")
+    ) {
+      throw new Error(`Invalid Runtime managed tool environment key: ${key}`);
+    }
+    output[key] = item;
+  }
+  return output;
 }
 
 function expectedTenantRoot(dataRoot: string, scope: RuntimeScope): string {
@@ -182,6 +205,9 @@ function parsePrepare(value: unknown): RuntimeLaunchPreparePayload {
     ...(thinkingLevel ? { thinkingLevel: thinkingLevel as ThinkingLevel } : {}),
     network: { allowedDomains: [...allowedDomains], deniedDomains: [...deniedDomains] },
     managedSkillPaths: managedSkillPaths.map((item) => safeRelative(item, "managed Skill path")),
+    ...(value.toolEnvironment === undefined
+      ? {}
+      : { toolEnvironment: parseToolEnvironment(value.toolEnvironment) }),
     ...(value.resumeSessionPath === undefined
       ? {}
       : { resumeSessionPath: safeRelative(value.resumeSessionPath, "resume session path") }),
@@ -406,17 +432,30 @@ export class PiRuntimeService {
       case "launch.bootstrap":
         return this.bootstrap(request.scope, request.payload, connection);
       case "request":
+        this.rebindActiveConnection(request.scope, connection);
         return this.request(request.scope, request.payload);
       case "interrupt":
+        this.rebindActiveConnection(request.scope, connection);
         return this.interrupt(request.scope);
       case "kill":
+        this.rebindActiveConnection(request.scope, connection);
         return { killed: await this.kill(request.scope) };
       case "status":
+        this.rebindActiveConnection(request.scope, connection);
         return this.status(request.scope);
       case "shutdown":
         await this.shutdown();
         return { stopped: true };
     }
+  }
+
+  private rebindActiveConnection(scope: RuntimeScope, connection: RuntimeControlConnection): void {
+    const active = this.active.get(scope.sessionId);
+    if (!active) return;
+    if (!sameRuntimeScope(active.scope, scope)) {
+      throw new Error("Runtime session scope is stale");
+    }
+    active.connection = connection;
   }
 
   private prepare(
@@ -513,6 +552,9 @@ export class PiRuntimeService {
         settings: sandbox,
         managedResourcesDir,
         ...(existsSync(sessionBinDir) ? { sessionBinDir } : {}),
+        ...(prepared.payload.toolEnvironment
+          ? { toolEnvironment: prepared.payload.toolEnvironment }
+          : {}),
       },
       model: prepared.payload.model,
       thinkingLevel: prepared.payload.thinkingLevel,

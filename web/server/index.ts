@@ -120,11 +120,16 @@ if (!isLoopbackHost(host)) {
 const controlPlaneService = new ControlPlaneService();
 const appRuntimeDriver = createAppRuntimeDriver();
 const appCloudflareCleanupTimer = setInterval(
-  () => void controlPlaneService.appCloudflareAccounts.cleanupExpired().catch(() => undefined),
+  () =>
+    void controlPlaneService.appCloudflareAccounts
+      .cleanupExpiredForMaintenance()
+      .catch(() => undefined),
   30_000,
 );
 appCloudflareCleanupTimer.unref?.();
-void controlPlaneService.appCloudflareAccounts.cleanupExpired().catch(() => undefined);
+void controlPlaneService.appCloudflareAccounts
+  .cleanupExpiredForMaintenance()
+  .catch(() => undefined);
 const runtimeDriver = new EmbeddedTenantRuntimeDriver(new URL(`http://127.0.0.1:${port}`));
 const localAuth = new LocalAuth(
   rbacService,

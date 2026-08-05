@@ -519,8 +519,13 @@ describe("LocalRuntimeRegistry native Pi runtime", () => {
       connectionId: "connection-1",
       temporaryAccountId: null,
     };
-    await outbox.dependencies.run!(context, deployment, new AbortController().signal);
-    expect(coordinator.handleDeploymentTargetQueued).toHaveBeenCalledWith(context, deployment);
+    const abortSignal = new AbortController().signal;
+    await outbox.dependencies.run!(context, deployment, abortSignal);
+    expect(coordinator.handleDeploymentTargetQueued).toHaveBeenCalledWith(
+      context,
+      deployment,
+      abortSignal,
+    );
 
     await outbox.dependencies.complete!("outbox-1", "worker-1");
     await outbox.dependencies.retry!("outbox-2", "worker-1", new Error("retry"));

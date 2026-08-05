@@ -211,10 +211,10 @@ export function registerAppsCloudflareRoutes(
       const body = await c.req.json().catch(() => ({}));
       const deploymentId = stringValue(body.deploymentId);
       if (!deploymentId) return c.json({ error: "deploymentId is required" }, 400);
-      const ipAddress =
-        stringValue(c.req.header("cf-connecting-ip")) ||
-        stringValue(c.req.header("x-real-ip")) ||
-        "unknown";
+      // The Hono request is not coupled to a trusted proxy socket, so browser
+      // supplied forwarding headers are untrusted and must not influence the
+      // abuse bucket or Turnstile remoteip value.
+      const ipAddress = "unknown";
       const preview = await deps.service.provisionTemporaryAccount(current().context, {
         deploymentId,
         ipAddress: ipAddress.slice(0, 128),
@@ -353,10 +353,7 @@ export function registerAppsCloudflareRoutes(
                 body.termsAcceptance && typeof body.termsAcceptance === "object"
                   ? body.termsAcceptance
                   : {};
-              const ipAddress =
-                stringValue(c.req.header("cf-connecting-ip")) ||
-                stringValue(c.req.header("x-real-ip")) ||
-                "unknown";
+              const ipAddress = "unknown";
               const preview = await deps.service.provisionTemporaryAccount(requestContext, {
                 deploymentId: c.req.param("id"),
                 ipAddress: ipAddress.slice(0, 128),

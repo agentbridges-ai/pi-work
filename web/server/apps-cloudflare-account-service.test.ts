@@ -1534,6 +1534,23 @@ describe("AppCloudflareAccountService", () => {
     expect(expirySql).toContain("stable_url=null,target_kind='unassigned'");
   });
 
+  it("uses the maintenance expiry function without issuing an unscoped table update", async () => {
+    const query = vi.fn().mockResolvedValueOnce({
+      rows: [{ temporary_accounts: "2", oauth_attempts: "3" }],
+    });
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client: clientFixture(),
+      masterKey: () => masterKey,
+    });
+
+    await expect(service.cleanupExpiredForMaintenance()).resolves.toEqual({
+      temporaryAccounts: 2,
+      oauthAttempts: 3,
+    });
+    expect(query).toHaveBeenCalledWith("select * from piwork_cleanup_cloudflare_expired()");
+  });
+
   it("expires a due preview before projecting deployment state to the browser", async () => {
     const now = new Date("2026-08-04T08:00:00.000Z");
     const query = vi

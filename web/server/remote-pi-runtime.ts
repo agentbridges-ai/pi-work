@@ -34,6 +34,8 @@ export interface RemotePiRuntimeOptions {
   dataRoot: string;
 }
 
+const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 30_000;
+
 function canonicalRelative(root: string, candidate: string, label: string): string {
   const canonicalRoot = realpathSync(root);
   const canonicalCandidate = realpathSync(candidate);
@@ -144,7 +146,9 @@ class RemotePiRpcTransport implements PiRpcTransportLike {
     try {
       const result = await this.withTimeout(
         this.client.request(this.scope, "request", { input, awaitResponse: waitForResponse }),
-        options.timeoutMs,
+        options.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+        options.signal,
+        options.abortRemoteOnSignal ?? true,
       );
       if (!waitForResponse) return undefined as T;
       return responseValue<T>(result as PiRpcResponse, input as PiRpcCommand);
@@ -153,25 +157,49 @@ class RemotePiRpcTransport implements PiRpcTransportLike {
     }
   }
 
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs?: number): Promise<T> {
-    if (!timeoutMs) return promise;
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        const timer = setTimeout(
-          () =>
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    signal: AbortSignal | undefined,
+    abortRemote: boolean,
+  ): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const abortRemoteSession = (): void => {
+      if (!abortRemote) return;
+      void this.client.request(this.scope, "interrupt").catch(() => undefined);
+    };
+    const abortPromise = signal
+      ? new Promise<T>((_, reject) => {
+          onAbort = () => {
+            abortRemoteSession();
             reject(
-              new PiRpcTransportError(
-                "request_timeout",
-                "Remote Pi RPC request timed out",
-                this.scope,
-              ),
-            ),
-          timeoutMs,
+              new PiRpcTransportError("aborted", "Remote Pi RPC request was aborted", this.scope),
+            );
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+          if (signal.aborted) onAbort();
+        })
+      : undefined;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timer = setTimeout(() => {
+        abortRemoteSession();
+        reject(
+          new PiRpcTransportError("request_timeout", "Remote Pi RPC request timed out", this.scope),
         );
-        timer.unref?.();
-      }),
-    ]);
+      }, timeoutMs);
+      timer.unref?.();
+    });
+    try {
+      return await Promise.race([
+        promise,
+        timeoutPromise,
+        ...(abortPromise ? [abortPromise] : []),
+      ] as Promise<T>[]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    }
   }
 
   async sendInput(input: PiRpcInput): Promise<void> {
@@ -323,6 +351,9 @@ function toRuntimePrepare(options: PiLaunchOptions, dataRoot: string): RuntimeLa
       deniedDomains: [...(options.sandbox.settings.network?.deniedDomains || [])],
     },
     managedSkillPaths,
+    ...(options.sandbox.toolEnvironment
+      ? { toolEnvironment: { ...options.sandbox.toolEnvironment } }
+      : {}),
     ...(options.resumeSessionFile
       ? {
           resumeSessionPath: canonicalRelative(
@@ -429,6 +460,18 @@ export class RemotePiRuntimeBackend implements PiRuntimeBackend {
 
   async launch(options: PiLaunchOptions): Promise<PiSessionInfo> {
     const scope = requiredScope(options);
+    // A Web restart must adopt a Pi that is still owned by the independently
+    // managed Runtime instead of asking it to launch a duplicate generation.
+    // The status request also rebinds the Runtime's event connection to this
+    // fresh control socket before notifications are subscribed below.
+    const existing = (await this.client.request(scope, "status").catch(() => undefined)) as
+      { alive?: unknown; session?: unknown } | undefined;
+    if (existing?.alive === true && isSessionInfo(existing.session)) {
+      if (existing.session.generation !== scope.generation) {
+        throw new Error("Remote Pi Runtime generation is newer than the persisted Web authority");
+      }
+      return this.attachRemoteSession(scope, options, existing.session);
+    }
     const prepared = toRuntimePrepare(options, this.dataRoot);
     const result = (await this.client.request(scope, "launch.prepare", prepared)) as {
       nonce?: unknown;
@@ -442,6 +485,14 @@ export class RemotePiRuntimeBackend implements PiRuntimeBackend {
     );
     if (!isSessionInfo(infoValue))
       throw new Error("Runtime launch returned invalid session metadata");
+    return this.attachRemoteSession(scope, options, infoValue);
+  }
+
+  private attachRemoteSession(
+    scope: RuntimeScope,
+    options: PiLaunchOptions,
+    infoValue: PiSessionInfo,
+  ): PiSessionInfo {
     const transport = new RemotePiRpcTransport(this.client, scope, (exitInfo) => {
       const current = this.sessions.get(scope.sessionId);
       if (current && current.generation === scope.generation) {

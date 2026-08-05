@@ -57,6 +57,7 @@ vi.mock("./app-build.js", () => ({
   APP_BUILD_COMMAND: "bun run build",
   APP_BUILD_TIMEOUT_MS: 1_000,
   inspectAppSource: mocks.inspectAppSource,
+  resolveAppBuildCommand: vi.fn(() => "bun run build"),
 }));
 
 import {

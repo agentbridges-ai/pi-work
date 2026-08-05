@@ -638,4 +638,18 @@ describe("tenant-bound runtime API requests", () => {
 
     expect(result).toEqual({ ok: true, user: tenantAUser });
   });
+
+  it("allows OAuth callbacks without browser tenant headers because state is server-bound", async () => {
+    for (const path of [
+      "/api/cloudflare/oauth/callback?state=opaque",
+      "/api/apps/cloudflare/oauth/callback?state=opaque",
+    ]) {
+      const result = await resolveTenantBoundRuntimePrincipal(
+        apiRequest(path),
+        authenticatedUser,
+        async () => tenantAUser,
+      );
+      expect(result).toEqual({ ok: true, user: tenantAUser });
+    }
+  });
 });

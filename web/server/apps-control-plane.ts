@@ -1002,7 +1002,10 @@ export class AppsControlPlane {
             deploymentId,
             idempotencyKey,
             nextGeneration,
-            context.userId,
+            // The rollback reuses the historical immutable artifact and
+            // source snapshot, so retain their creator authority even when a
+            // tenant administrator initiates the rollback.
+            targetRow.created_by,
           ],
         );
         row = inserted.rows[0];

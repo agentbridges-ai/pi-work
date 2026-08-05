@@ -9,7 +9,7 @@ import {
   type ProviderConfig,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { APP_BUILD_COMMAND, APP_BUILD_TIMEOUT_MS, inspectAppSource } from "./app-build.js";
+import { APP_BUILD_TIMEOUT_MS, inspectAppSource, resolveAppBuildCommand } from "./app-build.js";
 import { PiAgentSpace } from "./pi-agent-space.js";
 import {
   buildPiAskReview,
@@ -658,9 +658,10 @@ function registerAppTools(pi: ExtensionAPI, state: ExtensionState, cwd: string):
       requireRootAppMutation(state);
       const source = await inspectAppSource(cwd, params.path);
       const localBash = createLocalBashOperations();
+      const buildCommand = resolveAppBuildCommand();
       const chunks: Buffer[] = [];
       let capturedBytes = 0;
-      const result = await localBash.exec(APP_BUILD_COMMAND, source.sourceRoot, {
+      const result = await localBash.exec(buildCommand, source.sourceRoot, {
         timeout: APP_BUILD_TIMEOUT_MS,
         signal,
         env: scrubPiShellEnvironment({
@@ -701,7 +702,7 @@ function registerAppTools(pi: ExtensionAPI, state: ExtensionState, cwd: string):
           dryRun: params.dryRun === true,
           publishIntent: params.publishIntent,
           build: {
-            command: APP_BUILD_COMMAND,
+            command: buildCommand,
             exitCode: result.exitCode,
             log: buildLog,
             logTruncated: capturedBytes >= APP_BUILD_LOG_LIMIT_BYTES,

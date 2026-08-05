@@ -152,7 +152,12 @@ function tenantContextConflict(): Response {
 
 function allowsMissingTenantBinding(request: Request): boolean {
   const url = new URL(request.url);
-  return request.method === "POST" && url.pathname === "/api/onboarding/complete";
+  return (
+    (request.method === "POST" && url.pathname === "/api/onboarding/complete") ||
+    (request.method === "GET" &&
+      (url.pathname === "/api/cloudflare/oauth/callback" ||
+        url.pathname === "/api/apps/cloudflare/oauth/callback"))
+  );
 }
 
 /**

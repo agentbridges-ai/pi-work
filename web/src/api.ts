@@ -823,6 +823,8 @@ const PI_MODEL_REF_KEYS = new Set(["key", "provider", "modelId"]);
 const SESSION_AUTHORITY_KEYS = new Set([
   "tenantId",
   "userId",
+  "membershipId",
+  "orgNodeId",
   "agentDefinitionId",
   "agentVersionId",
   "effectivePolicyHash",
@@ -923,6 +925,8 @@ function isSessionAuthority(value: unknown): boolean {
     hasOnlyKeys(value, SESSION_AUTHORITY_KEYS) &&
     isBoundedString(value.tenantId, 1_024) &&
     isBoundedString(value.userId, 1_024) &&
+    isBoundedString(value.membershipId, 1_024) &&
+    isBoundedString(value.orgNodeId, 1_024) &&
     isBoundedString(value.agentDefinitionId, 1_024) &&
     isBoundedString(value.agentVersionId, 1_024) &&
     isBoundedString(value.effectivePolicyHash, 1_024)

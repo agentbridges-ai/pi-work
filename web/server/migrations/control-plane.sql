@@ -640,6 +640,67 @@ create table if not exists app_resource_receipts (
 create index if not exists idx_app_resource_receipts_app
   on app_resource_receipts(app_id, deployment_id, created_at desc);
 
+-- The Web timer has no user request context. Run its expiry mutation through a
+-- narrowly-scoped SECURITY DEFINER maintenance function instead of bypassing
+-- forced tenant RLS with an unscoped table update. The function returns only
+-- row counts; credential and claim columns never leave the database.
+create or replace function piwork_cleanup_cloudflare_expired()
+returns table(temporary_accounts integer, oauth_attempts integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  expired_count integer := 0;
+  oauth_count integer := 0;
+begin
+  with abandoned_previews as (
+    update cloudflare_temporary_previews set status='failed',
+      last_error_code='provisioning_abandoned',updated_at=now()
+    where status='provisioning' and created_at <= now() - interval '10 minutes'
+    returning id
+  ), newly_expired as (
+    update cloudflare_temporary_previews set status='expired',
+      credential_ciphertext=null,credential_iv=null,credential_auth_tag=null,credential_key_version=null,
+      claim_ciphertext=null,claim_iv=null,claim_auth_tag=null,claim_key_version=null,updated_at=now()
+    where status in ('ready','claiming') and expires_at <= now()
+    returning id,app_id
+  ), expired_previews as (
+    select id,app_id from newly_expired
+    union
+    select id,app_id from cloudflare_temporary_previews
+    where status='expired' and expires_at <= now()
+  ), expired_deployments as (
+    update app_deployments d set phase='expired',stable_url=null,
+      error_code='temporary_account_expired',error_message='Cloudflare temporary account expired.'
+    from expired_previews p
+    where d.temporary_preview_id=p.id and d.app_id=p.app_id
+      and d.phase in ('queued','provisioning','deploying','temporary_ready',
+        'claim_pending','verifying_claim')
+    returning d.id
+  ), affected_apps as (
+    update apps a set status='needs_action',status_reason='Cloudflare temporary account expired.',
+      stable_url=null,target_kind='unassigned',cloudflare_connection_id=null,
+      temporary_preview_id=null,updated_at=now()
+    from expired_previews p
+    where a.id=p.app_id and a.temporary_preview_id=p.id
+    returning a.id
+  )
+  select count(*)::integer into expired_count from newly_expired;
+
+  update cloudflare_oauth_states set status='expired',consumed_at=coalesce(consumed_at,now()),
+    verifier_ciphertext=null,verifier_iv=null,verifier_auth_tag=null,verifier_key_version=null
+    where status='pending' and expires_at <= now();
+  get diagnostics oauth_count = row_count;
+  return query select expired_count, oauth_count;
+end;
+$$;
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. The Web
+-- application role is granted this maintenance capability explicitly by the
+-- Compose migration bootstrap below; no other database role should be able to
+-- invoke a cross-tenant cleanup function.
+revoke all on function piwork_cleanup_cloudflare_expired() from public;
+
 insert into control_permissions (key, name, category) values
   ('tenant:manage', '管理租户', 'tenant'), ('member:manage', '管理成员', 'tenant'),
   ('org:manage', '管理组织', 'rbac'), ('role:manage', '管理角色', 'rbac'),

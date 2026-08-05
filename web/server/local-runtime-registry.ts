@@ -495,8 +495,8 @@ export class LocalRuntimeRegistry {
                 limit,
                 leaseMs,
               ),
-            run: (context, deployment) =>
-              appsRuntime.handleDeploymentTargetQueued(context, deployment),
+            run: (context, deployment, signal) =>
+              appsRuntime.handleDeploymentTargetQueued(context, deployment, signal),
             complete: (id, workerId) => this.controlPlane!.apps.completeOutbox(id, workerId),
             retry: (id, workerId, error) =>
               this.controlPlane!.apps.retryOutbox(id, workerId, error),

@@ -105,14 +105,21 @@ function sessionInfo(overrides: Partial<PiSessionInfo> = {}): PiSessionInfo {
 describe("Remote Pi Runtime backend", () => {
   it("launches through the authenticated Runtime channel and exposes the Pi transport contract", async () => {
     const input = await fixture();
+    (input.options.sandbox as { toolEnvironment?: Record<string, string> }).toolEnvironment = {
+      PIWORK_APP_BUILDER: "/usr/local/bin/bun",
+    };
     const authenticator = new RuntimeControlAuthenticator(await readFile(input.keyPath));
     const socketPath = join(input.root, "runtime.sock");
     const events: string[] = [];
+    let preparePayload: Record<string, unknown> | undefined;
     const server = new RuntimeControlServer({
       socketPath,
       authenticator,
       handler: async (request, connection) => {
-        if (request.operation === "launch.prepare") return { nonce: "nonce-1" };
+        if (request.operation === "launch.prepare") {
+          preparePayload = request.payload as Record<string, unknown>;
+          return { nonce: "nonce-1" };
+        }
         if (request.operation === "launch.bootstrap") return sessionInfo();
         if (request.operation === "kill") return { killed: true };
         if (request.operation === "shutdown") return { stopped: true };
@@ -151,6 +158,9 @@ describe("Remote Pi Runtime backend", () => {
     });
     const launched = await backend.launch(input.options);
     expect(launched).toMatchObject({ sessionId: scope.sessionId, generation: 1 });
+    expect(preparePayload).toMatchObject({
+      toolEnvironment: { PIWORK_APP_BUILDER: "/usr/local/bin/bun" },
+    });
     expect(backend.nextLaunchGeneration(scope.sessionId)).toBe(2);
     expect(backend.getSession(scope.sessionId)).toMatchObject({ sessionId: scope.sessionId });
     const transport = backend.getTransport(scope.sessionId)!;
@@ -197,6 +207,46 @@ describe("Remote Pi Runtime backend", () => {
     expect(await backend.kill(scope.sessionId)).toBe(true);
     expect(backend.isAlive(scope.sessionId)).toBe(false);
     await backend.killAll();
+    await server.close();
+  });
+
+  it("adopts an already-running Runtime session after a Web restart", async () => {
+    const input = await fixture();
+    const authenticator = new RuntimeControlAuthenticator(await readFile(input.keyPath));
+    const socketPath = join(input.root, "runtime-adopt.sock");
+    let statusCalls = 0;
+    let prepareCalls = 0;
+    const server = new RuntimeControlServer({
+      socketPath,
+      authenticator,
+      handler: async (request) => {
+        if (request.operation === "status") {
+          statusCalls += 1;
+          return { alive: true, session: sessionInfo() };
+        }
+        if (request.operation === "launch.prepare") {
+          prepareCalls += 1;
+          return { nonce: "unexpected" };
+        }
+        if (request.operation === "kill") return { killed: true };
+        throw new Error(`unexpected adoption operation ${request.operation}`);
+      },
+    });
+    await server.start();
+    const backend = new RemotePiRuntimeBackend({
+      socketPath,
+      controlKeyPath: input.keyPath,
+      dataRoot: input.root,
+    });
+
+    await expect(backend.launch(input.options)).resolves.toMatchObject({
+      sessionId: scope.sessionId,
+      generation: scope.generation,
+    });
+    expect(statusCalls).toBe(1);
+    expect(prepareCalls).toBe(0);
+    expect(backend.isAlive(scope.sessionId)).toBe(true);
+    await expect(backend.kill(scope.sessionId)).resolves.toBe(true);
     await server.close();
   });
 

@@ -19,6 +19,7 @@ import { PiBootstrapServer, type PiBootstrapPayload } from "./pi-bootstrap-chann
 import { PiRpcTransport } from "./pi-rpc-transport.js";
 import type { PiRpcNotification } from "./pi-rpc-contract.js";
 import { observePiRuntimeLifecycle, type PiRuntimeObserver } from "./pi-runtime-observer.js";
+import { resolveBinary } from "./path-resolver.js";
 import type { RuntimeScope } from "./runtime-control-protocol.js";
 import {
   assertPiSessionFileFromState,
@@ -403,7 +404,11 @@ function augmentSrtSettings(
     srt.packageRoot,
     dirname(extensionPath),
     SRT_PROXY_PRELOAD_PATH,
+    resolveBinary("bun"),
+    "/usr/local/bin/bun",
+    "/usr/local/bun/bin/bun",
   ].flatMap((path) => {
+    if (!path || !existsSync(path)) return [];
     const normalized = resolve(path);
     const canonical = realpathSync(normalized);
     return normalized === canonical ? [canonical] : [normalized, canonical];

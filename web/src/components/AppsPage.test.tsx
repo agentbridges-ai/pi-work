@@ -257,6 +257,67 @@ describe("AppsPage", () => {
     expect(screen.getByText("新租户应用")).toBeInTheDocument();
   });
 
+  it("does not commit an action result after switching Apps while it is pending", async () => {
+    const appA = detail({ id: "app-a", displayName: "应用 A" });
+    const appB = detail({
+      id: "app-b",
+      displayName: "应用 B",
+      latestDeploymentId: "deployment-b",
+      sourceSessionId: "session-b",
+    });
+    const deploymentA = deployment({ id: "deployment-a", appId: "app-a" });
+    const deploymentB = deployment({ id: "deployment-b", appId: "app-b" });
+    let resolveArchive!: (value: { app: PublishedApp }) => void;
+    vi.spyOn(api, "listApps").mockResolvedValue({
+      apps: [appA, appB],
+      nextCursor: null,
+    });
+    vi.spyOn(api, "getApp").mockImplementation(async (appId) => ({
+      app: appId === "app-b" ? appB : appA,
+    }));
+    vi.spyOn(api, "listAppVersions").mockImplementation(async (appId) => ({
+      versions: [appId === "app-b" ? deploymentB : deploymentA],
+      nextCursor: null,
+    }));
+    vi.spyOn(api, "getAppDeployment").mockImplementation(async (deploymentId) => ({
+      deployment: deploymentId === "deployment-b" ? deploymentB : deploymentA,
+    }));
+    vi.spyOn(api, "getAppDeploymentEvents").mockResolvedValue({ events: [] });
+    vi.spyOn(api, "listCloudflareConnections").mockResolvedValue({ connections: [] });
+    vi.spyOn(api, "getCloudflareConfig").mockResolvedValue({
+      temporaryEnabled: true,
+      byocEnabled: true,
+      turnstileEnabled: false,
+      siteKey: null,
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const archive = vi.spyOn(api, "archiveApp").mockReturnValue(
+      new Promise((resolve) => {
+        resolveArchive = resolve;
+      }),
+    );
+
+    render(<AppsPage />);
+    const user = userEvent.setup();
+    const manageButtons = await screen.findAllByRole("button", { name: uiCopy.apps.manage });
+    await user.click(manageButtons[0]);
+    await user.click(await screen.findByRole("button", { name: uiCopy.apps.archive }));
+    expect(archive).toHaveBeenCalledWith(
+      "app-a",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    await user.click(screen.getByRole("button", { name: uiCopy.apps.closeDetails }));
+    await user.click((await screen.findAllByRole("button", { name: uiCopy.apps.manage }))[1]);
+    expect(await screen.findByText("应用 B")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveArchive({ app: { ...appA, status: "archived" } });
+    });
+    expect(screen.getByText("应用 B")).toBeInTheDocument();
+    expect(screen.queryByText(uiCopy.apps.archived)).not.toBeInTheDocument();
+  });
+
   it("requires both Cloudflare policy confirmations before selecting a Temporary target", async () => {
     const currentDeployment = deployment();
     mockDetails({ deployment: currentDeployment });

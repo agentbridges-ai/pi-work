@@ -74,4 +74,32 @@ describe("App source snapshots", () => {
       }),
     ).rejects.toThrow("invalid");
   });
+
+  it("rejects a symlink introduced into a stored snapshot before restore", async () => {
+    const creatorRoot = await root("piwork-app-owner-");
+    const sourceRoot = await root("piwork-app-source-");
+    const workspaceRoot = await root("piwork-app-restore-");
+    await writeFile(join(sourceRoot, "index.ts"), "export default 1;");
+    const snapshot = await createAppSourceSnapshot({
+      creatorRoot,
+      appId: "app-1",
+      deploymentId: "deployment-1",
+      sourceRoot,
+    });
+    const snapshotFile = join(creatorRoot, "published-apps", snapshot.key, "index.ts");
+    const outside = join(await root("piwork-app-outside-"), "secret.ts");
+    await writeFile(outside, "secret");
+    await rm(snapshotFile);
+    await symlink(outside, snapshotFile);
+
+    await expect(
+      restoreAppSourceSnapshot({
+        creatorRoot,
+        snapshotKey: snapshot.key,
+        workspaceRoot,
+        expectedDigest: snapshot.digest,
+      }),
+    ).rejects.toThrow("symbolic links");
+    await expect(readFile(join(workspaceRoot, "index.ts"), "utf8")).rejects.toThrow();
+  });
 });

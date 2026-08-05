@@ -756,12 +756,7 @@ export class AppCloudflareAccountService {
         `select * from cloudflare_temporary_previews
          where id=$1 and app_id=$2 and tenant_id=$3 and owner_user_id=$4
            limit 1`,
-        [
-          deployment.temporary_preview_id,
-          appId,
-          context.tenantId,
-          context.userId,
-        ],
+        [deployment.temporary_preview_id, appId, context.tenantId, context.userId],
       );
       if (existing.rows[0]) return temporaryFromRow(existing.rows[0], this.now());
     }
@@ -2617,6 +2612,27 @@ export class AppCloudflareAccountService {
        where status='pending' and expires_at <= now() returning id`,
     );
     return { temporaryAccounts, oauthAttempts: oauth.rowCount || 0 };
+  }
+
+  /**
+   * Run from the process maintenance timer, which intentionally has no user
+   * request/RLS context. The migration-owned function performs the same
+   * expiry transitions under a narrowly scoped SECURITY DEFINER boundary and
+   * returns counts only.
+   */
+  async cleanupExpiredForMaintenance(): Promise<{
+    temporaryAccounts: number;
+    oauthAttempts: number;
+  }> {
+    const result = await this.pool.query<{
+      temporary_accounts: number | string;
+      oauth_attempts: number | string;
+    }>("select * from piwork_cleanup_cloudflare_expired()");
+    const row = result.rows[0];
+    return {
+      temporaryAccounts: row ? Number(row.temporary_accounts) : 0,
+      oauthAttempts: row ? Number(row.oauth_attempts) : 0,
+    };
   }
 
   private async expireTemporaryPreviews(db: Db, ids?: string[]): Promise<number> {

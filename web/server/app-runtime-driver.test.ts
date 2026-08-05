@@ -663,7 +663,12 @@ describe("App runtime drivers", () => {
     const versionsList = vi
       .fn()
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "version-uploaded", metadata: { annotations: {} } }]);
+      .mockResolvedValueOnce([
+        {
+          id: "version-uploaded",
+          metadata: { annotations: { "workers/tag": "deployment-sdk" } },
+        },
+      ]);
     const client = {
       kv: {
         namespaces: {

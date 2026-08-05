@@ -70,6 +70,9 @@ try {
   await pool.query(
     `grant usage, select, update on all sequences in schema public to ${quotedUser}`,
   );
+  await pool.query(
+    `grant execute on function piwork_cleanup_cloudflare_expired() to ${quotedUser}`,
+  );
   const currentRole = String(
     (await pool.query("select quote_ident(current_user) value")).rows[0]?.value || "",
   );

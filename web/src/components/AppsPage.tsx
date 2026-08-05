@@ -325,6 +325,8 @@ export function AppsPage() {
   const [domainImpactConfirmed, setDomainImpactConfirmed] = useState(false);
   const requestSequenceRef = useRef(0);
   const actionInFlightRef = useRef(false);
+  const selectedAppIdRef = useRef(selectedAppId);
+  selectedAppIdRef.current = selectedAppId;
 
   const replaceApp = useCallback((nextApp: PublishedApp) => {
     setSelectedApp(nextApp);
@@ -593,16 +595,23 @@ export function AppsPage() {
       if (actionInFlightRef.current) return;
       const operation = beginContextOperation(expectedUserScopeKey);
       if (!operation) return;
+      const selectedAppIdAtStart = selectedAppIdRef.current;
       actionInFlightRef.current = true;
       setBusyAction(actionKey);
       setNotice(null);
       try {
         const result = await action(operation.options);
-        if (!operationIsCurrent(operation)) return;
+        if (!operationIsCurrent(operation) || selectedAppIdRef.current !== selectedAppIdAtStart)
+          return;
         commit(result);
         setNotice({ status: "success", message: successMessage });
       } catch (error) {
-        if (isAbortError(error) || !operationIsCurrent(operation)) return;
+        if (
+          isAbortError(error) ||
+          !operationIsCurrent(operation) ||
+          selectedAppIdRef.current !== selectedAppIdAtStart
+        )
+          return;
         onError?.(error);
         setNotice({ status: "danger", message: errorMessage(error) });
       } finally {
@@ -619,6 +628,7 @@ export function AppsPage() {
       if (actionInFlightRef.current) return;
       const operation = beginContextOperation(expectedUserScopeKey);
       if (!operation) return;
+      const selectedAppIdAtStart = selectedAppIdRef.current;
       actionInFlightRef.current = true;
       setBusyAction("oauth");
       setNotice(null);
@@ -633,10 +643,16 @@ export function AppsPage() {
           },
           operation.options,
         );
-        if (!operationIsCurrent(operation)) return;
+        if (!operationIsCurrent(operation) || selectedAppIdRef.current !== selectedAppIdAtStart)
+          return;
         window.location.assign(result.authorizationUrl);
       } catch (error) {
-        if (isAbortError(error) || !operationIsCurrent(operation)) return;
+        if (
+          isAbortError(error) ||
+          !operationIsCurrent(operation) ||
+          selectedAppIdRef.current !== selectedAppIdAtStart
+        )
+          return;
         setNotice({ status: "danger", message: errorMessage(error) });
       } finally {
         if (operationIsCurrent(operation)) setBusyAction("");

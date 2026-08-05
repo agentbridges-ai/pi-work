@@ -48,18 +48,50 @@ compose() {
 materialize_runtime_secrets() {
   local image="${PIWORK_WEB_IMAGE:-piwork-web:source}"
   local postgres_password_file="${PIWORK_POSTGRES_APP_PASSWORD_FILE_HOST:-$POSTGRES_APP_PASSWORD_FILE}"
+  local provider_api_key="${PIWORK_PI_PROVIDER_API_KEY:-}"
+  local provider_enabled=0
+  [[ -n "$provider_api_key" ]] && provider_enabled=1
   docker volume create piwork_runtime_secrets >/dev/null
-  docker run --rm --user 0:0 --entrypoint /bin/sh \
-    -v 'piwork_runtime_secrets:/out' \
-    -v "$KEY_FILE:/in/runtime-control.key:ro" \
-    -v "$MARKER_FILE:/in/runtime-security.marker:ro" \
-    -v "$postgres_password_file:/in/postgres-app.password:ro" \
-    "$image" -eu -c '
+  local -a docker_args=(
+    run --rm
+    --user 0:0
+    --entrypoint /bin/sh
+    -v 'piwork_runtime_secrets:/out'
+    -v "$KEY_FILE:/in/runtime-control.key:ro"
+    -v "$MARKER_FILE:/in/runtime-security.marker:ro"
+    -v "$postgres_password_file:/in/postgres-app.password:ro"
+    -e "PIWORK_PI_PROVIDER_BOOTSTRAP_ENABLED=$provider_enabled"
+    -e "PIWORK_PI_PROVIDER_NAME=${PIWORK_PI_PROVIDER_NAME:-}"
+    -e "PIWORK_PI_PROVIDER_BASE_URL=${PIWORK_PI_PROVIDER_BASE_URL:-}"
+    -e "PIWORK_PI_PROVIDER_API=${PIWORK_PI_PROVIDER_API:-}"
+    -e "PIWORK_PI_PROVIDER_API_KEY_HEADER=${PIWORK_PI_PROVIDER_API_KEY_HEADER:-}"
+    -e "PIWORK_PI_PROVIDER_MODELS=${PIWORK_PI_PROVIDER_MODELS:-}"
+    "$image"
+    -eu
+    -c
+  )
+  local materialize_script='
       install -d -o 65532 -g 65532 -m 0700 /out
       install -o 65532 -g 65532 -m 0400 /in/runtime-control.key /out/runtime-control.key
       install -o 65532 -g 65532 -m 0400 /in/runtime-security.marker /out/runtime-security.marker
       install -o 65532 -g 65532 -m 0400 /in/postgres-app.password /out/postgres-app.password
+      rm -f /out/pi-provider-bootstrap
+      if [ "${PIWORK_PI_PROVIDER_BOOTSTRAP_ENABLED:-0}" = "1" ]; then
+        tmp="/out/.pi-provider-bootstrap.$$"
+        umask 077
+        bun /workspace/web/scripts/prepare-provider-bootstrap.ts >"$tmp"
+        chown 65532:65532 "$tmp"
+        chmod 0400 "$tmp"
+        mv -f "$tmp" /out/pi-provider-bootstrap
+      fi
     '
+  if [[ -n "$provider_api_key" ]]; then
+    printf '%s' "$provider_api_key" | env -u PIWORK_PI_PROVIDER_API_KEY -u PIWORK_PI_PROVIDER_KEYCHAIN_SERVICE \
+      docker "${docker_args[@]}" "$materialize_script"
+  else
+    env -u PIWORK_PI_PROVIDER_API_KEY -u PIWORK_PI_PROVIDER_KEYCHAIN_SERVICE \
+      docker "${docker_args[@]}" "$materialize_script" </dev/null
+  fi
 }
 
 select_mode() {
@@ -310,9 +342,12 @@ restore() {
      mv /var/lib/piwork/data.restore /var/lib/piwork/data
       rm -rf /var/lib/piwork/data.previous' <"$input/data.tar"
   compose up -d postgres
-  compose --profile migrate run --rm migrate
   compose exec -T postgres pg_restore --clean --if-exists --no-owner --no-acl \
     -U "${POSTGRES_USER:-piwork}" -d "${POSTGRES_DB:-piwork}" <"$input/postgres.dump"
+  # Restore the historical dump before applying current migrations. Running
+  # the migration job first is unsafe: pg_restore --clean can drop the newly
+  # created objects and leave the database at the backup's older schema.
+  compose --profile migrate run --rm migrate
   compose down
   echo 'Database and Pi data restore completed. The fixed stack remains stopped until selfhost up is run.'
 }

@@ -59,6 +59,7 @@ export interface AppsRuntimeUiOperations {
   handleDeploymentTargetQueued(
     context: AppCloudflareAccountContext,
     deployment: AppCloudflareQueuedDeployment,
+    signal?: AbortSignal,
   ): Promise<void>;
   setCustomDomain(
     context: AppOperationContext,
@@ -410,7 +411,9 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
   async handleDeploymentTargetQueued(
     accountContext: AppCloudflareAccountContext,
     queued: AppCloudflareQueuedDeployment,
+    signal?: AbortSignal,
   ): Promise<void> {
+    signal?.throwIfAborted();
     this.checkDeploySwitches();
     const holder = `cloudflare-deploy:${queued.deploymentId}:${randomUUID()}`;
     const leaseTtlMs = 300_000;
@@ -516,18 +519,24 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
       }
 
       const context = this.deploymentContext(accountContext, deployment);
-      const artifact = await this.readStagedArtifact(app.ownerUserId, deployment);
+      signal?.throwIfAborted();
+      const artifact = await this.readStagedArtifact(deployment.createdBy, deployment);
+      signal?.throwIfAborted();
       const credential = await this.cloudflareAccounts.resolveDeploymentCredential(
         accountContext,
         app.id,
         deployment.id,
         deployment.appGeneration,
       );
+      signal?.throwIfAborted();
       await ensureLease();
+      signal?.throwIfAborted();
       await (queued.target === "temporary"
         ? this.temporaryAdapter.validate(artifact)
         : this.byocAdapter.validate(artifact));
+      signal?.throwIfAborted();
       if (deployment.phase === "queued") {
+        signal?.throwIfAborted();
         await this.cloudflareAccounts.transitionDeploymentPhase(accountContext, {
           deploymentId: deployment.id,
           appGeneration: deployment.appGeneration,
@@ -538,6 +547,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
         deployment = { ...deployment, phase: "provisioning" };
       }
 
+      signal?.throwIfAborted();
       const currentReceipts = await this.cloudflareAccounts.listDeploymentReceipts(
         accountContext,
         deployment.id,
@@ -560,6 +570,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
         sameTarget && priorDeployment
           ? await this.cloudflareAccounts.listDeploymentReceipts(accountContext, priorDeployment.id)
           : [];
+      signal?.throwIfAborted();
       const receiptMap = new Map<string, AppCloudflareResourceReceipt>();
       for (const receipt of [...priorReceipts, ...currentReceipts]) {
         receiptMap.set(`${receipt.resourceKind}:${receipt.logicalKey}`, receipt);
@@ -576,10 +587,12 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
               },
               credential,
               bindings: artifact.bindings,
+              signal,
               existingReceipts: [...receiptMap.values()]
                 .map(runtimeReceipt)
                 .filter((receipt): receipt is AppRuntimeResourceReceipt => receipt !== null),
               onReceipt: async (receipt) => {
+                signal?.throwIfAborted();
                 await ensureLease();
                 await this.persistRuntimeReceipt(
                   accountContext,
@@ -590,7 +603,9 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
               },
             });
       if (queued.target === "byoc") preparedResources = prepared;
+      signal?.throwIfAborted();
       await ensureLease();
+      signal?.throwIfAborted();
       deployment = await this.controlPlane.markDeploymentDeploying(
         context,
         app.id,
@@ -606,6 +621,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
         workerName: app.workerName,
         ownerUserId: app.ownerUserId,
       };
+      signal?.throwIfAborted();
       await this.persistCoreReceipt(
         accountContext,
         deployment,
@@ -618,6 +634,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
       );
       workerReceiptStarted = true;
       if (artifact.assets.length > 0) {
+        signal?.throwIfAborted();
         await this.persistCoreReceipt(
           accountContext,
           deployment,
@@ -644,6 +661,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
           app.id,
           deployment.rollbackOfDeploymentId,
         );
+        signal?.throwIfAborted();
         const sameRollbackTarget =
           rollbackTarget.targetKind === deployment.targetKind &&
           (deployment.targetKind === "byoc"
@@ -661,13 +679,18 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
           deploymentId: deployment.id,
           credential,
           providerVersion: rollbackTarget.cloudflareVersionId,
+          signal,
         });
       } else {
         let previous:
           | { providerVersion: string; durableObjectClasses: string[]; migrationTag?: string }
           | undefined;
         if (sameTarget && priorDeployment?.cloudflareVersionId) {
-          const previousArtifact = await this.readStagedArtifact(app.ownerUserId, priorDeployment);
+          const previousArtifact = await this.readStagedArtifact(
+            priorDeployment.createdBy,
+            priorDeployment,
+          );
+          signal?.throwIfAborted();
           previous = {
             providerVersion: priorDeployment.cloudflareVersionId,
             durableObjectClasses: previousArtifact.durableObjectClasses,
@@ -677,6 +700,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
           };
         }
         const onReceipt = async (receipt: AppRuntimeResourceReceipt) => {
+          signal?.throwIfAborted();
           await ensureLease();
           await this.persistRuntimeReceipt(accountContext, deployment!, receipt, lease.leaseToken);
         };
@@ -689,6 +713,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
                 artifact,
                 ...(previous ? { previous } : {}),
                 onReceipt,
+                signal,
               })
             : await this.byocAdapter.deploy({
                 target,
@@ -698,8 +723,10 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
                 resources: prepared,
                 ...(previous ? { previous } : {}),
                 onReceipt,
+                signal,
               });
       }
+      signal?.throwIfAborted();
       await ensureLease();
       if (result.readiness !== "ready") {
         throw deploymentError(
@@ -825,9 +852,10 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
     payload: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<unknown> {
-    void signal;
+    signal?.throwIfAborted();
     const requestedPath = requiredString(payload.path, "path");
     const artifact = await collectAppBuildArtifact(scope.workspaceDir, requestedPath);
+    signal?.throwIfAborted();
     const build = record(payload.build);
     const prebuildDigest = optionalString(build.sourceDigestBeforeBuild);
     if (prebuildDigest && prebuildDigest !== artifact.sourceDigest) {
@@ -850,14 +878,18 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
 
     let begun: { app: AppRecord; deployment: AppDeploymentRecord } | undefined;
     try {
+      signal?.throwIfAborted();
+      const artifactKey = await this.persistStagedArtifact(artifact);
+      signal?.throwIfAborted();
       begun = await this.controlPlane.beginDeployment(context, {
         ...(optionalString(payload.appId) ? { appId: optionalString(payload.appId) } : {}),
         ...(optionalString(payload.slug) ? { slug: optionalString(payload.slug) } : {}),
         sourceDigest: artifact.sourceDigest,
-        artifactKey: await this.persistStagedArtifact(artifact),
+        artifactKey,
         manifest: artifact.manifest,
         bindingManifest: artifact.bindings as unknown as Record<string, unknown>,
       });
+      signal?.throwIfAborted();
       if (begun.deployment.phase === "ready") return begun;
       if (begun.deployment.phase === "failed") {
         throw new Error(begun.deployment.errorMessage || "This App deployment previously failed.");
@@ -869,6 +901,7 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
         sourceRoot: artifact.sourceRoot,
         expectedDigest: artifact.sourceDigest,
       });
+      signal?.throwIfAborted();
       await this.controlPlane.setSourceSnapshotKey(
         internalContext(context),
         begun.app.id,
@@ -902,8 +935,9 @@ export class AppsRuntimeCoordinator implements AppsRuntimeUiOperations {
     if (envFlag(ENV.PIWORK_APPS_KILL_SWITCH)) {
       throw new Error("App deployments are paused by the platform operator.");
     }
-    void signal;
+    signal?.throwIfAborted();
     const targetDeployment = await this.controlPlane.getDeployment(context, appId, deploymentId);
+    signal?.throwIfAborted();
     if (!targetDeployment.artifactKey) throw new Error("Rollback artifact is unavailable.");
     const rollback = await this.controlPlane.rollback(context, appId, deploymentId);
     return rollback;

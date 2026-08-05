@@ -37,6 +37,8 @@ describe("Apps control-plane migration", () => {
       "on cloudflare_temporary_previews(tenant_id, owner_user_id)\n  where status in ('provisioning', 'ready', 'claiming')",
     );
     expect(sql).toContain("partition by tenant_id, owner_user_id");
+    expect(sql).toContain("create or replace function piwork_cleanup_cloudflare_expired()");
+    expect(sql).toContain("security definer");
   });
 
   it("gives active members publish/manage-own permissions without manage-all", () => {
