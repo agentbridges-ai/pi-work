@@ -249,6 +249,11 @@ describe("published OnlyOffice descriptor verification", () => {
         base: "github.event.merge_group.base_sha",
         head: "github.event.merge_group.head_sha",
       },
+      {
+        name: "push",
+        base: "github.event.before",
+        head: "github.sha",
+      },
       { name: "other", base: "github.sha", head: "github.sha" },
     ];
     const expressions = {
@@ -328,6 +333,30 @@ describe("published OnlyOffice descriptor verification", () => {
         { rootPackage, webPackage },
       ),
     ).toThrow("self-referential");
+  });
+
+  it("allows development lockfile drift only when the descriptor is unchanged", () => {
+    const drifted = {
+      ...base,
+      lockfiles: base.lockfiles.map((entry: any) =>
+        entry.repository === "Piwork" && entry.path === "web/bun.lock"
+          ? { ...entry, sha256: "f".repeat(64) }
+          : entry,
+      ),
+    };
+    expect(() => validatePiworkReleaseInputs(drifted, root)).toThrow("digest mismatch");
+    expect(() =>
+      validatePiworkReleaseInputs(drifted, root, {
+        allowDependencyLockfileDrift: true,
+        descriptorChanged: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validatePiworkReleaseInputs(drifted, root, {
+        allowDependencyLockfileDrift: true,
+        descriptorChanged: true,
+      }),
+    ).toThrow("digest mismatch");
   });
 
   it("separates the npm proxy source from the Host runtime source", () => {

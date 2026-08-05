@@ -200,7 +200,11 @@ function gitPathChanged(left, right, path) {
   );
 }
 
-export function validatePiworkReleaseInputs(manifest, repositoryRoot = root) {
+export function validatePiworkReleaseInputs(
+  manifest,
+  repositoryRoot = root,
+  { allowDependencyLockfileDrift = false, descriptorChanged = true } = {},
+) {
   const piworkLockfiles = (manifest.lockfiles || []).filter(
     (entry) => entry?.repository === "Piwork",
   );
@@ -218,10 +222,15 @@ export function validatePiworkReleaseInputs(manifest, repositoryRoot = root) {
       pathFromRoot && !pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot),
       `Piwork lockfile path escapes the repository: ${entry.path}`,
     );
-    assert(
-      digest(readFileSync(target)) === entry.sha256,
-      `Piwork lockfile digest mismatch: ${entry.path}`,
-    );
+    const actualDigest = digest(readFileSync(target));
+    // Development dependency PRs may update the generated web lockfile while
+    // the published OnlyOffice descriptor is unchanged. Any descriptor
+    // change, tag, production, or explicit candidate integration remains
+    // strict; future Piwork lockfiles remain strict by default.
+    if (entry.path === "web/bun.lock" && allowDependencyLockfileDrift && !descriptorChanged) {
+      continue;
+    }
+    assert(actualDigest === entry.sha256, `Piwork lockfile digest mismatch: ${entry.path}`);
   }
 }
 
@@ -738,18 +747,26 @@ if (isMain) {
     webPackage: readJson(join(root, "web", "package.json")),
     allowCandidate,
   });
-  validatePiworkReleaseInputs(manifest);
   const eventBaseCommit = process.env.ONLYOFFICE_INTEGRATION_EVENT_BASE_SHA?.trim();
   const eventHeadCommit = process.env.ONLYOFFICE_INTEGRATION_EVENT_HEAD_SHA?.trim();
+  // Resolve whether the descriptor changed before checking lockfile digests.
+  // A paired PR/merge-group range can opt into development lockfile drift;
+  // every other event is strict, including a partially supplied range.
+  const hasEventRange = Boolean(eventBaseCommit && eventHeadCommit);
+  const descriptorChanged = hasEventRange
+    ? gitPathChanged(eventBaseCommit, eventHeadCommit, relative(root, manifestPath))
+    : true;
   validateOnlyOfficeIntegrationBase(manifest, {
     headCommit: resolveGitCommit("HEAD"),
     eventBaseCommit,
     eventHeadCommit,
     isAncestor: gitIsAncestor,
     mergeBase: gitMergeBase,
-    manifestChanged:
-      Boolean(eventBaseCommit && eventHeadCommit) &&
-      gitPathChanged(eventBaseCommit, eventHeadCommit, relative(root, manifestPath)),
+    manifestChanged: descriptorChanged,
+  });
+  validatePiworkReleaseInputs(manifest, root, {
+    allowDependencyLockfileDrift: process.argv.includes("--allow-dependency-lockfile-drift"),
+    descriptorChanged,
   });
   const expectedReleaseId = process.env.ONLYOFFICE_EXPECTED_RELEASE_ID?.trim();
   if (expectedReleaseId) {
