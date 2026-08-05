@@ -3,8 +3,9 @@ import { installClipboardWriteFallback } from "./clipboard.js";
 export type Route =
   | { page: "home"; userUuid?: string; agentId?: string }
   | { page: "session"; sessionId: string; userUuid?: string; agentId?: string }
+  | { page: "rbacAdmin" }
   | { page: "apps" }
-  | { page: "rbacAdmin" };
+  | { page: "projectionLab" };
 
 let clipboardFallbackInitialized = false;
 let routeContext: RouteContext = {};
@@ -93,6 +94,9 @@ function parsePath(pathname: string): Route {
 
   if (segments.length === 1 && segments[0] === "apps") {
     return { page: "apps" };
+  }
+  if (import.meta.env.DEV && segments[0] === "lab" && segments[1] === "projection") {
+    return { page: "projectionLab" };
   }
 
   if (segments[0] === "session" && segments[1]) {

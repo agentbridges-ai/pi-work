@@ -56,6 +56,32 @@ describe("interaction store", () => {
     expect(useStore.getState().completedInteractions.get("session-1")).toHaveLength(1);
   });
 
+  it("keeps an interaction pending until the runtime acknowledges its response", () => {
+    useStore.getState().addInteraction("session-1", request);
+    useStore.getState().markInteractionSubmitting("session-1", request.id, {
+      clientMsgId: "client-1",
+      generation: 3,
+      submittedAt: 1,
+    });
+
+    expect(useStore.getState().pendingInteractions.get("session-1")?.has(request.id)).toBe(true);
+    expect(useStore.getState().interactionSubmissions.get("session-1")?.get(request.id)).toEqual({
+      clientMsgId: "client-1",
+      generation: 3,
+      submittedAt: 1,
+    });
+
+    useStore.getState().completeInteraction("session-1", {
+      requestId: request.id,
+      kind: "ask",
+      status: "submitted",
+      answers: [],
+    });
+
+    expect(useStore.getState().pendingInteractions.has("session-1")).toBe(false);
+    expect(useStore.getState().interactionSubmissions.has("session-1")).toBe(false);
+  });
+
   it("removes one interaction without touching its siblings", () => {
     useStore.getState().addInteraction("session-1", request);
     useStore
@@ -63,6 +89,17 @@ describe("interaction store", () => {
       .addInteraction("session-1", { ...request, id: "request-2", toolCallId: "tool-2" });
     useStore.getState().removeInteraction("session-1", request.id);
     expect(useStore.getState().pendingInteractions.get("session-1")?.has("request-2")).toBe(true);
+  });
+
+  it("cleans up submission state when a pending interaction is removed", () => {
+    useStore.getState().addInteraction("session-1", request);
+    useStore.getState().markInteractionSubmitting("session-1", request.id, {
+      clientMsgId: "client-1",
+      generation: 1,
+      submittedAt: 1,
+    });
+    useStore.getState().removeInteraction("session-1", request.id);
+    expect(useStore.getState().interactionSubmissions.has("session-1")).toBe(false);
   });
 
   it("clears pending interactions for one session during history replay", () => {

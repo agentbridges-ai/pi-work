@@ -33,8 +33,21 @@ an unconnected user may request one real Cloudflare Temporary Account preview
 for the stateless Worker + Static Assets subset, then must claim it and OAuth
 the same account before continuing. Do not add Workers for Platforms dispatch,
 platform-owned artifacts or resources, `apps.localhost` deployment success, or
-local Cloudflare runtime simulation. Provider tests use injected fake HTTP
+an in-product Cloudflare runtime gateway. Provider tests use injected fake HTTP
 adapters and the development Deployment Lab only replays sanitised events.
+
+Piwork may provide opt-in, developer-only local Cloudflare runtime simulation
+for actual Worker surfaces, such as `packages/apps-platform` and a dependent
+Cloudflare Worker repository. Prefer Wrangler or the Cloudflare Vite Plugin;
+use Cloudflare's maintained [Miniflare
+implementation](https://github.com/cloudflare/workers-sdk/tree/main/packages/miniflare)
+directly only when a lower-level simulation API is needed. Local tracing and
+the Local Explorer must remain development tooling: keep it on a separate
+command and port, use local bindings by default, do not expose it through the
+Piwork product API or Caddy, and do not place credentials in local traces.
+
+The Pi Agent and its native Pi RPC runtime are not Cloudflare Workers and must
+never run inside Cloudflare's `workerd`, Wrangler, or Miniflare simulation.
 
 ```text
 Host browser/IDE

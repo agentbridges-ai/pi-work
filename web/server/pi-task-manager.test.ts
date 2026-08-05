@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -68,9 +69,17 @@ afterEach(async () => {
   }
   for (const root of roots.splice(0)) {
     makeTreeRemovable(root);
+    restoreWriteAccess(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function restoreWriteAccess(path: string): void {
+  const entry = lstatSync(path);
+  chmodSync(path, entry.isDirectory() ? 0o700 : 0o600);
+  if (!entry.isDirectory()) return;
+  for (const child of readdirSync(path)) restoreWriteAccess(join(path, child));
+}
 
 function brokerContext(signal = new AbortController().signal): PiBrokerRequestContext {
   return {
@@ -137,7 +146,9 @@ function fixture(
   rootMode: "agent" | "plan" = "agent",
   fixtureOptions: { deferLaunch?: boolean } = {},
 ) {
-  const root = mkdtempSync(join(tmpdir(), "piwork-task-manager-"));
+  // macOS exposes /tmp as a symlink to /private/tmp. The production layout
+  // guard correctly rejects symlink aliases, so canonicalize the test root.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "piwork-task-manager-")));
   roots.push(root);
   const dataRoot = join(root, "data");
   const tenantRoot = join(dataRoot, "tenant");
@@ -327,6 +338,7 @@ describe("PiTaskManager", () => {
         depth: 1,
         prompt: "inspect the workspace",
         background: true,
+        originToolCallId: "task-call-1",
         model: {
           key: "forged/model",
           provider: "forged",
@@ -403,6 +415,16 @@ describe("PiTaskManager", () => {
     expect(launch.sandbox.settings.network).toEqual(context.sandboxSettings.network);
 
     await context.manager.stopTask(result.taskId);
+    expect(context.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          taskId: result.taskId,
+          originToolCallId: "task-call-1",
+          durationMs: expect.any(Number),
+          description: "inspect the workspace",
+        }),
+      ]),
+    );
   });
 
   it("locks inherited Plan tasks to read-only Agent Space", async () => {

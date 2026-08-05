@@ -97,6 +97,12 @@ describe("parseRoute", () => {
     expect(parseRoute({ pathname: "/apps", search: "", hash: "" })).toEqual({ page: "apps" });
   });
 
+  it("parses the development-only projection lab route", () => {
+    expect(parseRoute({ pathname: "/lab/projection", search: "", hash: "" })).toEqual({
+      page: "projectionLab",
+    });
+  });
+
   it("ignores legacy hash session routes", () => {
     expect(parseRoute({ pathname: "/", search: "", hash: "#/session/abc123" })).toEqual({
       page: "home",

@@ -32,6 +32,7 @@ export type PiRunState =
   | "starting"
   | "ready"
   | "running"
+  | "settling"
   | "awaiting_interaction"
   | "compacting"
   | "reconnecting"
@@ -153,12 +154,16 @@ export interface TodoEntry {
 
 export interface TaskExecution {
   taskId: string;
+  /** The task tool invocation that originated this task, never its parent nesting id. */
+  originatingToolCallId?: string;
   name: string;
   description?: string;
   execution: "foreground" | "background";
   status: "running" | "completed" | "failed" | "stopped";
   depth: number;
   progress?: string;
+  durationMs?: number;
+  summary?: string;
 }
 
 export interface ToolExecutionEvent {
@@ -259,6 +264,41 @@ export interface RunStateEvent {
   generation: number;
   timestamp: number;
   reason?: string;
+  /** Structured runtime progress; distinct from a Pi child-process reconnect. */
+  detail?:
+    | {
+        kind: "provider_retry";
+        phase: "start";
+        attempt: number;
+        maxAttempts: number;
+        delayMs: number;
+        error: string;
+      }
+    | {
+        kind: "provider_retry";
+        phase: "end";
+        attempt: number;
+        success: boolean;
+        cancelled?: boolean;
+        error?: string;
+      }
+    | {
+        kind: "compaction";
+        reason: "manual" | "threshold" | "overflow";
+        phase: "start" | "end";
+        aborted?: boolean;
+        willRetry?: boolean;
+        error?: string;
+      }
+    | {
+        kind: "summarization_retry";
+        phase: "scheduled" | "attempt" | "finished";
+        source?: "branchSummary" | "compaction";
+        attempt?: number;
+        maxAttempts?: number;
+        delayMs?: number;
+        error?: string;
+      };
   usage?: PiUsage;
 }
 
@@ -403,6 +443,20 @@ export type BrowserIncomingMessageBase =
   | { type: "session_name_update"; name: string }
   | { type: "session_lifecycle_update"; sessionId: string; lifecycleState: "enabled" | "closed" }
   | { type: "mcp_status"; servers: McpServerDetail[] }
+  | {
+      type: "pi_queue";
+      generation: number;
+      steering: string[];
+      followUp: string[];
+      timestamp: number;
+    }
+  | {
+      type: "pi_extension_event";
+      generation: number;
+      event: string;
+      payload: Record<string, unknown>;
+      timestamp: number;
+    }
   | {
       type: "user_space_request";
       request_id: string;

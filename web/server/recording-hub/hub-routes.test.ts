@@ -130,6 +130,14 @@ describe("hub-routes", () => {
     if (existsSync(TEST_HOME)) rmSync(TEST_HOME, { recursive: true });
   });
 
+  it("exposes projection fixture metadata", async () => {
+    const res = await app.request("/hub/projection-lab");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      scenarios: [{ id: "basic-stream", version: 1 }],
+    });
+  });
+
   // ── Recording CRUD ──────────────────────────────────────────────────
 
   describe("GET /hub/recordings", () => {

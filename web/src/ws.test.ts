@@ -247,6 +247,42 @@ describe("Pi WebSocket transport", () => {
     expect(useStore.getState().completedInteractions.get("s1")).toHaveLength(1);
   });
 
+  it("projects Pi queues and trusted extension events while rejecting stale generations", () => {
+    fireMessage({ type: "session_init", session: makeSession(2), seq: 1 });
+    fireMessage({
+      type: "pi_queue",
+      generation: 2,
+      steering: ["answer current question"],
+      followUp: ["continue after approval"],
+      timestamp: 10,
+      seq: 2,
+    });
+    fireMessage({
+      type: "pi_extension_event",
+      generation: 2,
+      event: "error",
+      payload: { error: "extension failed" },
+      timestamp: 11,
+      seq: 3,
+    });
+    fireMessage({
+      type: "pi_queue",
+      generation: 1,
+      steering: ["stale"],
+      followUp: [],
+      timestamp: 12,
+      seq: 4,
+    });
+
+    expect(useStore.getState().agentActivity.get("s1")).toMatchObject({
+      generation: 2,
+      queue: { steering: ["answer current question"], followUp: ["continue after approval"] },
+      extensionEvent: { event: "error" },
+      latestError: "extension failed",
+      attention: "blocked",
+    });
+  });
+
   it("does not treat an unrelated Pi RPC error as interaction completion", () => {
     fireMessage({ type: "session_init", session: makeSession(), seq: 1 });
     fireMessage({

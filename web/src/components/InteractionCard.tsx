@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClientMessageId, sendToSession } from "../ws.js";
 import { useStore } from "../store.js";
 import type {
@@ -16,39 +16,42 @@ export interface InteractionCardProps {
 }
 
 export function InteractionCard({ interaction, sessionId, inline = false }: InteractionCardProps) {
-  const [submitting, setSubmitting] = useState(false);
   const [transportError, setTransportError] = useState("");
-  const submittedRef = useRef(false);
   const generation = useStore(
     (state) =>
       state.sessions.get(sessionId)?.generation ??
       state.runtimeSessions.find((session) => session.sessionId === sessionId)?.generation ??
       0,
   );
+  const submission = useStore((state) =>
+    state.interactionSubmissions.get(sessionId)?.get(interaction.id),
+  );
+  const submitting = Boolean(submission && submission.generation === generation);
 
   const submit = useCallback(
     (response: InteractionResponse): boolean => {
-      if (submittedRef.current) return false;
-      submittedRef.current = true;
-      setSubmitting(true);
+      if (submitting) return false;
       setTransportError("");
+      const clientMsgId = createClientMessageId();
       const sent = sendToSession(sessionId, {
         type: "interaction_response",
         generation,
         timestamp: Date.now(),
-        clientMsgId: createClientMessageId(),
+        clientMsgId,
         ...response,
       });
       if (!sent) {
-        submittedRef.current = false;
-        setSubmitting(false);
         setTransportError(uiCopy.interaction.sessionClosed);
         return false;
       }
-      useStore.getState().completeInteraction(sessionId, response);
+      useStore.getState().markInteractionSubmitting(sessionId, interaction.id, {
+        clientMsgId,
+        generation,
+        submittedAt: Date.now(),
+      });
       return true;
     },
-    [generation, sessionId],
+    [generation, interaction.id, sessionId, submitting],
   );
 
   useEffect(() => {

@@ -180,7 +180,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 
 function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const allowed = new Set(keys);
-  return Object.keys(value).every((key) => allowed.has(key));
+  return Reflect.ownKeys(value).every((key) => typeof key === "string" && allowed.has(key));
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

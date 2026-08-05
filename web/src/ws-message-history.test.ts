@@ -56,6 +56,38 @@ describe("Pi message history helpers", () => {
     expect(merged.toolExecutions).toEqual([completed]);
   });
 
+  it("retains a task parent across terminal lifecycle updates", () => {
+    const started: ToolExecutionEvent = {
+      type: "tool_execution",
+      generation: 1,
+      toolCallId: "child-tool",
+      toolName: "read",
+      status: "started",
+      timestamp: 10,
+      parentToolCallId: "task-call",
+    };
+    const completed: ToolExecutionEvent = {
+      ...started,
+      status: "completed",
+      timestamp: 20,
+      parentToolCallId: undefined,
+    };
+    const merged = mergeAgentMessage(
+      { ...assistant("tool-message", "", 10), toolExecutions: [started] },
+      { ...assistant("tool-message", "", 20), toolExecutions: [completed] },
+    );
+
+    expect(merged.toolExecutions?.[0]?.parentToolCallId).toBe("task-call");
+  });
+
+  it("retains a provider error while merging duplicate assistant entries", () => {
+    const merged = mergeAgentMessage(
+      { ...assistant("assistant-error", "", 10), error: "Provider failed" },
+      assistant("assistant-error", "", 20),
+    );
+    expect(merged.error).toBe("Provider failed");
+  });
+
   it("merges chronological pages by durable message id", () => {
     const merged = mergeChronologicalMessages(
       [assistant("assistant-1", "first", 10)],

@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "root": {
+    "readOnly": true,
+    "mustRemainClean": true,
+    "resolve": "main-worktree"
+  },
+  "branch": {
+    "prefix": "misakago/",
+    "pattern": "^misakago/[a-z0-9][a-z0-9._/-]{0,80}$",
+    "maxLength": 96
+  },
+  "paths": {
+    "worktreeRoot": "../piwork-worktrees",
+    "stateDir": ".git/piwork-worktree-harness",
+    "policyFile": ".governance/worktree-policy.json",
+    "includeFile": ".worktreeinclude"
+  },
+  "base": {
+    "defaultRef": "origin/main",
+    "requireFreshDefault": true,
+    "requireExplicitBaseAncestorOfDefault": false,
+    "allowPullRequestRef": true
+  },
+  "githubTracking": {
+    "repository": "agentbridges-ai/pi-work",
+    "owner": "root-coordinator",
+    "executionThreadsMayModify": false,
+    "writeApi": false,
+    "milestones": [
+      {
+        "number": 1,
+        "stableId": "engineering-governance-baseline-v1",
+        "title": "Engineering Governance Baseline v1"
+      },
+      {
+        "number": 2,
+        "stableId": "release-0.96.0",
+        "title": "Release 0.96.0"
+      }
+    ]
+  },
+  "milestoneOps": {
+    "sourceOfTruth": "github-milestone-and-tracker-issue",
+    "requiredTrackerIssue": true,
+    "requiredDependencyLinks": true,
+    "dueDateRequired": true,
+    "statusUpdateOnBlock": true,
+    "blockedStatusEvidence": ["status-update"],
+    "labelsSparse": true,
+    "maxLabels": 4,
+    "allowedLabels": ["governance", "feature", "release", "blocked", "needs-review"],
+    "scopeChangeRequiresRootReview": true,
+    "milestoneCloseRequiresRoot": true,
+    "allowedStatuses": ["ready", "in-progress", "blocked", "handoff"]
+  },
+  "scope": {
+    "highRiskPaths": [
+      ".github/**",
+      ".governance/**",
+      "Makefile",
+      "scripts/governance/**",
+      "web/server/*auth*",
+      "web/server/*path*",
+      "web/server/*secret*",
+      "web/server/*credential*",
+      "web/server/pi-*.ts",
+      "web/server/routes/**",
+      "web/shared/**"
+    ],
+    "rejectAnyHighRiskOverlap": true
+  },
+  "lock": {
+    "ttlMinutes": 240,
+    "runtimeTtlSeconds": 120
+  },
+  "cleanup": {
+    "expiredOnly": true,
+    "onlyIfClean": true,
+    "onlyIfNoUnpushedCommits": true,
+    "retainLocalBranch": true
+  },
+  "coordinationModel": {
+    "rootUserFacingCoordinator": true,
+    "manifestIsAuthority": true,
+    "milestoneOwner": "root-coordinator",
+    "executionThreadsUseExclusiveWorktree": true,
+    "requiredMilestoneEvidence": true,
+    "requiredHandoff": true,
+    "requiredHandoffEvidence": [
+      "commit",
+      "signature",
+      "checks",
+      "dirty",
+      "unpushed",
+      "risk",
+      "nextAction"
+    ],
+    "parallelScopesMustBeDisjoint": true,
+    "localSimulationPrecedesRemoteChecks": true,
+    "finalAudit": {
+      "modelSource": "runtime",
+      "minimumReasoning": "ultra",
+      "humanInTheLoop": true,
+      "reviewBypass": false
+    }
+  },
+  "milestones": [
+    {
+      "id": "local-simulation",
+      "githubMilestone": "engineering-governance-baseline-v1",
+      "title": "Local simulation",
+      "owner": "root-coordinator",
+      "objective": "Prove the scoped change and isolation contract locally before remote checks.",
+      "entryCriteria": ["task manifest is complete", "scope is disjoint or explicitly escalated"],
+      "exitCriteria": ["fixtures pass", "worktree-check passes"],
+      "evidence": ["plan", "worktree-check", "fixtures"],
+      "humanReviewAt": "milestone-exit",
+      "blockedEscalation": "root-coordinator",
+      "requiredEvidence": ["plan", "worktree-check", "fixtures"]
+    },
+    {
+      "id": "required-checks",
+      "githubMilestone": "engineering-governance-baseline-v1",
+      "title": "Required checks",
+      "owner": "root-coordinator",
+      "objective": "Collect deterministic commit, signature, and required-check evidence.",
+      "entryCriteria": ["local-simulation exit evidence is complete"],
+      "exitCriteria": [
+        "commit is signed",
+        "required checks pass",
+        "dirty and unpushed state is reported"
+      ],
+      "evidence": ["commit", "signature", "checks", "dirty", "unpushed"],
+      "humanReviewAt": "milestone-exit",
+      "blockedEscalation": "root-coordinator",
+      "requiredEvidence": ["commit", "signature", "checks", "dirty", "unpushed"]
+    },
+    {
+      "id": "handoff",
+      "githubMilestone": "engineering-governance-baseline-v1",
+      "title": "Root coordinator handoff",
+      "owner": "root-coordinator",
+      "objective": "Return a complete evidence packet and risk summary to the only user-facing coordinator.",
+      "entryCriteria": ["required-checks exit evidence is complete"],
+      "exitCriteria": ["handoff evidence is complete", "next action is explicit"],
+      "evidence": ["commit", "checks", "signature", "risk", "handoff"],
+      "humanReviewAt": "milestone-exit",
+      "blockedEscalation": "root-coordinator",
+      "requiredEvidence": ["commit", "checks", "signature", "risk", "handoff"]
+    },
+    {
+      "id": "final-audit",
+      "githubMilestone": "engineering-governance-baseline-v1",
+      "title": "Final audit",
+      "owner": "root-coordinator",
+      "objective": "Complete the final model-assisted and human-in-the-loop audit before merge orchestration.",
+      "entryCriteria": ["handoff evidence is complete"],
+      "exitCriteria": ["human review is recorded", "merge approval is recorded"],
+      "evidence": ["human-review", "merge-approval"],
+      "humanReviewAt": "required-before-merge",
+      "blockedEscalation": "root-coordinator",
+      "requiredEvidence": ["human-review", "merge-approval"]
+    }
+  ],
+  "roleBoundaries": {
+    "rootCoordinator": {
+      "userFacing": true,
+      "ownsTaskDag": true,
+      "ownsMerge": true
+    },
+    "executionThread": {
+      "role": "execution-thread",
+      "mayUseSubagents": true,
+      "inheritsManifestScope": true,
+      "mayWriteRoot": false,
+      "mayWriteOtherWorktrees": false,
+      "mayChangeRemotePolicy": false,
+      "mayMergePullRequests": false,
+      "mustHandoffTo": "root-coordinator"
+    }
+  },
+  "workflow": {
+    "order": [
+      "plan",
+      "claim",
+      "init-in-worktree",
+      "install-dependencies-in-worktree",
+      "commit",
+      "push",
+      "pr",
+      "review-merge"
+    ],
+    "stackedPr": "dependency-order-only",
+    "mergeQueue": "combined-validation-only",
+    "reviewBypass": false
+  },
+  "secrets": {
+    "worktreeIncludeOnlyGitignoredEnv": true,
+    "manifestNeverStoresContent": true,
+    "sharedAcrossWorktrees": [
+      ".git metadata",
+      "remote refs",
+      "filesystem permissions",
+      "secret stores",
+      "databases",
+      "ports",
+      "dependency caches"
+    ]
+  }
+}
