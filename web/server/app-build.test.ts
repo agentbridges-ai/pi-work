@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   APP_ASSET_FILE_LIMIT_BYTES,
+  APP_SOURCE_BYTE_LIMIT_BYTES,
   APP_BUILD_COMMAND,
   collectAppBuildArtifact,
   inspectAppSource,
@@ -77,6 +78,17 @@ describe("App build contract", () => {
     await expect(resolveAppSourceRoot(workspace, "../outside")).rejects.toThrow("escapes");
     await symlink("/tmp", join(source, "escape"));
     await expect(inspectAppSource(workspace, "demo")).rejects.toThrow("Symbolic links");
+  });
+
+  it("rejects oversized source trees before reading their contents", async () => {
+    const { workspace, source } = await fixture();
+    const oversizedPath = join(source, "oversized-fixture.bin");
+    await writeFile(oversizedPath, "");
+    await truncate(oversizedPath, APP_SOURCE_BYTE_LIMIT_BYTES + 1);
+    await expect(inspectAppSource(workspace, "demo")).rejects.toMatchObject({
+      code: "build_limit_exceeded",
+      message: expect.stringContaining("source exceeds"),
+    });
   });
 
   it("rejects platform-controlled bindings", async () => {

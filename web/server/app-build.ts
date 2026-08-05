@@ -15,6 +15,8 @@ const O_CLOEXEC = Number((constants as unknown as Record<string, unknown>).O_CLO
 
 export const APP_BUILD_TIMEOUT_MS = 120_000;
 export const APP_SOURCE_FILE_LIMIT = 50_000;
+/** Aggregate bytes inspected from one App source tree before hashing/building. */
+export const APP_SOURCE_BYTE_LIMIT_BYTES = 64 * 1024 * 1024;
 export const APP_ASSET_FILE_LIMIT_BYTES = 25 * 1024 * 1024;
 /** Aggregate bytes retained in one immutable Worker/Assets artifact. */
 export const APP_ARTIFACT_BYTE_LIMIT_BYTES = 64 * 1024 * 1024;
@@ -315,7 +317,19 @@ export async function inspectAppSource(
   const digest = createHash("sha256");
   let sourceBytes = 0;
   for (const file of files) {
+    if (sourceBytes + file.size > APP_SOURCE_BYTE_LIMIT_BYTES) {
+      throw new AppBuildError(
+        "build_limit_exceeded",
+        `App source exceeds the ${APP_SOURCE_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+      );
+    }
     const bytes = await readRegularFileNoFollow(file.absolutePath);
+    if (sourceBytes + bytes.byteLength > APP_SOURCE_BYTE_LIMIT_BYTES) {
+      throw new AppBuildError(
+        "build_limit_exceeded",
+        `App source exceeds the ${APP_SOURCE_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+      );
+    }
     sourceBytes += bytes.byteLength;
     digest.update(`${file.relativePath}\0${bytes.byteLength}\0`);
     digest.update(bytes);

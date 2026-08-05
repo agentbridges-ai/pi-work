@@ -13,7 +13,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { APP_SOURCE_FILE_LIMIT, APP_SOURCE_SNAPSHOT_IGNORED_DIRECTORIES } from "./app-build.js";
+import {
+  APP_SOURCE_BYTE_LIMIT_BYTES,
+  APP_SOURCE_FILE_LIMIT,
+  APP_SOURCE_SNAPSHOT_IGNORED_DIRECTORIES,
+} from "./app-build.js";
 
 const O_CLOEXEC = Number((constants as unknown as Record<string, unknown>).O_CLOEXEC || 0);
 
@@ -52,6 +56,7 @@ function safeSegment(value: string, label: string): string {
 
 async function enumerateSource(root: string): Promise<SourceFile[]> {
   const files: SourceFile[] = [];
+  let sourceBytes = 0;
   const walk = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -68,6 +73,12 @@ async function enumerateSource(root: string): Promise<SourceFile[]> {
         if (files.length >= APP_SOURCE_FILE_LIMIT) {
           throw new Error(`Source snapshot exceeds ${APP_SOURCE_FILE_LIMIT} files`);
         }
+        if (sourceBytes + stat.size > APP_SOURCE_BYTE_LIMIT_BYTES) {
+          throw new Error(
+            `Source snapshot exceeds the ${APP_SOURCE_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+          );
+        }
+        sourceBytes += stat.size;
         files.push({
           absolutePath: path,
           relativePath: relative(root, path).split(sep).join("/"),
