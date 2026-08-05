@@ -189,6 +189,17 @@ function readbackDrift() {
     drift.push("workflow permission readback is unavailable");
   }
   try {
+    const secretResponse = gh("GET", `/repos/${repository}/actions/secrets?per_page=100`);
+    const secretNames = new Set((secretResponse?.secrets || []).map((secret) => secret.name));
+    for (const requiredSecret of policy.requiredRepositorySecrets || []) {
+      if (!secretNames.has(requiredSecret)) {
+        drift.push(`repository Actions secret ${requiredSecret} is missing`);
+      }
+    }
+  } catch {
+    drift.push("repository Actions secret readback is unavailable");
+  }
+  try {
     const environment = gh(
       "GET",
       `/repos/${repository}/environments/${policy.productionEnvironment}`,
@@ -239,6 +250,14 @@ function readbackDrift() {
       drift.push(`ruleset ${name} is missing or inactive`);
   }
   const main = rulesets.find((item) => item.name === "Piwork main governance");
+  const mainPullRequest = main?.rules?.find((rule) => rule.type === "pull_request");
+  const mainReviewers = mainPullRequest?.parameters?.required_reviewers || [];
+  if (
+    mainPullRequest?.parameters?.required_approving_review_count !== policy.ordinaryApprovals ||
+    mainReviewers[0]?.minimum_approvals !== policy.ordinaryApprovals
+  ) {
+    drift.push("main ruleset approval baseline does not match policy");
+  }
   const contexts =
     main?.rules
       ?.find((rule) => rule.type === "required_status_checks")
@@ -246,6 +265,13 @@ function readbackDrift() {
   for (const requiredCheck of policy.requiredChecks) {
     if (!contexts.includes(requiredCheck))
       drift.push(`main ruleset is missing required check ${requiredCheck}`);
+  }
+  const highRisk = rulesets.find((item) => item.name === "Piwork high-risk review");
+  const highRiskReviewers =
+    highRisk?.rules?.find((rule) => rule.type === "pull_request")?.parameters?.required_reviewers ||
+    [];
+  if (highRiskReviewers[0]?.minimum_approvals !== policy.highRiskApprovals) {
+    drift.push("high-risk ruleset approval baseline does not match policy");
   }
   const tag = rulesets.find((item) => item.name === "Piwork release tags");
   const tagRuleTypes = new Set((tag?.rules || []).map((rule) => rule.type));

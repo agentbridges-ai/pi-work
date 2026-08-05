@@ -2,6 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { approvedReviewersForHead, requiredApprovalsForAuthor } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const policy = JSON.parse(readFileSync(join(root, ".governance/github-policy.json"), "utf8"));
@@ -152,6 +153,9 @@ while (!filesDone || !reviewsDone) {
 const highRisk = files.some((file) =>
   policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
 );
+const approvedReviewers = approvedReviewersForHead(reviews, headSha);
+const requiredApprovals = requiredApprovalsForAuthor(pullRequest.user.login, policy);
+const approvalsSatisfied = approvedReviewers.length >= requiredApprovals;
 const leaderParticipated =
   pullRequest.user.login === policy.leader ||
   reviews.some(
@@ -160,12 +164,16 @@ const leaderParticipated =
       review.state === "APPROVED" &&
       review.commit?.oid === headSha,
   );
-const state = !highRisk || leaderParticipated ? "success" : "failure";
-const description = !highRisk
+const state = approvalsSatisfied && (!highRisk || leaderParticipated) ? "success" : "failure";
+const approvalDescription = `${pullRequest.user.login === policy.leader ? policy.leader : "非 Leader Core 作者"}：${approvedReviewers.length}/${requiredApprovals} 个最新提交有效审批`;
+const leaderDescription = !highRisk
   ? "普通改动：Leader 参与检查不适用"
   : leaderParticipated
     ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
     : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
+const description = approvalsSatisfied
+  ? `${approvalDescription}；${leaderDescription}`
+  : `${approvalDescription}；审批数不足`;
 
 const workflowUrl = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
