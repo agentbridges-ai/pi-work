@@ -1,7 +1,15 @@
 #!/usr/local/bin/node
 
 const { spawnSync } = require("node:child_process");
-const { closeSync, constants, lstatSync, openSync, realpathSync, unlinkSync } = require("node:fs");
+const {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  realpathSync,
+  unlinkSync,
+} = require("node:fs");
 const { basename, dirname, isAbsolute, resolve } = require("node:path");
 
 const input = process.argv.slice(2);
@@ -121,14 +129,23 @@ function cleanupCreatedMaskDestinations() {
 }
 
 function openProxyDirectoryFd(proxyDirectory) {
+  let fd;
   try {
-    const info = lstatSync(proxyDirectory);
-    if (!info.isDirectory() || info.isSymbolicLink()) return;
-    return openSync(
+    // Open the canonical directory directly with O_NOFOLLOW. A separate
+    // path-based lstat would leave a check-to-use race before bwrap consumes
+    // the descriptor.
+    fd = openSync(
       proxyDirectory,
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_CLOEXEC,
     );
+    const info = fstatSync(fd);
+    if (!info.isDirectory() || (info.mode & 0o077) !== 0) {
+      closeSync(fd);
+      return;
+    }
+    return fd;
   } catch {
+    if (fd !== undefined) closeSync(fd);
     return;
   }
 }
