@@ -1,5 +1,13 @@
-export function requiredApprovalsForAuthor(authorLogin, policy) {
-  return authorLogin === policy.leader ? policy.leaderApprovals : policy.nonLeaderCoreApprovals;
+const coreAuthorAssociations = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
+
+export function isCoreAuthor(authorLogin, policy, authorAssociation = "MEMBER") {
+  return authorLogin === policy.leader || coreAuthorAssociations.has(authorAssociation);
+}
+
+export function requiredApprovalsForAuthor(authorLogin, policy, authorAssociation = "MEMBER") {
+  if (authorLogin === policy.leader) return policy.leaderApprovals;
+  if (isCoreAuthor(authorLogin, policy, authorAssociation)) return policy.nonLeaderCoreApprovals;
+  return policy.ordinaryApprovals;
 }
 
 export function approvedReviewersForHead(reviews, headSha) {
