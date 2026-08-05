@@ -30,6 +30,13 @@ describe("Apps control-plane migration", () => {
       "check (operation in ('deploy', 'rollback', 'domain_set', 'claim_verify'))",
     );
     expect(sql).toContain("step_status text not null default 'planned'");
+    expect(sql).toContain("row_number() over");
+    expect(sql).toContain("last_error_code='superseded_active_owner'");
+    expect(sql).toContain("idx_cloudflare_temporary_previews_active_owner");
+    expect(sql).toContain(
+      "on cloudflare_temporary_previews(tenant_id, owner_user_id)\n  where status in ('provisioning', 'ready', 'claiming')",
+    );
+    expect(sql).toContain("partition by tenant_id, owner_user_id");
   });
 
   it("gives active members publish/manage-own permissions without manage-all", () => {

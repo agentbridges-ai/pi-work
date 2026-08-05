@@ -481,6 +481,38 @@ create unique index if not exists idx_cloudflare_temporary_previews_account
   on cloudflare_temporary_previews(account_id) where account_id is not null;
 create unique index if not exists idx_cloudflare_temporary_previews_active_app
   on cloudflare_temporary_previews(app_id) where status in ('provisioning', 'ready', 'claiming');
+-- Older deployments allowed one active preview per App, so a user can have
+-- more than one active preview when this owner-wide admission index is first
+-- introduced. Keep the newest deterministic winner and expire older previews
+-- before creating the unique index; credentials are cleared to satisfy the
+-- terminal-state invariant and to prevent stale claims from remaining usable.
+with ranked_active as (
+  select id,
+         row_number() over (
+           partition by tenant_id, owner_user_id
+           order by created_at desc, id desc
+         ) as owner_rank
+  from cloudflare_temporary_previews
+  where status in ('provisioning', 'ready', 'claiming')
+)
+update cloudflare_temporary_previews as preview
+set status='expired',
+    credential_ciphertext=null,
+    credential_iv=null,
+    credential_auth_tag=null,
+    credential_key_version=null,
+    claim_ciphertext=null,
+    claim_iv=null,
+    claim_auth_tag=null,
+    claim_key_version=null,
+    last_error_code='superseded_active_owner',
+    updated_at=now()
+from ranked_active
+where preview.id=ranked_active.id and ranked_active.owner_rank > 1;
+drop index if exists idx_cloudflare_temporary_previews_active_owner;
+create unique index if not exists idx_cloudflare_temporary_previews_active_owner
+  on cloudflare_temporary_previews(tenant_id, owner_user_id)
+  where status in ('provisioning', 'ready', 'claiming');
 create index if not exists idx_cloudflare_temporary_previews_owner
   on cloudflare_temporary_previews(tenant_id, owner_user_id, created_at desc);
 create index if not exists idx_cloudflare_temporary_previews_expiry

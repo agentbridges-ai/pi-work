@@ -7,6 +7,7 @@ import {
   APP_BUILD_COMMAND,
   collectAppBuildArtifact,
   inspectAppSource,
+  resolveAppBuildCommand,
   resolveAppSourceRoot,
 } from "./app-build.js";
 
@@ -55,6 +56,10 @@ afterEach(async () => {
 describe("App build contract", () => {
   it("pins the SRT build command", () => {
     expect(APP_BUILD_COMMAND).toBe("bun install --frozen-lockfile && bun run build");
+  });
+
+  it("resolves an existing absolute Bun executable before entering the sandbox", () => {
+    expect(resolveAppBuildCommand()).toMatch(/^'.+' install --frozen-lockfile && '.+' run build$/u);
   });
 
   it("collects declared modules and assets with deterministic digests", async () => {

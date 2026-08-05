@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir, realpath } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { resolveBinary } from "./path-resolver.js";
 import {
   materializeAppBindingManifest,
   parsePiworkAppManifestText,
@@ -9,11 +11,35 @@ import {
   type PiworkAppManifestV1,
 } from "./app-manifest.js";
 
+const O_CLOEXEC = Number((constants as unknown as Record<string, unknown>).O_CLOEXEC || 0);
+
 export const APP_BUILD_TIMEOUT_MS = 120_000;
 export const APP_SOURCE_FILE_LIMIT = 50_000;
 export const APP_ASSET_FILE_LIMIT_BYTES = 25 * 1024 * 1024;
+/** Aggregate bytes retained in one immutable Worker/Assets artifact. */
+export const APP_ARTIFACT_BYTE_LIMIT_BYTES = 64 * 1024 * 1024;
 export const APP_BUILD_COMMAND = "bun install --frozen-lockfile && bun run build";
 export const APP_BUILD_CONFIG_PATH = "build/server/wrangler.json";
+
+function shellQuote(value: string): string {
+  if (!value || value.includes("\0")) throw new Error("Bun executable path is invalid");
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/** Resolve Bun before entering the SRT child PATH, which intentionally omits host install dirs. */
+export function resolveAppBuildCommand(): string {
+  const candidates = [
+    process.versions.bun ? process.execPath : undefined,
+    resolveBinary("bun"),
+    "/usr/local/bin/bun",
+    "/usr/local/bun/bin/bun",
+    "/opt/homebrew/bin/bun",
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  const executable = candidates.find((value) => isAbsolute(value) && existsSync(value));
+  if (!executable) throw new Error("Bun is required for App builds");
+  const quoted = shellQuote(executable);
+  return `${quoted} install --frozen-lockfile && ${quoted} run build`;
+}
 
 const PACKAGE_JSON_LIMIT_BYTES = 1024 * 1024;
 export const APP_SOURCE_SNAPSHOT_IGNORED_DIRECTORIES = new Set([
@@ -229,9 +255,20 @@ async function walkRegularFiles(
 
 async function requiredFile(path: string, message: string): Promise<Uint8Array> {
   try {
-    return await readFile(path);
+    return await readRegularFileNoFollow(path);
   } catch {
     throw new AppBuildError("missing_build_contract", message);
+  }
+}
+
+async function readRegularFileNoFollow(path: string): Promise<Uint8Array> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error("Expected a regular file");
+    return await handle.readFile();
+  } finally {
+    await handle.close();
   }
 }
 
@@ -278,7 +315,7 @@ export async function inspectAppSource(
   const digest = createHash("sha256");
   let sourceBytes = 0;
   for (const file of files) {
-    const bytes = await readFile(file.absolutePath);
+    const bytes = await readRegularFileNoFollow(file.absolutePath);
     sourceBytes += bytes.byteLength;
     digest.update(`${file.relativePath}\0${bytes.byteLength}\0`);
     digest.update(bytes);
@@ -462,19 +499,34 @@ export async function collectAppBuildArtifact(
   }
 
   const modules: AppWorkerModule[] = [];
+  let artifactBytes = 0;
   for (const file of buildFiles) {
     if (file.relativePath === "wrangler.json") continue;
     const rule = rules.find((candidate) =>
       candidate.patterns.some((pattern) => pattern.test(file.relativePath)),
     );
     if (file.relativePath !== mainModule && !rule) continue;
+    if (artifactBytes + file.size > APP_ARTIFACT_BYTE_LIMIT_BYTES) {
+      throw new AppBuildError(
+        "build_limit_exceeded",
+        `App artifact exceeds the ${APP_ARTIFACT_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+      );
+    }
+    const bytes = await readRegularFileNoFollow(file.absolutePath);
+    if (artifactBytes + bytes.byteLength > APP_ARTIFACT_BYTE_LIMIT_BYTES) {
+      throw new AppBuildError(
+        "build_limit_exceeded",
+        `App artifact exceeds the ${APP_ARTIFACT_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+      );
+    }
+    artifactBytes += bytes.byteLength;
     modules.push({
       name: file.relativePath,
       contentType:
         file.relativePath === mainModule
           ? "application/javascript+module"
           : moduleContentType(rule!.type),
-      bytes: await readFile(file.absolutePath),
+      bytes,
     });
   }
   modules.sort((left, right) => left.name.localeCompare(right.name));
@@ -518,7 +570,20 @@ export async function collectAppBuildArtifact(
         });
         continue;
       }
-      const bytes = await readFile(file.absolutePath);
+      if (artifactBytes + file.size > APP_ARTIFACT_BYTE_LIMIT_BYTES) {
+        throw new AppBuildError(
+          "build_limit_exceeded",
+          `App artifact exceeds the ${APP_ARTIFACT_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+        );
+      }
+      const bytes = await readRegularFileNoFollow(file.absolutePath);
+      if (artifactBytes + bytes.byteLength > APP_ARTIFACT_BYTE_LIMIT_BYTES) {
+        throw new AppBuildError(
+          "build_limit_exceeded",
+          `App artifact exceeds the ${APP_ARTIFACT_BYTE_LIMIT_BYTES}-byte aggregate limit`,
+        );
+      }
+      artifactBytes += bytes.byteLength;
       assets.push({
         path,
         contentType: contentTypeForAsset(file.relativePath),

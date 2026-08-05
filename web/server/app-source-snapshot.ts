@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   access,
-  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -10,10 +9,13 @@ import {
   realpath,
   rename,
   rm,
+  open,
   writeFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { APP_SOURCE_FILE_LIMIT, APP_SOURCE_SNAPSHOT_IGNORED_DIRECTORIES } from "./app-build.js";
+
+const O_CLOEXEC = Number((constants as unknown as Record<string, unknown>).O_CLOEXEC || 0);
 
 const SNAPSHOT_MARKER = ".piwork-source-snapshot.json";
 
@@ -87,7 +89,7 @@ async function sourceDigest(files: readonly SourceFile[]): Promise<{
   const hash = createHash("sha256");
   let sourceBytes = 0;
   for (const file of files) {
-    const bytes = await readFile(file.absolutePath);
+    const bytes = await readRegularFileNoFollow(file.absolutePath);
     sourceBytes += bytes.byteLength;
     hash.update(`${file.relativePath}\0${bytes.byteLength}\0`);
     hash.update(bytes);
@@ -95,12 +97,24 @@ async function sourceDigest(files: readonly SourceFile[]): Promise<{
   return { digest: hash.digest("hex"), sourceBytes };
 }
 
+async function readRegularFileNoFollow(path: string): Promise<Uint8Array> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error("Source snapshot requires regular files");
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function copyFiles(files: readonly SourceFile[], destination: string): Promise<void> {
   for (const file of files) {
     const target = resolve(destination, file.relativePath);
     if (!contained(destination, target)) throw new Error("Source snapshot target escapes its root");
     await mkdir(resolve(target, ".."), { recursive: true, mode: 0o700 });
-    await copyFile(file.absolutePath, target, constants.COPYFILE_EXCL);
+    const bytes = await readRegularFileNoFollow(file.absolutePath);
+    await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
   }
 }
 
@@ -218,7 +232,8 @@ export async function restoreAppSourceSnapshot(options: {
     await access(resolve(target, ".."), constants.F_OK).catch(async () => {
       await mkdir(resolve(target, ".."), { recursive: true, mode: 0o700 });
     });
-    await copyFile(file.absolutePath, target, constants.COPYFILE_EXCL);
+    const bytes = await readRegularFileNoFollow(file.absolutePath);
+    await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
   }
   return {
     key: options.snapshotKey,

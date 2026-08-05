@@ -18,6 +18,7 @@ on:
       - "web/scripts/verify-runtime-rls.ts"
       - "web/server/migrations/**"
       - "web/server/pi-runtime-*.ts"
+      - "web/server/remote-pi-runtime.ts"
       - "web/server/runtime-*.ts"
       - "web/server/srt-policy.ts"
   push:
@@ -38,6 +39,7 @@ on:
       - "web/scripts/verify-runtime-rls.ts"
       - "web/server/migrations/**"
       - "web/server/pi-runtime-*.ts"
+      - "web/server/remote-pi-runtime.ts"
       - "web/server/runtime-*.ts"
       - "web/server/srt-policy.ts"
   workflow_dispatch:

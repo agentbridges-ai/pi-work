@@ -580,14 +580,13 @@ export class AppCloudflareAccountService {
   private async reusableTemporaryAccount(
     db: Db,
     context: AppCloudflareAccountContext,
-    appId: string,
   ): Promise<QueryResultRow | undefined> {
     const result = await db.query(
       `select * from cloudflare_temporary_previews
-       where app_id=$1 and tenant_id=$2 and owner_user_id=$3 and owner_membership_id=$4
-         and status='ready' and expires_at > $5
+       where tenant_id=$1 and owner_user_id=$2
+         and status='ready' and expires_at > $3
        order by created_at desc,id desc limit 1`,
-      [appId, context.tenantId, context.userId, context.membershipId, this.now().toISOString()],
+      [context.tenantId, context.userId, this.now().toISOString()],
     );
     return result.rows[0];
   }
@@ -756,13 +755,12 @@ export class AppCloudflareAccountService {
       const existing = await this.pool.query(
         `select * from cloudflare_temporary_previews
          where id=$1 and app_id=$2 and tenant_id=$3 and owner_user_id=$4
-           and owner_membership_id=$5 limit 1`,
+           limit 1`,
         [
           deployment.temporary_preview_id,
           appId,
           context.tenantId,
           context.userId,
-          context.membershipId,
         ],
       );
       if (existing.rows[0]) return temporaryFromRow(existing.rows[0], this.now());
@@ -777,8 +775,15 @@ export class AppCloudflareAccountService {
       }
     }
     await this.cleanupExpired();
-    const reusable = await this.reusableTemporaryAccount(this.pool, context, appId);
-    if (reusable) return temporaryFromRow(reusable, this.now());
+    const reusable = await this.reusableTemporaryAccount(this.pool, context);
+    if (reusable) {
+      if (String(reusable.app_id) !== appId) {
+        throw new Error(
+          "This user already has an active Cloudflare temporary preview for another App; claim it or use BYOC before creating another preview.",
+        );
+      }
+      return temporaryFromRow(reusable, this.now());
+    }
     const admission = this.abuseGuard.acquire({
       userId: context.userId,
       ipAddress,
@@ -882,13 +887,13 @@ export class AppCloudflareAccountService {
           })
           .catch(() => undefined);
       }
-      const winner = await this.reusableTemporaryAccount(this.pool, context, appId);
-      if (winner) return temporaryFromRow(winner, this.now());
+      const winner = await this.reusableTemporaryAccount(this.pool, context);
+      if (winner && String(winner.app_id) === appId) return temporaryFromRow(winner, this.now());
       const provisioning = await this.pool.query(
         `select 1 from cloudflare_temporary_previews
-         where app_id=$1 and tenant_id=$2 and owner_user_id=$3 and owner_membership_id=$4
-           and status='provisioning' and id<>$5 limit 1`,
-        [appId, context.tenantId, context.userId, context.membershipId, id],
+         where tenant_id=$1 and owner_user_id=$2
+           and status='provisioning' and id<>$3 limit 1`,
+        [context.tenantId, context.userId, id],
       );
       if (provisioning.rows[0]) {
         throw new Error("Cloudflare temporary account provisioning is already in progress.");

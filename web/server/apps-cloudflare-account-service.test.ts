@@ -248,6 +248,80 @@ describe("AppCloudflareAccountService", () => {
     expect(client.provisionTemporaryAccount).not.toHaveBeenCalled();
   });
 
+  it("keeps one active preview per user when the membership context changes", async () => {
+    const now = new Date("2026-08-04T08:00:00.000Z");
+    const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
+    const switchedContext = { ...context, membershipId: "member-2" };
+    const query = vi.fn(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("from tenant_memberships")) return { rows: [{ id: "member-2" }] };
+      if (sql.includes("from app_deployments d join apps a")) {
+        return {
+          rows: [
+            {
+              id: "deployment-2",
+              app_id: "app-2",
+              owner_user_id: context.userId,
+              phase: "awaiting_target",
+              target_kind: "unassigned",
+              temporary_preview_id: null,
+              manifest: {
+                version: 1,
+                runtime: "cloudflare-workers",
+                exposure: { workersDev: true },
+              },
+            },
+          ],
+        };
+      }
+      if (sql.includes("from scoped_role_assignments")) return { rows: [{ allowed: true }] };
+      if (sql.includes("with abandoned_previews")) return { rows: [], rowCount: 0 };
+      if (sql.includes("update cloudflare_oauth_states")) return { rows: [], rowCount: 0 };
+      if (sql.includes("status='ready' and expires_at")) {
+        expect(sql).not.toContain("owner_membership_id");
+        expect(values).toEqual([context.tenantId, context.userId, now.toISOString()]);
+        return {
+          rows: [
+            {
+              id: "preview-1",
+              app_id: "app-1",
+              tenant_id: context.tenantId,
+              owner_user_id: context.userId,
+              owner_membership_id: context.membershipId,
+              account_id: "account-1",
+              account_name: "Preview",
+              status: "ready",
+              expires_at: expiresAt,
+              account_expires_at: expiresAt,
+              claim_expires_at: expiresAt,
+              claim_ciphertext: "encrypted",
+              policies_accepted_at: now,
+              created_at: now,
+              updated_at: now,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected membership-switch query: ${sql}`);
+    });
+    const client = clientFixture();
+    const service = new AppCloudflareAccountService({ query } as unknown as Pool, {
+      ...enabled,
+      client,
+      masterKey: () => masterKey,
+      now: () => now,
+    });
+
+    await expect(
+      service.provisionTemporaryAccount(switchedContext, {
+        deploymentId: "deployment-2",
+        ipAddress: "192.0.2.1",
+        acceptedTermsOfService: true,
+        acceptedPrivacyPolicy: true,
+      }),
+    ).rejects.toThrow(/already has an active Cloudflare temporary preview/);
+    expect(client.provisionTemporaryAccount).not.toHaveBeenCalled();
+  });
+
   it("discards only a preview that is still unreferenced after target selection fails", async () => {
     const credential = encryptSecret(
       JSON.stringify({ apiToken: "temporary-api-secret", tokenId: "token-1" }),
