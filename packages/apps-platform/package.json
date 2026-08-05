@@ -9,6 +9,7 @@
   },
   "scripts": {
     "check": "bun run types:check && bun run typecheck && bun run test && bun run wrangler:check",
+    "dev:trace": "wrangler dev -c wrangler.example.jsonc --local",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types -c wrangler.example.jsonc src/wrapper-configuration.d.ts --env-interface WrapperExampleEnv --include-runtime false --strict-vars false && wrangler types -c wrangler.test.jsonc src/test-configuration.d.ts --env-interface TestEnv --include-runtime false --strict-vars false",
