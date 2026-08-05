@@ -164,11 +164,13 @@ echo CANARY_STAGE=done
         LANG: "C",
         LC_ALL: "C",
         SRT_DEBUG: process.env.SRT_DEBUG || "",
-        PIWORK_BWRAP_DEBUG: "1",
       },
       encoding: "utf8",
       timeout: 15_000,
       maxBuffer: 64 * 1024,
+      // PiLauncher starts the Runtime child detached so the nested SRT shell
+      // has a valid session/process group before bwrap's --new-session path.
+      detached: true,
     },
   );
   if (sandbox.status !== 0) {
