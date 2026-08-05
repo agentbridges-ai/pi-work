@@ -29,6 +29,7 @@ on:
       - "web/server/managed-mcp.ts"
       - "web/server/srt-policy.ts"
       - "web/shared/user-space-shell-contract.ts"
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -52,6 +53,11 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          if [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            echo "merge_group has no pull_request metadata; run the full SRT canary for the synthetic queue commit."
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
             exit 0
