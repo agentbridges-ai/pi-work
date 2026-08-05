@@ -154,6 +154,38 @@ function closeProxyDirectoryFds() {
   for (const fd of proxyDirectoryFds) closeSync(fd);
 }
 
+function disableSrtJobControl(args, commandIndex) {
+  const shellPath = args[commandIndex + 1];
+  const shellFlag = args[commandIndex + 2];
+  const script = args[commandIndex + 3];
+  if (
+    typeof shellPath !== "string" ||
+    !/(?:^|\/)bash$/u.test(shellPath) ||
+    shellFlag !== "-c" ||
+    typeof script !== "string"
+  ) {
+    return;
+  }
+  const generatedPrefix = `${shellPath} -c `;
+  if (!script.startsWith(generatedPrefix) || !script.includes("socat TCP-LISTEN:")) return;
+
+  // SRT owns this wrapper and apply-seccomp invocation. Disable Bash monitor
+  // mode only for those generated shells; the user command remains byte-for-
+  // byte unchanged inside the final nested `-c` payload.
+  args.splice(commandIndex + 2, 0, "+m");
+  const shiftedScriptIndex = commandIndex + 4;
+  const applySeccompIndex = script.indexOf("apply-seccomp");
+  const nestedShell = `${shellPath} -c `;
+  const nestedShellIndex =
+    applySeccompIndex >= 0 ? script.indexOf(nestedShell, applySeccompIndex) : -1;
+  if (nestedShellIndex >= 0) {
+    args[shiftedScriptIndex] =
+      script.slice(0, nestedShellIndex) +
+      `${shellPath} +m -c ` +
+      script.slice(nestedShellIndex + nestedShell.length);
+  }
+}
+
 for (let index = 0; index < input.length; index += 1) {
   if (
     input[index] === "--ro-bind" &&
@@ -236,6 +268,7 @@ try {
   throw error;
 }
 args.splice(commandIndex, 0, ...networkBindArgs);
+disableSrtJobControl(args, args.indexOf("--"));
 
 let result;
 try {
