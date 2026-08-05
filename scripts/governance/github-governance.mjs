@@ -56,11 +56,7 @@ function mainRuleset(coreId, leadsId) {
           require_last_push_approval: true,
           required_approving_review_count: policy.ordinaryApprovals,
           required_review_thread_resolution: true,
-          required_reviewers: requiredReviewers(
-            coreId,
-            policy.ordinaryApprovals,
-            ["**"],
-          ),
+          required_reviewers: requiredReviewers(coreId, policy.ordinaryApprovals, ["**"]),
         },
       },
       {
@@ -91,7 +87,11 @@ function highRiskRuleset(coreId, leadsId) {
           require_last_push_approval: true,
           required_approving_review_count: policy.ordinaryApprovals,
           required_review_thread_resolution: true,
-          required_reviewers: requiredReviewers(coreId, policy.highRiskApprovals, policy.highRiskPaths),
+          required_reviewers: requiredReviewers(
+            coreId,
+            policy.highRiskApprovals,
+            policy.highRiskPaths,
+          ),
         },
       },
     ],
@@ -208,9 +208,9 @@ function readbackDrift() {
       policies.length !== 1 ||
       policies[0]?.name !== policy.productionBranch ||
       (environment?.protection_rules || []).some((rule) => rule.type !== "branch_policy") ||
-      environment?.wait_timer !== 0 &&
-      environment?.wait_timer !== null &&
-      environment?.wait_timer !== undefined
+      (environment?.wait_timer !== 0 &&
+        environment?.wait_timer !== null &&
+        environment?.wait_timer !== undefined)
     ) {
       drift.push(`${policy.productionEnvironment} environment is not main-only with no approvals`);
     }
