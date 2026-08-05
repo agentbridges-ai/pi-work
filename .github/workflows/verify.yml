@@ -65,9 +65,7 @@ jobs:
           '; then
             onlyoffice_release_verify_args="--allow-candidate"
           fi
-          make verify-actions-pinning verify-onlyoffice-release \
-            ONLYOFFICE_RELEASE_VERIFY_ARGS="${onlyoffice_release_verify_args}" \
-            verify-pi-only-runtime test-targeted test-srt-user-space-ipc
+          make verify-actions-pinning verify-onlyoffice-release verify-pi-only-runtime test-targeted test-srt-user-space-ipc ONLYOFFICE_RELEASE_VERIFY_ARGS="${onlyoffice_release_verify_args}"
 
       - name: Build the production frontend
         run: make build
