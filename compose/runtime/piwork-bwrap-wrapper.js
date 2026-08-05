@@ -1,10 +1,15 @@
 #!/usr/local/bin/node
 
 const { spawnSync } = require("node:child_process");
+const { mkdtempSync, rmSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { join } = require("node:path");
 
 const input = process.argv.slice(2);
 const args = [];
 const deferredNetworkBinds = [];
+let privateMountDir;
+let maskSourcePath;
 const srtRuntimeEtcSelfBindPaths = new Set([
   "/etc/hosts",
   "/etc/resolv.conf",
@@ -24,6 +29,15 @@ function isRedundantSelfBindPath(value) {
   return /^\/dev\//u.test(value) || srtRuntimeEtcSelfBindPaths.has(value);
 }
 
+function getMaskSourcePath() {
+  if (!privateMountDir) {
+    privateMountDir = mkdtempSync(join(tmpdir(), "piwork-bwrap-"));
+    maskSourcePath = join(privateMountDir, "empty-mask");
+    writeFileSync(maskSourcePath, "", { mode: 0o400 });
+  }
+  return maskSourcePath;
+}
+
 for (let index = 0; index < input.length; index += 1) {
   if (
     input[index] === "--ro-bind" &&
@@ -36,6 +50,19 @@ for (let index = 0; index < input.length; index += 1) {
     // inside the nested namespace, which is denied by the capability-free
     // Compose boundary on some kernels. Keep ordinary masks (for example
     // --ro-bind /dev/null <workspace-file>) untouched.
+    index += 2;
+    continue;
+  }
+  if (
+    input[index] === "--ro-bind" &&
+    input[index + 1] === "/dev/null" &&
+    input[index + 2] !== "/dev/null" &&
+    !/^\/dev\//u.test(input[index + 2])
+  ) {
+    // A capability-free nested bwrap may reject a device source when creating
+    // an ordinary file mask. Keep the exact read-only destination mask, but
+    // use a private immutable empty regular file as its source.
+    args.push("--ro-bind", getMaskSourcePath(), input[index + 2]);
     index += 2;
     continue;
   }
@@ -67,7 +94,12 @@ if (commandIndex === -1) {
 }
 args.splice(commandIndex, 0, ...deferredNetworkBinds);
 
-const result = spawnSync("/usr/bin/bwrap", args, { stdio: "inherit" });
+let result;
+try {
+  result = spawnSync("/usr/bin/bwrap", args, { stdio: "inherit" });
+} finally {
+  if (privateMountDir) rmSync(privateMountDir, { recursive: true, force: true });
+}
 if (result.error) {
   process.stderr.write(`${result.error.message}\n`);
   process.exit(127);
