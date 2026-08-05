@@ -157,6 +157,12 @@ function systemRuntimeReadPaths(): string[] {
             "/usr/lib64",
             "/usr/libexec",
             "/usr/sbin",
+            // The fixed Compose image keeps Node/Bun in these root-owned
+            // runtime directories. Re-open the directories (not only exact
+            // files) after the top-level /usr/local deny so bubblewrap can
+            // create bind parents for exact runtime-file grants.
+            "/usr/local/bin",
+            "/usr/local/bun/bin",
             "/usr/share/ca-certificates",
             "/usr/share/zoneinfo",
             "/etc/ca-certificates",
