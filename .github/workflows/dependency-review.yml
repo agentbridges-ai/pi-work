@@ -10,6 +10,9 @@ on:
       - "web/package.json"
       - "landing-page/bun.lock"
       - "landing-page/package.json"
+      - "mise.toml"
+      - "mise.lock"
+      - ".github/actions/setup-toolchain/action.yml"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
   workflow_dispatch:

@@ -9,6 +9,9 @@ on:
       - "landing-page/**"
       - "scripts/governance/landing-check.mjs"
       - ".github/workflows/landing-quality.yml"
+      - ".github/actions/setup-toolchain/action.yml"
+      - "mise.toml"
+      - "mise.lock"
   workflow_dispatch:
 
 concurrency:
