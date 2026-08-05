@@ -14,6 +14,8 @@ package-lock.json
 test-live.ts
 web/dist/
 .env
+.worktreeinclude
+.worktreeinclude.*
 web/.env.local
 .runtime/
 .terraform/
