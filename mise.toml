@@ -1,0 +1,6 @@
+[tools]
+bun = "1.3.9"
+node = "26.5.0"
+
+[settings]
+lockfile = true

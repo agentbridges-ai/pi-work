@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/srt-linux.yml"
       - ".github/actions/setup-toolchain/action.yml"
+      - "mise.toml"
+      - "mise.lock"
       - "Makefile"
       - "scripts/verify-native-pi-dependencies.mjs"
       - "scripts/verify-pi-only-runtime.sh"
