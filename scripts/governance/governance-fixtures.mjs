@@ -4,7 +4,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { findMutableExternalActionUses } from "../verify-github-actions-pinning.mjs";
-import { approvedReviewersForHead, requiredApprovalsForAuthor } from "./review-policy.mjs";
+import {
+  approvedReviewersForHead,
+  isCoreAuthor,
+  requiredApprovalsForAuthor,
+} from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const policy = JSON.parse(readFileSync(join(root, ".governance/github-policy.json"), "utf8"));
@@ -91,7 +95,13 @@ assert.equal(policy.leaderApprovals, 1);
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 1);
-assert.equal(requiredApprovalsForAuthor("another-core-dev", policy), 2);
+assert.equal(isCoreAuthor("another-core-dev", policy, "MEMBER"), true);
+assert.equal(requiredApprovalsForAuthor("another-core-dev", policy, "MEMBER"), 2);
+assert.equal(isCoreAuthor("community-contributor", policy, "CONTRIBUTOR"), false);
+assert.equal(
+  requiredApprovalsForAuthor("community-contributor", policy, "CONTRIBUTOR"),
+  policy.ordinaryApprovals,
+);
 assert.deepEqual(
   approvedReviewersForHead(
     [
