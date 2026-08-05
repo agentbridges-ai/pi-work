@@ -283,6 +283,12 @@ isolateSrtSeccompShell(args, args.indexOf("--"));
 
 let result;
 try {
+  if (process.env.PIWORK_BWRAP_DEBUG === "1") {
+    const debugCommandIndex = args.indexOf("--");
+    process.stderr.write(
+      `piwork-bwrap: commandIndex=${debugCommandIndex} commandArgs=${JSON.stringify(args.slice(debugCommandIndex))}\n`,
+    );
+  }
   const stdio = ["inherit", "inherit", "inherit", ...proxyDirectoryFds];
   result = spawnSync("/usr/bin/bwrap", args, { stdio });
 } finally {
