@@ -15,6 +15,7 @@ import {
   pusherEvidenceDescription,
   requiredApprovalsForAuthor,
   auditStatusWriterWorkflowChanges,
+  auditStatusWriterWorkflowContents,
   selectLastPusherEvent,
   selectPersistedPusherStatus,
 } from "./review-policy.mjs";
@@ -90,6 +91,38 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
     files.push(...pageFiles);
     if (pageFiles.length < 100) return files;
   }
+}
+
+async function readChangedWorkflowContents(files, headRepository) {
+  const workflows = [];
+  for (const file of Array.isArray(files) ? files : []) {
+    const path = file?.path || file?.filename;
+    if (typeof path !== "string" || !/^\.github\/workflows\/[^/]+\.ya?ml$/.test(path)) {
+      continue;
+    }
+    if (
+      typeof headRepository !== "string" ||
+      !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(headRepository) ||
+      typeof file.sha !== "string" ||
+      !/^[0-9a-f]{40}$/.test(file.sha)
+    ) {
+      workflows.push({ path, source: null });
+      continue;
+    }
+    const [headOwner, headRepositoryName] = headRepository.split("/", 2);
+    const blob = await restJson(
+      `/repos/${encodeURIComponent(headOwner)}/${encodeURIComponent(headRepositoryName)}/git/blobs/${file.sha}`,
+    );
+    if (blob?.encoding !== "base64" || typeof blob.content !== "string") {
+      workflows.push({ path, source: null });
+      continue;
+    }
+    workflows.push({
+      path,
+      source: Buffer.from(blob.content.replace(/\s+/g, ""), "base64").toString("utf8"),
+    });
+  }
+  return workflows;
 }
 
 function statusTargetUrl() {
@@ -309,8 +342,12 @@ if (typeof authorLogin !== "string" || authorLogin.length === 0) {
 // restricted to exact SHA-pinned action lines.
 files = await listPullRequestFiles(repository, pullRequestNumber);
 const statusWriterAudit = auditStatusWriterWorkflowChanges(files);
-if (!statusWriterAudit.allowed) {
-  const reason = `PR-controlled workflow status writer change rejected: ${statusWriterAudit.failures.join("; ")}`;
+const statusWriterContentAudit = auditStatusWriterWorkflowContents(
+  await readChangedWorkflowContents(files, headRepository),
+);
+const statusWriterFailures = [...statusWriterAudit.failures, ...statusWriterContentAudit.failures];
+if (!statusWriterAudit.allowed || !statusWriterContentAudit.allowed) {
+  const reason = `PR-controlled workflow status writer change rejected: ${statusWriterFailures.join("; ")}`;
   try {
     await createCommitStatus({
       sha: headSha,

@@ -96,6 +96,55 @@ export function auditStatusWriterWorkflowChanges(files) {
   return { allowed: failures.length === 0, failures };
 }
 
+/**
+ * Validate the complete resulting workflow blob for changed workflow files.
+ * Patch-only checks cannot detect a PR that reuses the existing status writer
+ * permission while adding an executable status-posting step. The trusted
+ * workflow is therefore structurally constrained, and every other workflow
+ * is forbidden from declaring a status-writing permission at all.
+ */
+export function auditStatusWriterWorkflowContents(workflows) {
+  const failures = [];
+  for (const workflow of Array.isArray(workflows) ? workflows : []) {
+    const path = workflow?.path || workflow?.filename;
+    const source = workflow?.source;
+    if (typeof path !== "string" || !workflowPathPattern.test(path)) continue;
+    if (typeof source !== "string" || source.length === 0) {
+      failures.push(`${path}: resulting workflow content is unavailable`);
+      continue;
+    }
+    if (path !== trustedStatusWriterPath) {
+      if (
+        /\bstatuses\s*:\s*(?:write(?:-all)?|\[[^\]]*\bwrite\b[^\]]*\])/i.test(source) ||
+        /\bpermissions\s*:\s*write-all\b/i.test(source)
+      ) {
+        failures.push(`${path}: resulting workflow requests status-writing permissions`);
+      }
+      continue;
+    }
+    if (!/\bpull_request_target\s*:/i.test(source)) {
+      failures.push(`${path}: trusted status writer lacks pull_request_target`);
+    }
+    if (/^\s*pull_request\s*:/m.test(source) || /\bworkflow_dispatch\s*:/i.test(source)) {
+      failures.push(`${path}: trusted status writer has an untrusted trigger`);
+    }
+    if (!/\bref:\s*refs\/heads\/main\s*$/m.test(source)) {
+      failures.push(`${path}: trusted status writer does not checkout refs/heads/main`);
+    }
+    if (!/node\s+scripts\/governance\/leader-review\.mjs/.test(source)) {
+      failures.push(`${path}: trusted status writer does not invoke the trusted governance script`);
+    }
+    if (
+      /\b(?:curl|wget|gh\s+api|fetch\s*\(|github-script|create[_-]?commit[_-]?status|\/statuses?\/)\b/i.test(
+        source,
+      )
+    ) {
+      failures.push(`${path}: trusted workflow contains a direct status-posting command`);
+    }
+  }
+  return { allowed: failures.length === 0, failures };
+}
+
 function patchMatches(patch, pattern) {
   const lines = changedPatchLines(patch);
   if (!lines || lines.length === 0) return false;

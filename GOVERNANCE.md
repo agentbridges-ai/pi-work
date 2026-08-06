@@ -19,6 +19,8 @@ Dependabot 的自动化依赖升级是一个窄化的低风险例外：当作者
 
 单人阶段使用显式 `.governance/github-policy.json` `bootstrap`：只有非 Leader Core 作者路径受 `leader-only` Bootstrap 约束；Leader 作者、社区作者和低风险 Dependabot 规则不变。`governance-bootstrap-audit` 从 trusted `main` 只读审计起始日、90 天期限、三名显式 Core 身份阈值、Ruleset 和工作流权限声明。PR token 不查询仅管理员可读的 Actions 权限或 legacy branch-protection 端点；仓库级 `default_workflow_permissions`、`can_approve_pull_request_reviews` 和 legacy protection readback 由显式管理员 `github-governance-check/apply` 执行。超过期限、达到阈值或发生范围/配置漂移时 fail-closed；切换只能由 Leader 以 Good signature 提交策略 PR，机器人不修改 policy、Team、Ruleset、Issue 或 PR。
 
+对 PR 变更的 workflow，trusted 审计同时检查 patch 和完整 blob：除 status-writer 外不得声明状态写权限，status-writer 不得新增非 `pull_request_target` 入口或直接发布状态的命令；发现违规时先写入 fail-closed 状态再退出。
+
 紧急修复仍必须通过 PR。只有 `piwork-leads` 可以使用 Ruleset 的 PR-only bypass；PR 必须写明原因、影响、回滚方式和跟踪 Issue，并在两个工作日内完成复盘。
 
 ## 变更与成员

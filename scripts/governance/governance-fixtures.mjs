@@ -7,6 +7,7 @@ import { findMutableExternalActionUses } from "../verify-github-actions-pinning.
 import {
   approvalCountForHead,
   auditStatusWriterWorkflowChanges,
+  auditStatusWriterWorkflowContents,
   approvedReviewersForHead,
   classifyDependabotFiles,
   countableReviewersForHead,
@@ -167,6 +168,48 @@ assert.match(
     },
   ]).failures.join("\n"),
   /trusted pull_request_target entry point/,
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/example.yml",
+      source: "on:\n  pull_request:\npermissions:\n  contents: read\n",
+    },
+  ]).allowed,
+  true,
+  "ordinary workflows without status-writing permissions remain allowed",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/example.yml",
+      source: "on:\n  pull_request:\npermissions:\n  statuses: write\n",
+    },
+  ]).allowed,
+  false,
+  "resulting PR workflows cannot reuse status-writing permissions",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/leader-review.yml",
+      source:
+        "on:\n  pull_request_target:\npermissions:\n  statuses: write\njobs:\n  review:\n    steps:\n      - uses: actions/checkout@sha\n        with:\n          ref: refs/heads/main\n      - run: node scripts/governance/leader-review.mjs\n",
+    },
+  ]).allowed,
+  true,
+  "trusted status writer structure is allowed",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/leader-review.yml",
+      source:
+        "on:\n  pull_request:\npermissions:\n  statuses: write\njobs:\n  review:\n    steps:\n      - run: curl https://api.github.com/statuses\n",
+    },
+  ]).allowed,
+  false,
+  "status writer trigger and direct status commands are rejected",
 );
 assert.equal(
   auditStatusWriterWorkflowChanges([{ path: ".github/workflows/example.yml" }]).allowed,

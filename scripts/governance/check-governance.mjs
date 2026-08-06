@@ -288,7 +288,9 @@ if (leaderReviewWorkflow.includes("/actions/permissions/workflow")) {
 }
 if (
   !leaderReviewSource.includes("auditStatusWriterWorkflowChanges") ||
+  !leaderReviewSource.includes("auditStatusWriterWorkflowContents") ||
   !leaderReviewSource.includes("statusWriterAudit.allowed") ||
+  !leaderReviewSource.includes("statusWriterContentAudit.allowed") ||
   !leaderReviewSource.includes('state: "failure"')
 ) {
   fail.push(
