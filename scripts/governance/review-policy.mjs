@@ -166,7 +166,28 @@ export function selectLastPusherEvent(events, headSha, headRef = null) {
   return { login: event.actor.login, eventId: event.id };
 }
 
-export function selectPersistedPusherStatus(statuses) {
+export function pusherEvidenceDescription({ repository, pullRequestNumber, headRef, login }) {
+  if (
+    typeof repository !== "string" ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
+    !Number.isSafeInteger(pullRequestNumber) ||
+    pullRequestNumber < 1 ||
+    typeof headRef !== "string" ||
+    headRef.length === 0 ||
+    typeof login !== "string" ||
+    login.length === 0
+  ) {
+    throw new Error("pusher evidence metadata is invalid");
+  }
+  return [repository, String(pullRequestNumber), headRef, login]
+    .map((value) => encodeURIComponent(value))
+    .join(":");
+}
+
+export function selectPersistedPusherStatus(
+  statuses,
+  { repository = null, pullRequestNumber = null, headRef = null } = {},
+) {
   const candidates = (Array.isArray(statuses) ? statuses : [])
     .filter(
       (status) =>
@@ -174,13 +195,36 @@ export function selectPersistedPusherStatus(statuses) {
         status?.state === "success" &&
         status?.creator?.login === "github-actions[bot]" &&
         typeof status?.description === "string" &&
-        status.description.startsWith("actual-pusher:"),
+        status.description.startsWith("actual-pusher:v1:"),
     )
     .map((status) => {
       try {
-        const login = decodeURIComponent(status.description.slice("actual-pusher:".length));
-        if (!login) return null;
-        return { login, statusId: status.id, createdAt: status.created_at || "" };
+        const values = status.description
+          .slice("actual-pusher:v1:".length)
+          .split(":")
+          .map((value) => decodeURIComponent(value));
+        if (values.length !== 4) return null;
+        const [statusRepository, statusPullRequestNumber, statusHeadRef, login] = values;
+        const parsedPullRequestNumber = Number(statusPullRequestNumber);
+        if (
+          !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(statusRepository) ||
+          !Number.isSafeInteger(parsedPullRequestNumber) ||
+          parsedPullRequestNumber < 1 ||
+          !statusHeadRef ||
+          !login ||
+          (repository !== null && statusRepository !== repository) ||
+          (pullRequestNumber !== null && parsedPullRequestNumber !== pullRequestNumber) ||
+          (headRef !== null && statusHeadRef !== headRef)
+        )
+          return null;
+        return {
+          login,
+          repository: statusRepository,
+          pullRequestNumber: parsedPullRequestNumber,
+          headRef: statusHeadRef,
+          statusId: status.id,
+          createdAt: status.created_at || "",
+        };
       } catch {
         return null;
       }
@@ -196,7 +240,13 @@ export function selectPersistedPusherStatus(statuses) {
     });
   const status = candidates[0];
   if (!status) return null;
-  return { login: status.login, statusId: status.statusId };
+  return {
+    login: status.login,
+    repository: status.repository,
+    pullRequestNumber: status.pullRequestNumber,
+    headRef: status.headRef,
+    statusId: status.statusId,
+  };
 }
 
 export function dependabotApprovalForHead({ reviews, headSha, policy, lastPusher }) {

@@ -12,6 +12,7 @@ import {
   leaderParticipated,
   leaderReviewMode,
   leaderSelfReviewForHead,
+  pusherEvidenceDescription,
   requiredApprovalsForAuthor,
   selectLastPusherEvent,
   selectPersistedPusherStatus,
@@ -109,12 +110,20 @@ function statusTargetUrl() {
     : `https://github.com/${repository}/pull/${pullRequestNumber}`;
 }
 
-async function persistPusherEvidence(sha, login) {
+async function persistPusherEvidence(sha, login, headRef) {
+  if (typeof headRef !== "string" || headRef.length === 0) {
+    throw new Error("head branch identity is unavailable for pusher evidence");
+  }
   await createCommitStatus({
     sha,
     state: "success",
     context: "governance-review-pusher",
-    description: `actual-pusher:${encodeURIComponent(login)}`,
+    description: `actual-pusher:v1:${pusherEvidenceDescription({
+      repository,
+      pullRequestNumber,
+      headRef,
+      login,
+    })}`,
     targetUrl: statusTargetUrl(),
   });
 }
@@ -132,15 +141,6 @@ async function lastPusherMetadata(headRepository, headSha, headRef) {
   if (typeof headRef !== "string" || headRef.length === 0) {
     throw new Error("head branch identity is unavailable");
   }
-  if (
-    process.env.GITHUB_EVENT_NAME === "pull_request_target" &&
-    event.action === "synchronize" &&
-    typeof event.sender?.login === "string" &&
-    event.sender.login.length > 0
-  ) {
-    await persistPusherEvidence(headSha, event.sender.login);
-    return { login: event.sender.login, source: "synchronize-event" };
-  }
   const persistedStatuses = [];
   for (let page = 1; page <= 10; page += 1) {
     const pageStatuses = await restJson(
@@ -152,9 +152,13 @@ async function lastPusherMetadata(headRepository, headSha, headRef) {
     persistedStatuses.push(...pageStatuses);
     if (pageStatuses.length < 100) break;
   }
-  const persistedPusher = selectPersistedPusherStatus(persistedStatuses);
+  const persistedPusher = selectPersistedPusherStatus(persistedStatuses, {
+    repository,
+    pullRequestNumber,
+    headRef,
+  });
   if (persistedPusher) {
-    await persistPusherEvidence(headSha, persistedPusher.login);
+    await persistPusherEvidence(headSha, persistedPusher.login, headRef);
     return { ...persistedPusher, source: "trusted-commit-status" };
   }
   const [headOwner, headRepositoryName] = headRepository.split("/", 2);
@@ -166,7 +170,7 @@ async function lastPusherMetadata(headRepository, headSha, headRef) {
     if (!Array.isArray(events)) throw new Error("REST repository events response is invalid");
     const lastPusher = selectLastPusherEvent(events, headSha, headRef);
     if (lastPusher) {
-      await persistPusherEvidence(headSha, lastPusher.login);
+      await persistPusherEvidence(headSha, lastPusher.login, headRef);
       return { ...lastPusher, source: "repository-push-event" };
     }
     if (events.length < 100) break;
@@ -222,6 +226,9 @@ let filesDone = false;
 let reviewsDone = false;
 let headSha = null;
 let headRepository = null;
+let headRefName = null;
+let authorLogin = null;
+let authorAssociation = null;
 while (!filesDone || !reviewsDone) {
   const data = await graphql(
     `
@@ -237,9 +244,14 @@ while (!filesDone || !reviewsDone) {
         repository(owner: $owner, name: $name) {
           pullRequest(number: $number) {
             headRefOid
+            headRefName
             headRepository {
               nameWithOwner
             }
+            author {
+              login
+            }
+            authorAssociation
             files(first: 100, after: $filesCursor) @include(if: $includeFiles) {
               nodes {
                 path
@@ -280,10 +292,10 @@ while (!filesDone || !reviewsDone) {
     },
   );
   headSha = data.repository.pullRequest.headRefOid;
-  headRepository =
-    data.repository.pullRequest.headRepository?.nameWithOwner ||
-    pullRequest.head?.repo?.full_name ||
-    null;
+  headRefName = data.repository.pullRequest.headRefName;
+  headRepository = data.repository.pullRequest.headRepository?.nameWithOwner || null;
+  authorLogin = data.repository.pullRequest.author?.login || null;
+  authorAssociation = data.repository.pullRequest.authorAssociation || null;
   if (!filesDone) {
     const filesConnection = data.repository.pullRequest.files;
     files.push(...(filesConnection?.nodes || []));
@@ -300,19 +312,25 @@ while (!filesDone || !reviewsDone) {
   }
 }
 if (!headSha) throw new Error("GitHub did not return a pull request head SHA");
+if (typeof headRefName !== "string" || headRefName.length === 0) {
+  throw new Error("GitHub did not return a pull request head branch");
+}
+if (typeof authorLogin !== "string" || authorLogin.length === 0) {
+  throw new Error("GitHub did not return a pull request author");
+}
 // GraphQL exposes paths but not patches on PullRequestChangedFile. Read the
 // same trusted PR metadata through REST so Dependabot workflow changes can be
 // restricted to exact SHA-pinned action lines.
 files = await listPullRequestFiles(repository, pullRequestNumber);
-const dependabotAuthor = isDependabotAuthor(pullRequest.user.login, policy);
+const dependabotAuthor = isDependabotAuthor(authorLogin, policy);
 const dependabotScope = dependabotAuthor
   ? classifyDependabotFiles(files, policy)
   : { eligible: false, reason: "PR author is not Dependabot" };
 let lastPusher = null;
 let lastPusherError = null;
-if (pullRequest.user.login !== policy.leader) {
+if (authorLogin !== policy.leader) {
   try {
-    lastPusher = await lastPusherMetadata(headRepository, headSha, pullRequest.head.ref);
+    lastPusher = await lastPusherMetadata(headRepository, headSha, headRefName);
   } catch (error) {
     lastPusherError = error instanceof Error ? error.message : String(error);
   }
@@ -322,38 +340,34 @@ const highRisk =
   files.some((file) =>
     policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path || file.filename)),
   );
-const authorAssociation = pullRequest.author_association || "NONE";
-const coreAuthor = isCoreAuthor(pullRequest.user.login, policy, authorAssociation);
+const normalizedAuthorAssociation = authorAssociation || "NONE";
+const coreAuthor = isCoreAuthor(authorLogin, policy, normalizedAuthorAssociation);
 const requiredApprovals = requiredApprovalsForAuthor(
-  pullRequest.user.login,
+  authorLogin,
   policy,
-  authorAssociation,
+  normalizedAuthorAssociation,
 );
 const leaderMode = leaderReviewMode(policy);
-const leaderSelfReview = leaderSelfReviewForHead(reviews, headSha, pullRequest.user.login, policy);
+const leaderSelfReview = leaderSelfReviewForHead(reviews, headSha, authorLogin, policy);
 const approvalCount = approvalCountForHead({
   reviews,
   headSha,
-  authorLogin: pullRequest.user.login,
+  authorLogin,
   policy,
   lastPusher,
 });
 const allowlistedReviewers = coreReviewerLogins(policy);
 const reviewerCapacity =
   allowlistedReviewers.size -
-  (coreAuthor &&
-  pullRequest.user.login !== policy.leader &&
-  allowlistedReviewers.has(pullRequest.user.login)
-    ? 1
-    : 0);
+  (coreAuthor && authorLogin !== policy.leader && allowlistedReviewers.has(authorLogin) ? 1 : 0);
 const allowlistUnsatisfiable =
-  coreAuthor && pullRequest.user.login !== policy.leader && reviewerCapacity < requiredApprovals;
+  coreAuthor && authorLogin !== policy.leader && reviewerCapacity < requiredApprovals;
 const approvalsSatisfied =
   !allowlistUnsatisfiable && !lastPusherError && approvalCount >= requiredApprovals;
 const leaderParticipatedForHead =
   !lastPusherError &&
   leaderParticipated({
-    authorLogin: pullRequest.user.login,
+    authorLogin,
     reviews,
     headSha,
     policy,
@@ -377,7 +391,7 @@ const authorDescription = dependabotScope.eligible
   ? "Dependabot 低风险自动化"
   : dependabotAuthor
     ? "Dependabot（普通/高风险规则）"
-    : pullRequest.user.login === policy.leader
+    : authorLogin === policy.leader
       ? policy.leader
       : coreAuthor
         ? "非 Leader Core 作者"
@@ -388,7 +402,7 @@ const approvalDescription = lastPusherError
     ? `${authorDescription}：显式 Core allowlist 仅可提供 ${Math.max(reviewerCapacity, 0)} 个非作者审批，但规则要求 ${requiredApprovals} 个；Leader 必须先登记足够 Core 身份`
     : dependabotScope.eligible
       ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
-      : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
+      : authorLogin === policy.leader && leaderMode === "self-or-exempt"
         ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
         : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
 const leaderDescription = !highRisk

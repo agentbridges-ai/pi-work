@@ -144,14 +144,14 @@ if (policy) {
     enforcement.authorAwareLastPush?.nonLeaderCannotBeLastPusher !== true ||
     enforcement.authorAwareLastPush?.dependabotLeaderCannotBeLastPusher !== true ||
     enforcement.authorAwareLastPush?.lastPusherIdentitySource !==
-      "trusted-commit-status-or-pull-request-target-synchronize-sender-or-head-repository-push-event-actor" ||
+      "trusted-commit-status-or-head-repository-push-event-actor" ||
     enforcement.authorAwareLastPush?.lastPusherFailClosed !== true ||
     enforcement.unknownReviewerBehavior !== "reject" ||
     !Array.isArray(enforcement.coreReviewerLogins) ||
     !enforcement.coreReviewerLogins.includes(policy.leader) ||
     enforcement.reviewerAllowlist?.source !== "leader-managed-explicit-identities" ||
     enforcement.reviewerAllowlist?.minimumIdentitiesForNonLeaderCore !== 2 ||
-    enforcement.reviewerAllowlist?.bootstrapState !== "leader-only" ||
+    enforcement.reviewerAllowlist?.bootstrapState !== bootstrap?.state ||
     enforcement.reviewerAllowlist?.unsatisfiableBehavior !==
       "fail-closed-until-leader-enrolls-identities" ||
     !nativeReview ||
@@ -320,6 +320,8 @@ if (
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.source !==
     "trusted-leader-review-commit-status" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.retention !== "commit-status" ||
+  policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.format !==
+    "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus
     .requiresReadOnlyWorkflowPermissions !== true
 ) {

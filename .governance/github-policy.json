@@ -39,13 +39,14 @@
       "leaderAuthorExempt": true,
       "nonLeaderCannotBeLastPusher": true,
       "dependabotLeaderCannotBeLastPusher": true,
-      "lastPusherIdentitySource": "trusted-commit-status-or-pull-request-target-synchronize-sender-or-head-repository-push-event-actor",
+      "lastPusherIdentitySource": "trusted-commit-status-or-head-repository-push-event-actor",
       "lastPusherFailClosed": true,
       "pusherEvidenceStatus": {
         "context": "governance-review-pusher",
         "source": "trusted-leader-review-commit-status",
         "retention": "commit-status",
-        "requiresReadOnlyWorkflowPermissions": true
+        "requiresReadOnlyWorkflowPermissions": true,
+        "format": "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>"
       }
     },
     "coreReviewerLogins": ["Misakago"],

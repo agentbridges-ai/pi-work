@@ -18,6 +18,7 @@ import {
   leaderParticipated,
   leaderReviewMode,
   leaderSelfReviewForHead,
+  pusherEvidenceDescription,
   requiredApprovalsForAuthor,
   selectLastPusherEvent,
   selectPersistedPusherStatus,
@@ -143,7 +144,7 @@ assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, tr
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeLastPusher, true);
 assert.equal(
   policy.reviewEnforcement.authorAwareLastPush.lastPusherIdentitySource,
-  "trusted-commit-status-or-pull-request-target-synchronize-sender-or-head-repository-push-event-actor",
+  "trusted-commit-status-or-head-repository-push-event-actor",
 );
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.lastPusherFailClosed, true);
 assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus, {
@@ -151,6 +152,7 @@ assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStat
   source: "trusted-leader-review-commit-status",
   retention: "commit-status",
   requiresReadOnlyWorkflowPermissions: true,
+  format: "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>",
 });
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
@@ -244,7 +246,12 @@ assert.deepEqual(
       id: 20,
       context: "governance-review-pusher",
       state: "success",
-      description: `actual-pusher:${encodeURIComponent("community-dev")}`,
+      description: `actual-pusher:v1:${pusherEvidenceDescription({
+        repository: policy.repository,
+        pullRequestNumber: 67,
+        headRef: "feature",
+        login: "community-dev",
+      })}`,
       creator: { login: "github-actions[bot]" },
       created_at: "2026-08-06T00:01:00Z",
     },
@@ -252,7 +259,12 @@ assert.deepEqual(
       id: 21,
       context: "governance-review-pusher",
       state: "success",
-      description: `actual-pusher:${encodeURIComponent("Misakago")}`,
+      description: `actual-pusher:v1:${pusherEvidenceDescription({
+        repository: policy.repository,
+        pullRequestNumber: 67,
+        headRef: "feature",
+        login: "Misakago",
+      })}`,
       creator: { login: "github-actions[bot]" },
       created_at: "2026-08-06T00:02:00Z",
     },
@@ -260,13 +272,45 @@ assert.deepEqual(
       id: 22,
       context: "governance-review-pusher",
       state: "success",
-      description: `actual-pusher:${encodeURIComponent("spoofed")}`,
+      description: `actual-pusher:v1:${pusherEvidenceDescription({
+        repository: policy.repository,
+        pullRequestNumber: 67,
+        headRef: "feature",
+        login: "spoofed",
+      })}`,
       creator: { login: "write-capable-user" },
       created_at: "2026-08-06T00:03:00Z",
     },
   ]),
-  { login: "Misakago", statusId: 21 },
+  {
+    login: "Misakago",
+    repository: policy.repository,
+    pullRequestNumber: 67,
+    headRef: "feature",
+    statusId: 21,
+  },
   "only trusted commit-status pusher evidence is retained and the latest record wins",
+);
+assert.equal(
+  selectPersistedPusherStatus(
+    [
+      {
+        id: 23,
+        context: "governance-review-pusher",
+        state: "success",
+        description: `actual-pusher:v1:${pusherEvidenceDescription({
+          repository: policy.repository,
+          pullRequestNumber: 66,
+          headRef: "feature",
+          login: "wrong-pr",
+        })}`,
+        creator: { login: "github-actions[bot]" },
+      },
+    ],
+    { repository: policy.repository, pullRequestNumber: 67, headRef: "feature" },
+  ),
+  null,
+  "pusher evidence from another PR cannot be reused by SHA",
 );
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],

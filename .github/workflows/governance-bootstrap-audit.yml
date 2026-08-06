@@ -42,4 +42,5 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_API_URL: ${{ github.api_url }}
+          PIWORK_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
         run: node scripts/governance/bootstrap-audit.mjs

@@ -230,7 +230,8 @@ export function isDocsOnlyPullRequest(paths) {
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const apiBase = process.env.GITHUB_API_URL || "https://api.github.com";
-const repository = process.env.GITHUB_REPOSITORY || policy.repository;
+const repository = process.env.GITHUB_REPOSITORY || "agentbridges-ai/pi-work";
+const defaultBranch = "main";
 const token = process.env.GITHUB_TOKEN;
 
 async function githubJson(path, { allowNotFound = false } = {}) {
@@ -270,8 +271,7 @@ async function readRulesets() {
   return rulesets;
 }
 
-async function readPullRequest(event) {
-  const number = Number(event.pull_request?.number);
+async function readPullRequest(number) {
   if (!Number.isSafeInteger(number) || number < 1) return null;
   const metadata = await githubJson(`/repos/${repository}/pulls/${number}`);
   const files = [];
@@ -287,7 +287,12 @@ async function readPullRequest(event) {
 }
 
 async function main() {
-  if (repository !== policy.repository || !repositoryPattern.test(repository)) {
+  if (
+    repository !== "agentbridges-ai/pi-work" ||
+    policy.repository !== repository ||
+    policy.defaultBranch !== defaultBranch ||
+    !repositoryPattern.test(repository)
+  ) {
     throw new Error("GITHUB_REPOSITORY does not match the checked-in governance policy");
   }
   const now = process.env.PIWORK_BOOTSTRAP_AUDIT_NOW || new Date().toISOString();
@@ -302,13 +307,20 @@ async function main() {
   const event = eventPayload();
   const eventName = process.env.GITHUB_EVENT_NAME || "local";
   const offline = process.argv.includes("--offline");
+  const pullRequestNumber = Number(process.env.PIWORK_PULL_REQUEST_NUMBER);
   if (eventName === "merge_group") {
     console.log(
       "[governance-bootstrap-audit] merge_group has no pull_request metadata; deterministic no-op after trusted policy/ruleset readback",
     );
   } else if (event.pull_request && !offline) {
     if (!token) throw new Error("GITHUB_TOKEN is required for pull request metadata readback");
-    const pullRequest = await readPullRequest(event);
+    if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber < 1) {
+      throw new Error("PIWORK_PULL_REQUEST_NUMBER is invalid");
+    }
+    if (Number(event.pull_request.number) !== pullRequestNumber) {
+      throw new Error("event pull request number does not match PIWORK_PULL_REQUEST_NUMBER");
+    }
+    const pullRequest = await readPullRequest(pullRequestNumber);
     const docsOnly = isDocsOnlyPullRequest(pullRequest?.files || []);
     console.log(
       `[governance-bootstrap-audit] ${docsOnly ? "docs-only PR no-op" : "PR metadata read"}; bootstrap transition is policy-only and is never inferred from changed files`,
@@ -339,7 +351,7 @@ async function main() {
   }
   const [rulesets, branchProtection, workflowPermissions] = await Promise.all([
     readRulesets(),
-    githubJson(`/repos/${repository}/branches/${policy.defaultBranch}/protection`, {
+    githubJson(`/repos/${repository}/branches/${defaultBranch}/protection`, {
       allowNotFound: true,
     }),
     githubJson(`/repos/${repository}/actions/permissions/workflow`),
