@@ -221,7 +221,7 @@ export function validatePolicy(policy) {
   }
   const requiredSurfaceMetadata = {
     issues: ["labels", "milestone", "tracker-issue", "issue-forms"],
-    discussions: ["categories", "pinned-governance-entry", "moderation-owner"],
+    discussions: ["categories", "governance-entry", "moderation-owner"],
     pullRequests: [
       "template",
       "assignee",

@@ -140,7 +140,7 @@ describe("isolated worktree harness", () => {
     assert.equal(surface.tabs.discussions.required, true);
     assert.deepEqual(surface.tabs.discussions.requiredMetadata, [
       "categories",
-      "pinned-governance-entry",
+      "governance-entry",
       "moderation-owner",
     ]);
     assert.equal(surface.tabs.projects.mode, "optional-view-only");

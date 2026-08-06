@@ -32,7 +32,7 @@ GitHub 仓库页面的治理入口也纳入 policy：Code、Issues、Discussions
 Actions、Security and quality、Insights 和 Settings 都要有明确 readback；PR manifest
 必须补齐 assignee、`piwork-core`/`piwork-leads` reviewer 路由、至少一个稳定 label、
 milestone 和 Development 链接（tracker issue、依赖和 stacked-pr 关系）。Issues
-必须有 labels/milestones/issue forms，Discussions 必须有 categories、置顶治理入口和
+必须有 labels/milestones/issue forms，Discussions 必须有 categories、明确的治理入口和
 moderation owner，PR 必须有 template、required checks，Actions 必须有
 `merge_group`/只读默认权限/SHA pinning，Security and quality 必须覆盖 PVR、Secret
 Scanning、Dependabot、CodeQL 和 Dependency Review。Projects 仅作为可选视图，Wiki

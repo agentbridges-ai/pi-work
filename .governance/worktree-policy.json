@@ -52,7 +52,7 @@
       },
       "discussions": {
         "required": true,
-        "requiredMetadata": ["categories", "pinned-governance-entry", "moderation-owner"]
+        "requiredMetadata": ["categories", "governance-entry", "moderation-owner"]
       },
       "pullRequests": {
         "required": true,
