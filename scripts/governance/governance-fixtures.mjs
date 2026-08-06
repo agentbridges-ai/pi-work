@@ -156,6 +156,16 @@ assert.equal(
 );
 assert.equal(
   auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/example.yml",
+      patch: '@@ -1 +1 @@\n-  contents: read\n+  "statuses": "wri\\u0074e"',
+    },
+  ]).allowed,
+  false,
+  "escaped YAML status permission values cannot evade the workflow audit",
+);
+assert.equal(
+  auditStatusWriterWorkflowChanges([
     { path: ".github/workflows/example.yml", patch: "@@ -1 +1 @@\n+permissions: write-all" },
   ]).allowed,
   false,
@@ -230,6 +240,16 @@ assert.equal(
   ]).allowed,
   false,
   "quoted resulting status permission keys are rejected",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/example.yml",
+      source: 'on:\n  pull_request:\npermissions:\n  "statuses": "wri\\u0074e"\n',
+    },
+  ]).allowed,
+  false,
+  "escaped YAML resulting status permission values are rejected",
 );
 assert.equal(
   auditStatusWriterWorkflowContents([

@@ -57,11 +57,20 @@ function addedPatchLines(patch) {
 const workflowPathPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
 const trustedStatusWriterPath = ".github/workflows/leader-review.yml";
 
+function decodeYamlEscapes(source) {
+  return source.replace(
+    /\\u\{([0-9a-f]{1,6})\}|\\u([0-9a-f]{4})|\\x([0-9a-f]{2})/gi,
+    (_match, codePoint, unicode, hex) =>
+      String.fromCodePoint(Number.parseInt(codePoint || unicode || hex, 16)),
+  );
+}
+
 function hasStatusWritePermission(source) {
+  const normalized = decodeYamlEscapes(source);
   return (
     /["']?statuses["']?\s*:\s*(?:["']?write(?:-all)?["']?|\[[^\]]*["']?write(?:-all)?["']?[^\]]*\])/i.test(
-      source,
-    ) || /["']?permissions["']?\s*:\s*["']?write-all["']?/i.test(source)
+      normalized,
+    ) || /["']?permissions["']?\s*:\s*["']?write-all["']?/i.test(normalized)
   );
 }
 
