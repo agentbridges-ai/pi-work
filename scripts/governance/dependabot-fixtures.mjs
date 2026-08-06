@@ -57,9 +57,9 @@ const codeqlRefs = [
 assert.deepEqual(
   codeqlRefs,
   [
-    "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
-    "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
-    "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+    "d1ba80a13dd99fba24a470575428917156a28b43",
+    "d1ba80a13dd99fba24a470575428917156a28b43",
+    "d1ba80a13dd99fba24a470575428917156a28b43",
   ],
   "CodeQL init/analyze must use one v4 SHA",
 );
