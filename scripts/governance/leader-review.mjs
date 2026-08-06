@@ -3,8 +3,10 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  approvedReviewersForHead,
+  approvalCountForHead,
   isCoreAuthor,
+  leaderAuthorCountsAsApproval,
+  leaderParticipated,
   requiredApprovalsForAuthor,
 } from "./review-policy.mjs";
 
@@ -157,7 +159,6 @@ while (!filesDone || !reviewsDone) {
 const highRisk = files.some((file) =>
   policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
 );
-const approvedReviewers = approvedReviewersForHead(reviews, headSha);
 const authorAssociation = pullRequest.author_association || "NONE";
 const coreAuthor = isCoreAuthor(pullRequest.user.login, policy, authorAssociation);
 const requiredApprovals = requiredApprovalsForAuthor(
@@ -165,26 +166,32 @@ const requiredApprovals = requiredApprovalsForAuthor(
   policy,
   authorAssociation,
 );
-const approvalsSatisfied = approvedReviewers.length >= requiredApprovals;
-const leaderParticipated =
-  pullRequest.user.login === policy.leader ||
-  reviews.some(
-    (review) =>
-      review.author?.login === policy.leader &&
-      review.state === "APPROVED" &&
-      review.commit?.oid === headSha,
-  );
-const state = approvalsSatisfied && (!highRisk || leaderParticipated) ? "success" : "failure";
+const leaderAuthorApproval = leaderAuthorCountsAsApproval(pullRequest.user.login, policy);
+const approvalCount = approvalCountForHead({
+  reviews,
+  headSha,
+  authorLogin: pullRequest.user.login,
+  policy,
+});
+const approvalsSatisfied = approvalCount >= requiredApprovals;
+const leaderParticipatedForHead = leaderParticipated({
+  authorLogin: pullRequest.user.login,
+  reviews,
+  headSha,
+  policy,
+});
+const state =
+  approvalsSatisfied && (!highRisk || leaderParticipatedForHead) ? "success" : "failure";
 const authorDescription =
   pullRequest.user.login === policy.leader
     ? policy.leader
     : coreAuthor
       ? "非 Leader Core 作者"
       : "社区作者";
-const approvalDescription = `${authorDescription}：${approvedReviewers.length}/${requiredApprovals} 个最新提交有效审批`;
+const approvalDescription = `${authorDescription}：${approvalCount}/${requiredApprovals} 个最新提交有效审批${leaderAuthorApproval ? "（Leader 作者身份计入 1 个审计，不伪造 Review）" : ""}`;
 const leaderDescription = !highRisk
   ? "普通改动：Leader 参与检查不适用"
-  : leaderParticipated
+  : leaderParticipatedForHead
     ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
     : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
 const description = approvalsSatisfied

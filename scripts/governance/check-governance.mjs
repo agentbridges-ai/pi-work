@@ -79,6 +79,11 @@ if (policy) {
       "github-policy.json: Misaka requires one audit and non-Misaka Core authors require two",
     );
   }
+  if (policy.leaderSelfApproval !== true) {
+    fail.push(
+      "github-policy.json: leaderSelfApproval must explicitly enable only the Leader author audit",
+    );
+  }
   if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
     fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
   }

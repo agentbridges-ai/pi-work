@@ -10,7 +10,11 @@ export function requiredApprovalsForAuthor(authorLogin, policy, authorAssociatio
   return policy.ordinaryApprovals;
 }
 
-export function approvedReviewersForHead(reviews, headSha) {
+export function leaderAuthorCountsAsApproval(authorLogin, policy) {
+  return authorLogin === policy.leader && policy.leaderSelfApproval === true;
+}
+
+export function approvedReviewersForHead(reviews, headSha, excludedAuthor = null) {
   return [
     ...new Set(
       reviews
@@ -18,9 +22,27 @@ export function approvedReviewersForHead(reviews, headSha) {
           (review) =>
             review.state === "APPROVED" &&
             review.commit?.oid === headSha &&
-            typeof review.author?.login === "string",
+            typeof review.author?.login === "string" &&
+            review.author.login !== excludedAuthor,
         )
         .map((review) => review.author.login),
     ),
   ];
+}
+
+export function approvalCountForHead({ reviews, headSha, authorLogin, policy }) {
+  const approvedReviewers = approvedReviewersForHead(reviews, headSha, authorLogin);
+  return approvedReviewers.length + (leaderAuthorCountsAsApproval(authorLogin, policy) ? 1 : 0);
+}
+
+export function leaderParticipated({ authorLogin, reviews, headSha, policy }) {
+  return (
+    authorLogin === policy.leader ||
+    reviews.some(
+      (review) =>
+        review.author?.login === policy.leader &&
+        review.state === "APPROVED" &&
+        review.commit?.oid === headSha,
+    )
+  );
 }

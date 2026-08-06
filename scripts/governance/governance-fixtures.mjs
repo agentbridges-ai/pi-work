@@ -5,8 +5,11 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { findMutableExternalActionUses } from "../verify-github-actions-pinning.mjs";
 import {
+  approvalCountForHead,
   approvedReviewersForHead,
   isCoreAuthor,
+  leaderAuthorCountsAsApproval,
+  leaderParticipated,
   requiredApprovalsForAuthor,
 } from "./review-policy.mjs";
 
@@ -92,15 +95,78 @@ assert.match(codeowners, /@agentbridges-ai\/piwork-core/);
 assert.match(codeowners, /@Misakago/);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 1);
+assert.equal(policy.leaderSelfApproval, true);
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 1);
+assert.equal(leaderAuthorCountsAsApproval(policy.leader, policy), true);
+assert.equal(leaderAuthorCountsAsApproval("another-core-dev", policy), false);
+assert.equal(leaderAuthorCountsAsApproval("community-contributor", policy), false);
+assert.equal(
+  approvalCountForHead({ reviews: [], headSha: "head", authorLogin: policy.leader, policy }),
+  1,
+);
 assert.equal(isCoreAuthor("another-core-dev", policy, "MEMBER"), true);
 assert.equal(requiredApprovalsForAuthor("another-core-dev", policy, "MEMBER"), 2);
+assert.equal(
+  approvalCountForHead({
+    reviews: [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "core-a" } },
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "core-b" } },
+    ],
+    headSha: "head",
+    authorLogin: "another-core-dev",
+    policy,
+  }),
+  2,
+);
 assert.equal(isCoreAuthor("community-contributor", policy, "CONTRIBUTOR"), false);
 assert.equal(
   requiredApprovalsForAuthor("community-contributor", policy, "CONTRIBUTOR"),
   policy.ordinaryApprovals,
+);
+assert.equal(
+  approvalCountForHead({
+    reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: "reviewer-a" } }],
+    headSha: "head",
+    authorLogin: "community-contributor",
+    policy,
+  }),
+  1,
+);
+assert.equal(
+  approvalCountForHead({
+    reviews: [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "another-core-dev" } },
+    ],
+    headSha: "head",
+    authorLogin: "another-core-dev",
+    policy,
+  }),
+  0,
+  "an author approval cannot satisfy the non-Leader Core rule",
+);
+assert.equal(
+  leaderParticipated({ authorLogin: policy.leader, reviews: [], headSha: "head", policy }),
+  true,
+);
+assert.equal(
+  leaderParticipated({
+    authorLogin: "another-core-dev",
+    reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } }],
+    headSha: "head",
+    policy,
+  }),
+  true,
+);
+assert.equal(
+  leaderParticipated({
+    authorLogin: "another-core-dev",
+    reviews: [{ state: "APPROVED", commit: { oid: "old" }, author: { login: policy.leader } }],
+    headSha: "head",
+    policy,
+  }),
+  false,
 );
 assert.deepEqual(
   approvedReviewersForHead(

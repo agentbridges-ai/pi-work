@@ -8,6 +8,7 @@
   "ordinaryApprovals": 1,
   "highRiskApprovals": 1,
   "leaderApprovals": 1,
+  "leaderSelfApproval": true,
   "nonLeaderCoreApprovals": 2,
   "productionEnvironment": "production",
   "productionBranch": "main",
