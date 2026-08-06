@@ -13,6 +13,8 @@
 
 评审计数按 PR 作者动态执行：`@Misakago` 作为作者时使用 `self-or-exempt` 治理模式，额外治理审批要求为 0；若 API 返回当前 head 的 Leader self-review，仅可显示，绝不创建或伪造 Review。其他 Core 作者需要至少 2 个针对最新提交的非作者 Core 审批；社区作者沿用普通改动的 1 个 Core CODEOWNER 基础门禁。高风险路径在此基础上仍要求 Leader 作为作者或最新提交批准者参与。`governance-review` 只读取 PR 元数据与评审，不读取组织成员清单，并使用 GitHub 的作者关联类型识别 Core 作者。
 
+Dependabot 的自动化依赖升级是一个窄化的低风险例外：当作者为 `dependabot[bot]` 或 `app/dependabot`，且变更仅限依赖清单、锁文件、SHA 固定的 Actions，及配套的精确 SHA fixture 时，只要求 `@Misakago` 对当前 head 有 1 个有效 `APPROVED`。`scripts/governance/review-policy.mjs` 会按 REST 文件 patch 做范围分类；`web/server`、`web/shared`、产品代码、`.governance`、发布、安全或其他高风险路径一律退出该分类。Leader 不能作为该 PR 的最后提交作者/committer 来满足审批；手工重放必须由 Dependabot/其他非 Leader 提交者重新生成 head 并重新获取 Leader 审批。原生 CODEOWNERS、Ruleset 的 last-push approval、Verified 签名、所有 required checks、Dependency Review、安全扫描与发布门禁始终有效，治理状态不得绕过这些平台约束。
+
 该条件策略只影响 `governance-review` 的机器计数，不改变 GitHub CODEOWNERS、Ruleset、required approving review、last-push approval 或平台禁止作者自审的限制。GitHub 原生 Ruleset 无法按作者条件表达 0/2/1 时，以治理状态作为条件策略权威；不得创建或配置 Misaka 专用 bypass actor。只有确实无法满足非 Leader/社区作者的独立成员审批时，才可使用已登记的 `piwork-leads` PR-only bypass，并记录原因、范围、跟踪 Issue 和复盘期限。
 
 紧急修复仍必须通过 PR。只有 `piwork-leads` 可以使用 Ruleset 的 PR-only bypass；PR 必须写明原因、影响、回滚方式和跟踪 Issue，并在两个工作日内完成复盘。

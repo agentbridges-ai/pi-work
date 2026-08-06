@@ -16,6 +16,7 @@ Piwork 的工程治理采用“基线 + ratchet”。`.governance/controls.json`
 - [架构、代码与边界](architecture.md)
 - [合约、数据与兼容性](contracts.md)
 - [安全、依赖与供应链](security.md)
+- [Dependabot 低风险审批](dependencies.md#dependabot-低风险审批)
 - [测试、CI 与发布](delivery.md)
 - [运行、日志、指标与恢复](operations.md)
 - [文档、RFC 与变更管理](change-management.md)

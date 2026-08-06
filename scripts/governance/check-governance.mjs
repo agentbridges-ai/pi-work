@@ -95,6 +95,40 @@ if (policy) {
   if (!Array.isArray(policy.highRiskPaths) || policy.highRiskPaths.length < 10) {
     fail.push("github-policy.json: high-risk path policy is incomplete");
   }
+  const dependabot = policy.dependabotReview;
+  if (
+    !dependabot?.enabled ||
+    dependabot.leader !== policy.leader ||
+    dependabot.requiredApprovals !== 1 ||
+    !Array.isArray(dependabot.authorLogins) ||
+    !dependabot.authorLogins.includes("dependabot[bot]") ||
+    !dependabot.authorLogins.includes("app/dependabot") ||
+    !Array.isArray(dependabot.dependencyPaths) ||
+    !dependabot.dependencyPaths.includes("**/package.json") ||
+    !dependabot.dependencyPaths.includes("**/bun.lock") ||
+    !Array.isArray(dependabot.workflowActionPinPaths) ||
+    !dependabot.workflowActionPinPaths.includes(".github/workflows/codeql.yml") ||
+    !Array.isArray(dependabot.excludedWorkflowPaths) ||
+    !dependabot.excludedWorkflowPaths.includes(".github/workflows/deploy.yml") ||
+    !dependabot.excludedWorkflowPaths.includes(".github/workflows/release-please.yml") ||
+    !dependabot.excludedWorkflowPaths.includes(".github/workflows/governance.yml") ||
+    !dependabot.excludedWorkflowPaths.includes(".github/workflows/deep-verify.yml") ||
+    dependabot.workflowActionPinOnly !== true ||
+    !Array.isArray(dependabot.supportingFixturePaths) ||
+    !dependabot.supportingFixturePaths.includes("scripts/governance/dependabot-fixtures.mjs") ||
+    !Array.isArray(dependabot.excludedPathClasses) ||
+    !["high-risk", "product", "security", "release"].every((item) =>
+      dependabot.excludedPathClasses.includes(item),
+    ) ||
+    dependabot.requireCurrentHeadLeaderApproval !== true ||
+    dependabot.nativeLastPushApprovalRequired !== true ||
+    dependabot.signedCommitsRequired !== true ||
+    dependabot.requiredChecks !== "requiredChecks"
+  ) {
+    fail.push(
+      "github-policy.json: Dependabot low-risk review must require one current-head Leader approval while retaining native last-push, signature, and required-check gates",
+    );
+  }
 }
 
 const exceptions = readJson(".governance/exceptions.json");

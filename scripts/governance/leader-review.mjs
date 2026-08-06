@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   approvalCountForHead,
+  classifyDependabotFiles,
+  dependabotApprovalForHead,
   isCoreAuthor,
+  isDependabotAuthor,
   leaderParticipated,
   leaderReviewMode,
   leaderSelfReviewForHead,
@@ -40,6 +43,34 @@ async function graphql(query, variables) {
   if (payload.errors?.length)
     throw new Error(payload.errors.map((item) => item.message).join("; "));
   return payload.data;
+}
+
+async function restJson(path) {
+  const response = await fetch(`https://api.github.com${path}`, { headers });
+  if (!response.ok) {
+    throw new Error(`REST request failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json();
+}
+
+async function listPullRequestFiles(repository, pullRequestNumber) {
+  const files = [];
+  for (let page = 1; ; page += 1) {
+    const pageFiles = await restJson(
+      `/repos/${repository}/pulls/${pullRequestNumber}/files?per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(pageFiles)) throw new Error("REST pull request files response is invalid");
+    files.push(...pageFiles);
+    if (pageFiles.length < 100) return files;
+  }
+}
+
+async function headCommitMetadata(repository, headSha) {
+  const payload = await restJson(`/repos/${repository}/commits/${headSha}`);
+  return {
+    authorLogin: payload.author?.login || null,
+    committerLogin: payload.committer?.login || null,
+  };
 }
 
 async function createCommitStatus({ sha, state, context, description, targetUrl }) {
@@ -154,10 +185,27 @@ while (!filesDone || !reviewsDone) {
     reviews.push(...(reviewsConnection?.nodes || []));
     const reviewsPage = reviewsConnection?.pageInfo;
     reviewsDone = !reviewsPage?.hasNextPage;
-    reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
+  reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
   }
 }
-const highRisk = files.some((file) =>
+// GraphQL exposes paths but not patches on PullRequestChangedFile. Read the
+// same trusted PR metadata through REST so Dependabot workflow changes can be
+// restricted to exact SHA-pinned action lines.
+files = await listPullRequestFiles(policy.repository, pullRequestNumber);
+const dependabotAuthor = isDependabotAuthor(pullRequest.user.login, policy);
+const dependabotScope = dependabotAuthor
+  ? classifyDependabotFiles(files, policy)
+  : { eligible: false, reason: "PR author is not Dependabot" };
+let headCommit = null;
+let headCommitError = null;
+if (dependabotAuthor && dependabotScope.eligible) {
+  try {
+    headCommit = await headCommitMetadata(policy.repository, headSha);
+  } catch (error) {
+    headCommitError = error instanceof Error ? error.message : String(error);
+  }
+}
+const highRisk = !dependabotScope.eligible && files.some((file) =>
   policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
 );
 const authorAssociation = pullRequest.author_association || "NONE";
@@ -182,16 +230,31 @@ const leaderParticipatedForHead = leaderParticipated({
   headSha,
   policy,
 });
-const state =
-  approvalsSatisfied && (!highRisk || leaderParticipatedForHead) ? "success" : "failure";
+const dependabotApproval = dependabotScope.eligible
+  ? dependabotApprovalForHead({ reviews, headSha, policy, headCommit })
+  : null;
+if (dependabotApproval && headCommitError) {
+  dependabotApproval.satisfied = false;
+  dependabotApproval.reason = `unable to verify head commit author/committer: ${headCommitError}`;
+}
+const state = dependabotScope.eligible
+  ? dependabotApproval.satisfied
+    ? "success"
+    : "failure"
+  : approvalsSatisfied && (!highRisk || leaderParticipatedForHead)
+    ? "success"
+    : "failure";
 const authorDescription =
-  pullRequest.user.login === policy.leader
+  dependabotScope.eligible
+    ? "Dependabot 低风险自动化"
+    : pullRequest.user.login === policy.leader
     ? policy.leader
     : coreAuthor
       ? "非 Leader Core 作者"
       : "社区作者";
-const approvalDescription =
-  pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
+const approvalDescription = dependabotScope.eligible
+  ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
+  : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
     ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
     : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
 const leaderDescription = !highRisk
@@ -199,7 +262,9 @@ const leaderDescription = !highRisk
   : leaderParticipatedForHead
     ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
     : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
-const description = approvalsSatisfied
+const description = dependabotScope.eligible
+  ? `${approvalDescription}；原生 last-push、签名提交和必需状态仍由 GitHub Ruleset 强制`
+  : approvalsSatisfied
   ? `${approvalDescription}；${leaderDescription}`
   : `${approvalDescription}；审批数不足`;
 

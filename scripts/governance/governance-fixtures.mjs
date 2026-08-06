@@ -7,7 +7,11 @@ import { findMutableExternalActionUses } from "../verify-github-actions-pinning.
 import {
   approvalCountForHead,
   approvedReviewersForHead,
+  classifyDependabotFiles,
+  dependabotApprovalForHead,
   isCoreAuthor,
+  isDependabotAuthor,
+  leaderIsLastPusher,
   leaderParticipated,
   leaderReviewMode,
   leaderSelfReviewForHead,
@@ -99,6 +103,22 @@ assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
+assert.equal(policy.dependabotReview.enabled, true);
+assert.deepEqual(policy.dependabotReview.authorLogins, ["dependabot[bot]", "app/dependabot"]);
+assert.equal(policy.dependabotReview.leader, policy.leader);
+assert.equal(policy.dependabotReview.requiredApprovals, 1);
+assert.equal(policy.dependabotReview.workflowActionPinOnly, true);
+assert.ok(policy.dependabotReview.workflowActionPinPaths.includes(".github/workflows/codeql.yml"));
+assert.ok(policy.dependabotReview.excludedWorkflowPaths.includes(".github/workflows/deploy.yml"));
+assert.ok(
+  policy.dependabotReview.excludedWorkflowPaths.includes(".github/workflows/governance.yml"),
+);
+assert.equal(policy.dependabotReview.nativeLastPushApprovalRequired, true);
+assert.equal(policy.dependabotReview.signedCommitsRequired, true);
+assert.equal(policy.dependabotReview.requiredChecks, "requiredChecks");
+for (const excludedClass of ["high-risk", "product", "security", "release"]) {
+  assert.ok(policy.dependabotReview.excludedPathClasses.includes(excludedClass));
+}
 assert.equal(leaderReviewMode(policy), "self-or-exempt");
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 0);
 const leaderNoReviewCount = approvalCountForHead({
@@ -204,6 +224,102 @@ assert.deepEqual(
   ["reviewer-a"],
 );
 
+const actionPinPatch = `@@ -1 +1 @@\n-        uses: github/codeql-action/init@${"a".repeat(40)} # v4.37.4\n+        uses: github/codeql-action/init@${"b".repeat(40)} # v4.37.5`;
+const fixturePatch = `@@ -1 +1 @@\n-  "${"a".repeat(40)}",\n+  "${"b".repeat(40)}",`;
+assert.equal(isDependabotAuthor("dependabot[bot]", policy), true);
+assert.equal(isDependabotAuthor("app/dependabot", policy), true);
+assert.equal(isDependabotAuthor("community-contributor", policy), false);
+assert.deepEqual(
+  classifyDependabotFiles(
+    [
+      { path: ".github/workflows/codeql.yml", patch: actionPinPatch },
+      { path: "scripts/governance/dependabot-fixtures.mjs", patch: fixturePatch },
+    ],
+    policy,
+  ),
+  {
+    eligible: true,
+    reason: "SHA-pinned workflow action update (with optional exact SHA fixture)",
+  },
+);
+assert.equal(
+  classifyDependabotFiles(
+    [{ path: "web/package.json", patch: "@@ -1 +1 @@\n-  \"x\": 1\n+  \"x\": 2" }],
+    policy,
+  ).eligible,
+  true,
+);
+for (const forbiddenPath of ["web/server/index.ts", "release/onlyoffice-release-manifest.json"])
+  assert.equal(
+    classifyDependabotFiles([{ path: forbiddenPath, patch: "@@ -1 +1 @@\n-a\n+b" }], policy)
+      .eligible,
+    false,
+    `${forbiddenPath} must remain outside Dependabot low-risk scope`,
+  );
+assert.equal(
+  classifyDependabotFiles(
+    [{ path: ".github/workflows/codeql.yml", patch: "@@ -1 +1 @@\n-        run: old\n+        run: new" }],
+    policy,
+  ).eligible,
+  false,
+  "workflow code changes are not action-pin-only",
+);
+assert.equal(
+  classifyDependabotFiles(
+    [{ path: ".github/workflows/deploy.yml", patch: actionPinPatch }],
+    policy,
+  ).eligible,
+  false,
+  "deploy workflow action pins remain high-risk",
+);
+assert.equal(
+  classifyDependabotFiles(
+    [{ path: "scripts/governance/dependabot-fixtures.mjs", patch: fixturePatch }],
+    policy,
+  ).eligible,
+  false,
+  "fixture-only changes cannot opt into low-risk review",
+);
+const dependabotLeaderReview = {
+  state: "APPROVED",
+  commit: { oid: "head" },
+  author: { login: policy.leader },
+};
+assert.equal(
+  dependabotApprovalForHead({
+    reviews: [dependabotLeaderReview],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+  }).satisfied,
+  true,
+  "Dependabot PR accepts one current-head Leader approval when Leader is not the pusher",
+);
+assert.equal(
+  dependabotApprovalForHead({
+    reviews: [dependabotLeaderReview],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+  }).satisfied,
+  false,
+  "Leader cannot satisfy native last-push approval for a manually replayed head",
+);
+assert.equal(
+  leaderIsLastPusher({ authorLogin: policy.leader }, policy),
+  true,
+);
+assert.equal(
+  dependabotApprovalForHead({
+    reviews: [{ ...dependabotLeaderReview, commit: { oid: "old" } }],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+  }).satisfied,
+  false,
+  "an approval on an old head cannot satisfy Dependabot review",
+);
+
 console.log(
-  "[governance-fixtures] exceptions, expansion, path classification, PR title, CODEOWNERS, and Action pin fixtures passed",
+  "[governance-fixtures] exceptions, expansion, path classification, PR title, CODEOWNERS, Action pin, and Dependabot review fixtures passed",
 );
