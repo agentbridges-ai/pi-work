@@ -208,7 +208,7 @@ if (dependabotAuthor && dependabotScope.eligible) {
 const highRisk =
   !dependabotScope.eligible &&
   files.some((file) =>
-    policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
+    policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path || file.filename)),
   );
 const authorAssociation = pullRequest.author_association || "NONE";
 const coreAuthor = isCoreAuthor(pullRequest.user.login, policy, authorAssociation);

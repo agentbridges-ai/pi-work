@@ -311,6 +311,28 @@ assert.equal(
 assert.equal(leaderIsLastPusher({ authorLogin: policy.leader }, policy), true);
 assert.equal(
   dependabotApprovalForHead({
+    reviews: [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "another-core-dev" } },
+    ],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+  }).satisfied,
+  false,
+  "a non-Leader approval cannot satisfy the Dependabot-only Leader rule",
+);
+assert.equal(
+  dependabotApprovalForHead({
+    reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: "app/dependabot" } }],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+  }).satisfied,
+  false,
+  "an author approval cannot satisfy the Dependabot-only Leader rule",
+);
+assert.equal(
+  dependabotApprovalForHead({
     reviews: [{ ...dependabotLeaderReview, commit: { oid: "old" } }],
     headSha: "head",
     policy,
