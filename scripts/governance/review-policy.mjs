@@ -58,10 +58,14 @@ const workflowPathPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
 const trustedStatusWriterPath = ".github/workflows/leader-review.yml";
 
 function decodeYamlEscapes(source) {
-  return source.replace(
+  const decoded = source.replace(
     /\\u\{([0-9a-f]{1,6})\}|\\u([0-9a-f]{4})|\\x([0-9a-f]{2})/gi,
     (_match, codePoint, unicode, hex) =>
       String.fromCodePoint(Number.parseInt(codePoint || unicode || hex, 16)),
+  );
+  return decoded.replace(
+    /(^[ \t]*["']?statuses["']?\s*:\s*)[|>][-+]?\s*\n[ \t]+([^\n]+)/gim,
+    (_match, prefix, value) => `${prefix}${value.trim()}`,
   );
 }
 
@@ -91,7 +95,7 @@ export function auditStatusWriterWorkflowChanges(files) {
       failures.push(`${path}: workflow patch is unavailable`);
       continue;
     }
-    if (addedLines.some((line) => hasStatusWritePermission(line))) {
+    if (hasStatusWritePermission(addedLines.join("\n"))) {
       failures.push(`${path}: changed workflow requests status-writing permissions`);
     }
     if (

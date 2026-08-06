@@ -252,6 +252,26 @@ assert.equal(
   "escaped YAML resulting status permission values are rejected",
 );
 assert.equal(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/example.yml",
+      patch: "@@ -1 +1 @@\n-  contents: read\n+  statuses: >-\n+    write",
+    },
+  ]).allowed,
+  false,
+  "folded YAML status permission values cannot evade the workflow audit",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/example.yml",
+      source: "on:\n  pull_request:\npermissions:\n  statuses: |\n    write\n",
+    },
+  ]).allowed,
+  false,
+  "block YAML resulting status permission values are rejected",
+);
+assert.equal(
   auditStatusWriterWorkflowContents([
     {
       path: ".github/workflows/leader-review.yml",
