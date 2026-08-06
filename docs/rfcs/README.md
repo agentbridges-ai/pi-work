@@ -8,3 +8,7 @@ RFC 文件使用 `RFC-NNNN-短标题.md`，状态为 `proposed`、`accepted`、`
 - `immutable-migrations.md`
 - `hosted-observability-slo.md`
 - `restore-rto-rpo.md`
+
+已接受的治理迁移：
+
+- `RFC-0005-codeql-v4-migration.md`

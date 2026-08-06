@@ -285,6 +285,7 @@ dry-check:
 governance-check: worktree-check
 	node ./scripts/governance/check-governance.mjs
 	node ./scripts/governance/governance-fixtures.mjs
+	node ./scripts/governance/dependabot-fixtures.mjs
 	node ./scripts/verify-github-actions-pinning.mjs
 	node ./scripts/governance/merge-queue-workflows.mjs
 security-check:
