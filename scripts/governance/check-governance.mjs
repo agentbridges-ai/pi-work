@@ -75,12 +75,13 @@ if (policy) {
     );
   }
   if (
-    policy.leaderApprovals !== 0 ||
-    policy.leaderReviewMode !== "self-or-exempt" ||
+    policy.ordinaryApprovals !== 1 ||
+    policy.leaderApprovals !== 1 ||
+    policy.leaderReviewMode !== "required" ||
     policy.nonLeaderCoreApprovals !== 2
   ) {
     fail.push(
-      "github-policy.json: Leader must use self-or-exempt governance mode and non-Leader Core authors require two",
+      "github-policy.json: every author requires an independent review (ordinary=1, Leader=1, non-Leader Core=2)",
     );
   }
   if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {

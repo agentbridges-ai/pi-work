@@ -10,7 +10,6 @@ import {
   isCoreAuthor,
   leaderParticipated,
   leaderReviewMode,
-  leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
 } from "./review-policy.mjs";
 
@@ -95,12 +94,13 @@ const codeowners = readFileSync(join(root, ".github/CODEOWNERS"), "utf8");
 assert.match(codeowners, /@agentbridges-ai\/piwork-core/);
 assert.match(codeowners, /@Misakago/);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
-assert.equal(policy.leaderApprovals, 0);
-assert.equal(policy.leaderReviewMode, "self-or-exempt");
+assert.equal(policy.ordinaryApprovals, 1);
+assert.equal(policy.leaderApprovals, 1);
+assert.equal(policy.leaderReviewMode, "required");
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
-assert.equal(leaderReviewMode(policy), "self-or-exempt");
-assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 0);
+assert.equal(leaderReviewMode(policy), "required");
+assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 1);
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],
   headSha: "head",
@@ -108,16 +108,12 @@ const leaderNoReviewCount = approvalCountForHead({
   policy,
 });
 assert.equal(leaderNoReviewCount, 0);
-assert.ok(
-  leaderNoReviewCount >= requiredApprovalsForAuthor(policy.leader, policy),
-  "Misakago author passes with no Review under self-or-exempt mode",
-);
+assert.ok(leaderNoReviewCount < requiredApprovalsForAuthor(policy.leader, policy));
 const leaderSelfReview = {
   state: "APPROVED",
   commit: { oid: "head" },
   author: { login: policy.leader },
 };
-assert.equal(leaderSelfReviewForHead([leaderSelfReview], "head", policy.leader, policy), true);
 assert.equal(
   approvalCountForHead({
     reviews: [leaderSelfReview],
@@ -125,10 +121,23 @@ assert.equal(
     authorLogin: policy.leader,
     policy,
   }),
-  1,
-  "an existing Leader self-review may be displayed but is not fabricated",
+  0,
+  "Leader author approval cannot satisfy the independent review requirement",
 );
 assert.deepEqual(approvedReviewersForHead([leaderSelfReview], "head", policy.leader), []);
+assert.equal(
+  approvalCountForHead({
+    reviews: [
+      leaderSelfReview,
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "independent-reviewer" } },
+    ],
+    headSha: "head",
+    authorLogin: policy.leader,
+    policy,
+  }),
+  1,
+  "Leader author passes only with one independent current-head approval",
+);
 assert.equal(isCoreAuthor("another-core-dev", policy, "MEMBER"), true);
 assert.equal(requiredApprovalsForAuthor("another-core-dev", policy, "MEMBER"), 2);
 assert.equal(
