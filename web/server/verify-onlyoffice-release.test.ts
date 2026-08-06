@@ -562,7 +562,7 @@ describe("published OnlyOffice descriptor verification", () => {
       conclusion: "success",
       event: "workflow_dispatch",
       head_sha: piworkIntegrationCommit,
-      head_branch: "misakago/onlyoffice-integration",
+      head_branch: "piwork/onlyoffice-integration",
       repository: { full_name: "agentbridges-ai/pi-work" },
       path: ".github/workflows/deep-verify.yml",
     };

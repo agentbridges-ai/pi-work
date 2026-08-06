@@ -1,3 +1,8 @@
-# 备份与恢复
+# Backup and restore
 
-使用 `make backup` 创建备份，使用 `make backup-verify BACKUP=...` 验证 checksum 和路径安全。恢复演练必须在临时数据根和临时 Postgres 中完成，确认 Better Auth 表、Pi runtime marker、用户 profile 和 Session 文件可读取，再删除临时资源。生产恢复前由 Owner 记录实际 RTO/RPO 和回滚点；当前 local-first 版本不宣称统一 SLA。
+Run `make backup` to create a backup and
+`make backup-verify BACKUP=/path/to/backup` to verify checksums and path
+safety. Rehearse restores in a temporary data root and Postgres instance.
+Confirm Better Auth tables, the Pi runtime marker, profiles, and session files
+before removing the temporary resources. Record the measured restore point and
+recovery time before a production restore.

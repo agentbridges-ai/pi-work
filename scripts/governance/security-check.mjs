@@ -36,7 +36,7 @@ if (!existsSync(licensePolicy)) failures.push(".governance/license-policy.json i
 else {
   const policy = JSON.parse(readFileSync(licensePolicy, "utf8"));
   if (
-    policy.owner !== "Misakago" ||
+    policy.owner !== "maintainers" ||
     !Array.isArray(policy.allowedSpdx) ||
     !Array.isArray(policy.reviewRequired)
   ) {

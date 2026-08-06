@@ -52,7 +52,7 @@ function checkDependencyLicense(projectManifest, dependency, specification) {
   const scope = `${projectManifest.replace(/\/package\.json$/, "") || "."}:${dependency}`;
   report.push({ manifest: projectManifest, dependency, license, packageManifest: path });
   if (!policy.allowedSpdx.includes(license) && !hasActiveException(scope)) {
-    failures.push(`${scope}: dependency license ${license} requires Leader review`);
+    failures.push(`${scope}: dependency license ${license} requires maintainer review`);
   }
 }
 
@@ -60,7 +60,7 @@ for (const manifest of manifests) {
   const parsed = JSON.parse(readFileSync(join(root, manifest), "utf8"));
   const license = packageLicense(parsed);
   if (!policy.allowedSpdx.includes(license) && !hasActiveException(`${manifest}:package`)) {
-    failures.push(`${manifest}: package license ${license} requires Leader review`);
+    failures.push(`${manifest}: package license ${license} requires maintainer review`);
   }
   report.push({ manifest, license });
   for (const [dependency, specification] of Object.entries(parsed.dependencies || {})) {

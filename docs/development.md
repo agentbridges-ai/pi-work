@@ -6,9 +6,10 @@ the pinned Node + native Pi process inside one SRT per session. Better Auth +
 Postgres provides authentication; Piwork product state stays in tenant-scoped
 `data/`.
 
-并行开发的 worktree、任务 manifest、里程碑证据和主线程收口规则见
-[`docs/engineering/worktree-harness.md`](./engineering/worktree-harness.md)。根
-checkout 必须始终 clean/read-only；初始化和依赖安装都在独立 worktree 内完成。
+Concurrent worktree usage, task manifests, milestone evidence, and handoff
+rules are summarized in [`docs/engineering/README.md`](./engineering/README.md).
+The root checkout is always clean and read-only; initialization and dependency
+installation happen inside each isolated worktree.
 
 ```bash
 mise trust
@@ -99,23 +100,14 @@ Useful host references: [OrbStack](https://orbstack.dev/) and Microsoft's
 
 ## Official Pi development guide
 
-The only normative Agent/runtime guide is the official `earendil-works/pi`
-repository pinned at [`docs/upstream/pi`](upstream/pi). Initialize it after
-cloning Piwork:
-
-```bash
-git submodule update --init docs/upstream/pi
-make verify-pi-upstream
-```
-
-Use `make sync-pi-upstream` to advance the gitlink to the latest official
-`main`, then review that dependency-pin diff before adapting Piwork. For RPC
-work, begin with
-[`packages/coding-agent/docs/rpc.md`](upstream/pi/packages/coding-agent/docs/rpc.md),
-but use the rest of the same upstream repository when the behavior crosses
-extensions, Skills, packages, sessions, compaction, providers, or tools.
-Community projects may identify cases worth testing; they are not protocol or
-product authorities.
+The normative Agent/runtime guide is the official
+[`earendil-works/pi`](https://github.com/earendil-works/pi) repository. For RPC
+work, begin with its
+[`packages/coding-agent/docs/rpc.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md),
+then consult the surrounding implementation when behavior crosses extensions,
+Skills, packages, sessions, compaction, providers, or tools. Piwork does not
+vendor a second copy of that repository; review the upstream revision used for
+each compatibility change in the pull request.
 
 ## Service Split
 
@@ -650,7 +642,7 @@ tools:
 - `user-space bash --capabilities`
 
 Agent-facing paths include the active directory's exact `rootName` and do not
-start with `/`, for example `office/需求调研.md`. The CLI validates and removes
+start with `/`, for example `office/requirements.md`. The CLI validates and removes
 that active root prefix before sending the browser operation; mount IDs and
 directory-selection commands remain internal. Top-level `grep`, `glob`,
 `tree`, `find`, direct Unix aliases, and `sh -c` are not public.

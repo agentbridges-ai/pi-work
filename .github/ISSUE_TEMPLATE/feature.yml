@@ -1,19 +1,26 @@
 name: Feature request
-description: 提议产品或工程改进
+description: Propose a focused product or engineering improvement.
 title: "feat: "
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: 要解决的问题
+      label: Problem and motivation
+      description: What problem should this solve, and for whom?
+    validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: 建议方案
+      label: Proposal
+      description: Describe the smallest useful behavior and its boundaries.
+    validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: 替代方案与风险
+      label: Alternatives and risks
+      description: List alternatives, compatibility impact, and security considerations.
+    validations:
+      required: true

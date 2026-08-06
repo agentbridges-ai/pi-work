@@ -1,30 +1,41 @@
 name: Bug report
-description: 报告可复现的问题
+description: Report a reproducible product or development problem.
 title: "bug: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        请不要在 Issue 中披露安全漏洞；安全问题请使用 SECURITY.md 的 Private Vulnerability Reporting。
+        Do not disclose security vulnerabilities here. Use Private Vulnerability Reporting instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken, and why does it matter?
+    validations:
+      required: true
   - type: textarea
     id: expected
     attributes:
-      label: 预期行为
+      label: Expected behavior
+    validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: 实际行为
+      label: Actual behavior
+    validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: 复现步骤
+      label: Reproduction
+      description: Include the smallest reliable reproduction and relevant logs.
+    validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: 版本或 commit
+      label: Version or commit
     validations:
       required: true

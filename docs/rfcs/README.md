@@ -1,14 +1,17 @@
-# RFC
+# RFCs
 
-RFC 文件使用 `RFC-NNNN-短标题.md`，状态为 `proposed`、`accepted`、`rejected` 或 `superseded`，必须包含问题、目标、非目标、方案、替代方案、迁移、回滚和验收标准。
+Use `RFC-NNNN-short-title.md` for a proposal that needs design, migration, or
+operational evidence. An RFC is `proposed`, `accepted`, `rejected`, or
+`superseded` and should cover the problem, goals, non-goals, alternatives,
+migration, rollback, and acceptance criteria.
 
-待专项改造：
+Open proposals:
 
-- `schema-first-api.md`
-- `immutable-migrations.md`
-- `hosted-observability-slo.md`
-- `restore-rto-rpo.md`
+- [Schema-first HTTP contracts](schema-first-api.md)
+- [Immutable migrations](immutable-migrations.md)
+- [Hosted observability and SLOs](hosted-observability-slo.md)
+- [Restore RTO/RPO](restore-rto-rpo.md)
 
-已接受的治理迁移：
+Accepted migration record:
 
-- `RFC-0005-codeql-v4-migration.md`
+- [CodeQL Action v4](RFC-0005-codeql-v4-migration.md)

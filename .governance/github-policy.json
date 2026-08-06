@@ -1,15 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "repository": "agentbridges-ai/pi-work",
   "defaultBranch": "main",
-  "leader": "Misakago",
-  "coreTeam": "piwork-core",
-  "leadsTeam": "piwork-leads",
+  "maintainerTeam": "piwork-core",
+  "releaseTeam": "piwork-leads",
   "ordinaryApprovals": 1,
-  "highRiskApprovals": 1,
-  "leaderApprovals": 0,
-  "leaderReviewMode": "self-or-exempt",
-  "nonLeaderCoreApprovals": 2,
+  "highRiskApprovals": 2,
   "productionEnvironment": "production",
   "productionBranch": "main",
   "releaseAutomation": "github-actions",
@@ -33,8 +29,7 @@
     "srt-production-canaries",
     "verify",
     "landing-quality",
-    "dependency-review",
-    "governance-review"
+    "dependency-review"
   ],
   "highRiskPaths": [
     "web/server/**",
@@ -53,89 +48,30 @@
     "bun.lock",
     "**/bun.lock"
   ],
-  "bootstrapBypassDays": 90,
   "stackedPullRequests": {
-    "status": "private-preview-not-enabled",
+    "enabled": false,
     "dependencyOrder": ["mise", "feature", "release"],
-    "conventions": {
-      "baseChain": "main <- mise <- feature <- release",
-      "mergeOrder": "bottom-up",
-      "independentReview": "Every layer keeps its own checks, approvals, CODEOWNERS evaluation, and high-risk review.",
-      "securityBoundary": "Stacked PR preview is not a bypass for CODEOWNERS, author-aware governance, last-push approval, signed commits, linear history, required checks, or production gates."
-    },
-    "readback": {
-      "at": "2026-08-05",
-      "repository": "agentbridges-ai/pi-work",
-      "restEndpoint": "/repos/agentbridges-ai/pi-work/stacks",
-      "restResponse": [],
-      "pullRequestStackField": null,
-      "officialStatus": "private preview",
-      "reference": "https://github.github.com/gh-stack/reference/rest-api/"
-    }
+    "mergeOrder": "bottom-up",
+    "reviewBoundary": "Each layer keeps its own checks, ownership, and review.",
+    "securityBoundary": "Stacking is dependency metadata, never an approval bypass.",
+    "reference": "https://github.blog/changelog/2026-07-30-stacked-pull-requests-are-now-in-public-preview/"
   },
   "mergeQueue": {
     "enabled": false,
-    "status": "recommendation-only-not-applied",
-    "availability": {
-      "repositoryVisibility": "public",
-      "organizationPlan": "free",
-      "publicOrganizationRepositorySupport": true,
-      "graphqlRepositoryMergeQueue": null,
-      "restRequiredMergeQueueRule": false,
-      "activeRulesets": [
-        "Piwork main governance",
-        "Piwork high-risk review",
-        "Piwork release tags"
-      ],
-      "mainRulesetId": 20441671,
-      "requiredStatusChecks": [
-        "governance",
-        "quality",
-        "better-auth-e2e",
-        "srt-production-canaries",
-        "verify",
-        "landing-quality",
-        "dependency-review",
-        "governance-review"
-      ],
-      "ghRulesetCheck": "7 rules apply to main; required_merge_queue is absent",
-      "readbackAt": "2026-08-05",
-      "baseCommit": "36215b770f8abb0b59d252abe2aba74950c3193d"
-    },
-    "deferredApply": {
-      "apply": false,
-      "reason": "Existing governance, mise, native-Pi, OnlyOffice, and release pull requests are not fully closed or explicitly coordinated.",
-      "openPullRequests": [49, 48, 45, 17, 14, 9],
-      "requiredBeforeApply": [
-        "Merge or explicitly coordinate the current dependent work before changing main merge behavior.",
-        "Observe the merge_group required statuses on a dedicated draft validation PR.",
-        "Have an administrator apply the main ruleset merge_queue rule and read it back through REST and gh ruleset check."
-      ]
-    },
-    "recommendedConfiguration": {
-      "targetBranch": "main",
-      "mergeMethod": "SQUASH",
-      "mergingStrategy": "ALLGREEN",
-      "maxEntriesToBuild": 1,
-      "maxEntriesToMerge": 1,
-      "minEntriesToMerge": 1,
-      "minEntriesToMergeWaitMinutes": 5,
-      "checkResponseTimeoutMinutes": 60,
-      "safetyNote": "ALLGREEN requires every queued entry to pass; HEADGREEN can admit a failing entry and is not selected. The initial one-at-a-time concurrency is intentionally conservative."
-    },
-    "workflowContract": {
-      "requiredStatusesOnMergeGroup": [
-        "governance",
-        "quality",
-        "better-auth-e2e",
-        "srt-production-canaries",
-        "verify",
-        "landing-quality",
-        "dependency-review",
-        "governance-review"
-      ],
-      "prMetadataNoOpStatuses": ["dependency-review", "governance-review"],
-      "productionAndReleaseExcluded": ["deploy", "release-please"]
-    }
+    "applyMode": "administrator-explicit",
+    "strategy": "ALLGREEN",
+    "method": "SQUASH",
+    "maxEntriesToBuild": 1,
+    "maxEntriesToMerge": 1,
+    "requiredStatusesOnMergeGroup": [
+      "governance",
+      "quality",
+      "better-auth-e2e",
+      "srt-production-canaries",
+      "verify",
+      "landing-quality",
+      "dependency-review"
+    ],
+    "reference": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue"
   }
 }

@@ -1,5 +1,0 @@
-[submodule "docs/upstream/pi"]
-	path = docs/upstream/pi
-	url = https://github.com/earendil-works/pi.git
-	branch = main
-	shallow = true

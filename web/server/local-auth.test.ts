@@ -126,7 +126,7 @@ describe("LocalAuth Better Auth adapter", () => {
     mockGetSession.mockResolvedValue({
       user: {
         id: "better-auth-user",
-        email: "Misaka@Example.Test",
+        email: "TestUser@Example.Test",
         name: "御坂美琴",
       },
       session: { id: "session" },
@@ -140,18 +140,18 @@ describe("LocalAuth Better Auth adapter", () => {
     expect(result.user).toMatchObject({
       userId: "better-auth-user",
       uuid: "better-auth-user",
-      username: "misaka@example.test",
+      username: "testuser@example.test",
       displayName: "御坂美琴",
       orgId: "local",
       orgName: "Local",
       roles: ["user"],
-      email: "misaka@example.test",
+      email: "testuser@example.test",
     });
     const profilePath = join(root, "data", "better-auth-user", "profile.json");
     expect(existsSync(profilePath)).toBe(true);
     expect(JSON.parse(readFileSync(profilePath, "utf-8")).data).toMatchObject({
       uuid: "better-auth-user",
-      email: "misaka@example.test",
+      email: "testuser@example.test",
     });
   });
 
@@ -196,7 +196,7 @@ describe("LocalAuth Better Auth adapter", () => {
     mockGetSession.mockResolvedValue({
       user: {
         id: "better-auth-user",
-        email: "Misaka@Example.Test",
+        email: "TestUser@Example.Test",
         name: "御坂美琴",
       },
       session: { id: "session" },

@@ -10,12 +10,12 @@ const mockGetMe = vi.fn().mockResolvedValue({
   user: {
     userId: "better-auth-user",
     uuid: "better-auth-user",
-    username: "misaka@example.test",
+    username: "testuser@example.test",
     displayName: "御坂美琴",
     orgId: "local",
     orgName: "Local",
     roles: ["user"],
-    email: "misaka@example.test",
+    email: "testuser@example.test",
   },
   runtimeMode: "local",
 });
@@ -80,12 +80,12 @@ beforeEach(() => {
     user: {
       userId: "better-auth-user",
       uuid: "better-auth-user",
-      username: "misaka@example.test",
+      username: "testuser@example.test",
       displayName: "御坂美琴",
       orgId: "local",
       orgName: "Local",
       roles: ["user"],
-      email: "misaka@example.test",
+      email: "testuser@example.test",
     },
     runtimeMode: "local",
   });
@@ -121,7 +121,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     fireEvent.change(await screen.findByLabelText("邮箱"), {
-      target: { value: "Misaka@Example.Test" },
+      target: { value: "TestUser@Example.Test" },
     });
     fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "33669900" },
@@ -130,12 +130,12 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(mockSignInEmail).toHaveBeenCalledWith({
-        email: "misaka@example.test",
+        email: "testuser@example.test",
         password: "33669900",
       });
       expect(mockGetMe).toHaveBeenCalledTimes(1);
       expect(mockState.setCurrentUser).toHaveBeenCalledWith(
-        expect.objectContaining({ uuid: "better-auth-user", email: "misaka@example.test" }),
+        expect.objectContaining({ uuid: "better-auth-user", email: "testuser@example.test" }),
         "local",
       );
     });
@@ -149,7 +149,7 @@ describe("LoginPage", () => {
       target: { value: "御坂美琴" },
     });
     fireEvent.change(screen.getByLabelText("邮箱"), {
-      target: { value: "misaka@example.test" },
+      target: { value: "testuser@example.test" },
     });
     fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "33669900" },
@@ -161,7 +161,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(mockSignUpEmail).toHaveBeenCalledWith({
-        email: "misaka@example.test",
+        email: "testuser@example.test",
         password: "33669900",
         name: "御坂美琴",
       });
@@ -199,7 +199,7 @@ describe("LoginPage", () => {
       target: { value: "御坂美琴" },
     });
     fireEvent.change(screen.getByLabelText("邮箱"), {
-      target: { value: "misaka@example.test" },
+      target: { value: "testuser@example.test" },
     });
     fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "33669900" },
@@ -233,7 +233,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     fireEvent.change(await screen.findByLabelText("邮箱"), {
-      target: { value: "misaka@example.test" },
+      target: { value: "testuser@example.test" },
     });
     fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "wrong-pass" },

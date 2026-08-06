@@ -6,8 +6,8 @@
     "resolve": "main-worktree"
   },
   "branch": {
-    "prefix": "misakago/",
-    "pattern": "^misakago/[a-z0-9][a-z0-9._/-]{0,80}$",
+    "prefix": "piwork/",
+    "pattern": "^piwork/[a-z0-9][a-z0-9._/-]{0,80}$",
     "maxLength": 96
   },
   "paths": {

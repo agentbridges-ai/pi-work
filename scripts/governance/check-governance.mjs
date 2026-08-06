@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const fail = [];
@@ -58,8 +58,7 @@ if (controls) {
 
 const policy = readJson(".governance/github-policy.json");
 if (policy) {
-  if (policy.leader !== "Misakago") fail.push("github-policy.json: leader must remain Misakago");
-  if (policy.coreTeam !== "piwork-core" || policy.leadsTeam !== "piwork-leads") {
+  if (policy.maintainerTeam !== "piwork-core" || policy.releaseTeam !== "piwork-leads") {
     fail.push("github-policy.json: unexpected governance team slug");
   }
   if (policy.productionEnvironment !== "production" || policy.productionBranch !== "main") {
@@ -74,14 +73,8 @@ if (policy) {
       "github-policy.json: workflow permissions or release automation policy is incomplete",
     );
   }
-  if (
-    policy.leaderApprovals !== 0 ||
-    policy.leaderReviewMode !== "self-or-exempt" ||
-    policy.nonLeaderCoreApprovals !== 2
-  ) {
-    fail.push(
-      "github-policy.json: Leader must use self-or-exempt governance mode and non-Leader Core authors require two",
-    );
+  if (policy.ordinaryApprovals !== 1 || policy.highRiskApprovals !== 2) {
+    fail.push("github-policy.json: ordinary and high-risk approval counts must be 1 and 2");
   }
   if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
     fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
@@ -133,11 +126,33 @@ const codeowners = existsSync(join(root, ".github/CODEOWNERS"))
   : "";
 if (!codeowners.includes("@agentbridges-ai/piwork-core"))
   fail.push("CODEOWNERS: Core Team is missing");
-if (!codeowners.includes("@Misakago")) fail.push("CODEOWNERS: Leader is missing");
+const allowedPublicHandles = new Set([
+  "agentbridges-ai/piwork-core",
+  "agentbridges-ai/piwork-leads",
+  "earendil-works/pi-coding-agent",
+]);
+
+function publicIdentityIssues(text, label) {
+  const issues = [];
+  for (const match of text.matchAll(/@([A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9._-]+)?)/g)) {
+    if (!allowedPublicHandles.has(match[1])) {
+      issues.push(`${label}: unapproved personal or team handle ${match[0]}`);
+    }
+  }
+  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text)) {
+    issues.push(`${label}: private email address must not appear in public governance text`);
+  }
+  return issues;
+}
+
+fail.push(...publicIdentityIssues(codeowners, "CODEOWNERS"));
 
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;
-for (const title of ["feat(governance): 建立工程治理基线", "fix: 修复运行态权限"]) {
+for (const title of [
+  "feat(governance): simplify repository policy",
+  "fix: protect runtime access",
+]) {
   if (!titlePattern.test(title)) fail.push(`PR title fixture does not match: ${title}`);
 }
 
@@ -150,25 +165,8 @@ function walk(directory) {
 }
 
 for (const file of walk(join(root, "docs"))) {
-  // The Pi source tree is a pinned read-only submodule. Its upstream
-  // documentation and fixtures follow Pi's own governance contract, not
-  // Piwork's local frontmatter/link policy.
-  if (
-    file === join(root, "docs/upstream") ||
-    file.startsWith(`${join(root, "docs/upstream")}${sep}`)
-  ) {
-    continue;
-  }
   if (!file.endsWith(".md") || file.endsWith("README.md")) continue;
   const text = readFileSync(file, "utf8");
-  if (text.startsWith("---\n")) {
-    const header = text.split("---\n", 3)[1] || "";
-    for (const key of ["owner", "status", "last_reviewed", "review_cycle_days"]) {
-      if (!new RegExp(`^${key}:\\s*.+$`, "m").test(header)) {
-        fail.push(`${relative(root, file)}: missing frontmatter ${key}`);
-      }
-    }
-  }
   for (const match of text.matchAll(/\]\(([^)#]+)(?:#[^)]+)?\)/g)) {
     const target = match[1];
     if (target.startsWith("http") || target.startsWith("mailto:")) continue;
@@ -176,6 +174,19 @@ for (const file of walk(join(root, "docs"))) {
     if (!existsSync(resolved) && !existsSync(`${resolved}.md`))
       fail.push(`${relative(root, file)}: broken link ${target}`);
   }
+}
+
+for (const file of [
+  "README.md",
+  "CONTRIBUTING.md",
+  "GOVERNANCE.md",
+  "SECURITY.md",
+  "docs/engineering/README.md",
+  ".github/CODEOWNERS",
+  ".github/PULL_REQUEST_TEMPLATE.md",
+]) {
+  const text = readFileSync(join(root, file), "utf8");
+  fail.push(...publicIdentityIssues(text, file));
 }
 
 if (fail.length) {

@@ -69,13 +69,13 @@ describe("parseRoute", () => {
   it("parses user and agent scoped session paths", () => {
     expect(
       parseRoute({
-        pathname: "/misaka.mikoto/agent/session/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        pathname: "/testuser.mikoto/agent/session/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         search: "",
         hash: "",
       }),
     ).toEqual({
       page: "session",
-      userUuid: "misaka.mikoto",
+      userUuid: "testuser.mikoto",
       agentId: "agent",
       sessionId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     });
@@ -120,8 +120,8 @@ describe("sessionPath", () => {
   });
 
   it("builds scoped path for a session ID", () => {
-    expect(sessionPath("abc123", { userUuid: "misaka.mikoto", agentId: "agent" })).toBe(
-      "/misaka.mikoto/agent/session/abc123",
+    expect(sessionPath("abc123", { userUuid: "testuser.mikoto", agentId: "agent" })).toBe(
+      "/testuser.mikoto/agent/session/abc123",
     );
   });
 
@@ -137,25 +137,25 @@ describe("navigateToSession", () => {
   });
 
   it("sets the path to a scoped session route", () => {
-    navigateToSession("test-id", false, { userUuid: "misaka.mikoto", agentId: "agent" });
-    expect(window.location.pathname).toBe("/misaka.mikoto/agent/session/test-id");
+    navigateToSession("test-id", false, { userUuid: "testuser.mikoto", agentId: "agent" });
+    expect(window.location.pathname).toBe("/testuser.mikoto/agent/session/test-id");
     expect(window.location.hash).toBe("");
   });
 
   it("uses replaceState when replace=true", () => {
     const spy = vi.spyOn(history, "replaceState");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
-    navigateToSession("test-id", true, { userUuid: "misaka.mikoto", agentId: "agent" });
-    expect(spy).toHaveBeenCalledWith(null, "", "/misaka.mikoto/agent/session/test-id");
+    navigateToSession("test-id", true, { userUuid: "testuser.mikoto", agentId: "agent" });
+    expect(spy).toHaveBeenCalledWith(null, "", "/testuser.mikoto/agent/session/test-id");
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(PopStateEvent));
     spy.mockRestore();
     dispatchSpy.mockRestore();
   });
 
   it("does not dispatch a route change when the target session path is already current", () => {
-    history.replaceState(null, "", "/misaka.mikoto/agent/session/test-id");
+    history.replaceState(null, "", "/testuser.mikoto/agent/session/test-id");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
-    navigateToSession("test-id", true, { userUuid: "misaka.mikoto", agentId: "agent" });
+    navigateToSession("test-id", true, { userUuid: "testuser.mikoto", agentId: "agent" });
     expect(dispatchSpy).not.toHaveBeenCalled();
     dispatchSpy.mockRestore();
   });
@@ -163,13 +163,13 @@ describe("navigateToSession", () => {
 
 describe("navigateHome", () => {
   beforeEach(() => {
-    setRouteContext({ userUuid: "misaka.mikoto", agentId: "agent" });
-    history.replaceState(null, "", "/misaka.mikoto/agent/session/test");
+    setRouteContext({ userUuid: "testuser.mikoto", agentId: "agent" });
+    history.replaceState(null, "", "/testuser.mikoto/agent/session/test");
   });
 
   it("navigates to the scoped user/agent home path", () => {
     navigateHome();
-    expect(window.location.pathname).toBe("/misaka.mikoto/agent");
+    expect(window.location.pathname).toBe("/testuser.mikoto/agent");
     expect(window.location.hash).toBe("");
   });
 
@@ -177,14 +177,14 @@ describe("navigateHome", () => {
     const spy = vi.spyOn(history, "replaceState");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
     navigateHome(true);
-    expect(spy).toHaveBeenCalledWith(null, "", "/misaka.mikoto/agent");
+    expect(spy).toHaveBeenCalledWith(null, "", "/testuser.mikoto/agent");
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(PopStateEvent));
     spy.mockRestore();
     dispatchSpy.mockRestore();
   });
 
   it("does not dispatch a route change when the target home path is already current", () => {
-    history.replaceState(null, "", "/misaka.mikoto/agent");
+    history.replaceState(null, "", "/testuser.mikoto/agent");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
     navigateHome(true);
     expect(dispatchSpy).not.toHaveBeenCalled();
