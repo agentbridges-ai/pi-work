@@ -23,7 +23,7 @@ Dependabot 的常规依赖、锁文件和 SHA 固定 Actions 更新是可重复�
 
 Leader 不能同时作为该 head 的实际最后 push 者来满足治理的
 current-head 约束；`governance-review` 从 trusted `pull_request_target` 的
-`synchronize` sender 或匹配当前 head/分支的仓库 `PushEvent` actor 读取该身份，PR `opened` opener 不被接受；在这种手工重放场景失败并提示重新生成 head，
+`synchronize` sender 或匹配当前 head/分支的 head 仓库 `PushEvent` actor 读取该身份，PR `opened` opener 不被接受；在这种手工重放场景失败并提示重新生成 head，
 绝不伪造 Review、修改 Ruleset 或使用 bypass。native `require_last_push_approval` 关闭
 以支持 Leader self-or-exempt；Verified 签名、CODEOWNERS ownership metadata、全部
 required checks、Dependency Review、安全扫描与发布门禁继续由平台强制。

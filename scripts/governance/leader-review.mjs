@@ -89,9 +89,18 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
   }
 }
 
-async function lastPusherMetadata(repository, headSha, headRef) {
+async function lastPusherMetadata(headRepository, headSha, headRef) {
   if (!/^[0-9a-f]{40}$/.test(headSha)) {
     throw new Error("head SHA is not a canonical 40-character Git object id");
+  }
+  if (
+    typeof headRepository !== "string" ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(headRepository)
+  ) {
+    throw new Error("head repository identity is unavailable or invalid");
+  }
+  if (typeof headRef !== "string" || headRef.length === 0) {
+    throw new Error("head branch identity is unavailable");
   }
   if (
     process.env.GITHUB_EVENT_NAME === "pull_request_target" &&
@@ -101,8 +110,12 @@ async function lastPusherMetadata(repository, headSha, headRef) {
   ) {
     return { login: event.sender.login, source: "synchronize-event" };
   }
+  const [headOwner, headRepositoryName] = headRepository.split("/", 2);
+  const eventsPathRepository = `${encodeURIComponent(headOwner)}/${encodeURIComponent(headRepositoryName)}`;
   for (let page = 1; page <= 10; page += 1) {
-    const events = await restJson(`/repos/${repository}/events?per_page=100&page=${page}`);
+    const events = await restJson(
+      `/repos/${eventsPathRepository}/events?per_page=100&page=${page}`,
+    );
     if (!Array.isArray(events)) throw new Error("REST repository events response is invalid");
     const lastPusher = selectLastPusherEvent(events, headSha, headRef);
     if (lastPusher) return { ...lastPusher, source: "repository-push-event" };
@@ -150,6 +163,7 @@ let reviewsCursor = null;
 let filesDone = false;
 let reviewsDone = false;
 let headSha = null;
+let headRepository = null;
 while (!filesDone || !reviewsDone) {
   const data = await graphql(
     `
@@ -165,6 +179,9 @@ while (!filesDone || !reviewsDone) {
         repository(owner: $owner, name: $name) {
           pullRequest(number: $number) {
             headRefOid
+            headRepository {
+              nameWithOwner
+            }
             files(first: 100, after: $filesCursor) @include(if: $includeFiles) {
               nodes {
                 path
@@ -205,6 +222,10 @@ while (!filesDone || !reviewsDone) {
     },
   );
   headSha = data.repository.pullRequest.headRefOid;
+  headRepository =
+    data.repository.pullRequest.headRepository?.nameWithOwner ||
+    pullRequest.head?.repo?.full_name ||
+    null;
   if (!filesDone) {
     const filesConnection = data.repository.pullRequest.files;
     files.push(...(filesConnection?.nodes || []));
@@ -233,7 +254,7 @@ let lastPusher = null;
 let lastPusherError = null;
 if (pullRequest.user.login !== policy.leader) {
   try {
-    lastPusher = await lastPusherMetadata(repository, headSha, pullRequest.head.ref);
+    lastPusher = await lastPusherMetadata(headRepository, headSha, pullRequest.head.ref);
   } catch (error) {
     lastPusherError = error instanceof Error ? error.message : String(error);
   }
