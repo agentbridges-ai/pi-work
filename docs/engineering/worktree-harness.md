@@ -28,6 +28,17 @@ policy 自动继承，而不是依赖某一次对话中的口头约定。每个�
 harness 只校验 manifest 中的本地 milestone 与 GitHub milestone 绑定格式，不调用
 GitHub 写 API。
 
+GitHub 仓库页面的治理入口也纳入 policy：Code、Issues、Discussions、Pull requests、
+Actions、Security and quality、Insights 和 Settings 都要有明确 readback；PR manifest
+必须补齐 assignee、`piwork-core`/`piwork-leads` reviewer 路由、至少一个稳定 label、
+milestone 和 Development 链接（tracker issue、依赖和 stacked-pr 关系）。Issues
+必须有 labels/milestones/issue forms，Discussions 必须有 categories、置顶治理入口和
+moderation owner，PR 必须有 template、required checks，Actions 必须有
+`merge_group`/只读默认权限/SHA pinning，Security and quality 必须覆盖 PVR、Secret
+Scanning、Dependabot、CodeQL 和 Dependency Review。Projects 仅作为可选视图，Wiki
+不能成为第二治理事实源；Insights 只读，Settings 只允许 root-coordinator 的显式
+管理员 readback/apply。harness 不直接写 GitHub，缺字段会在本地 plan/claim 失败。
+
 ### Tracker、依赖与阻塞约定
 
 本 harness 采用 GitHub Milestone、Issue/Tracker 和 Projects 中可复用的协作语义，
@@ -51,6 +62,29 @@ date、milestone 的 entry/exit/evidence/humanReview/blocked escalation，以及
 外部授权 → 主线程收口”。并发只在 scope 不相交时启用；相同文件和高风险路径
 会自动阻断，不能靠口头约定消除冲突。最终审计使用运行时实际可用的模型和
 reasoning 配置，并保留 human-in-the-loop；模型精度不改变审批要求。
+
+### CI/CD 主线程编排契约
+
+主线程是 CI/CD 编排器和唯一用户入口：先按变更范围与最高风险选择检查，再做
+快失败，最后才跑重验证。`.governance/worktree-policy.json` 的 Gate 0–3 是不可
+删除的分层门禁：
+
+1. **Gate 0 — scope-and-risk**：manifest、`worktree-check`、风险分类和变更文件
+   解析；本地失败立即停止。
+2. **Gate 1 — local-fast-fail**：format、lint、typecheck、targeted tests 和
+   security fixtures；能在本地仿真的错误不得留到远端。
+3. **Gate 2 — remote-required-checks**：治理、质量、依赖审查、verify 和领域
+   canary；按照当前提交的风险动态排列，但不减少检查。
+4. **Gate 3 — combined-closeout**：Stacked PR 依赖顺序、Merge Queue 的
+   `merge_group` 组合验证、release evidence 和 human review。
+
+每个 required status 都必须产生确定结果：无关变更为受控 `deterministic-no-op`，
+相关变更运行真实检查；禁止缺失状态、伪造状态和静默 bypass。旧提交只在同一
+scope 的新提交出现时取消，不能取消 required evidence。Stacked PR 只表达依赖
+顺序（`mise → feature → release`），每一层独立 review/check；Merge Queue 只做
+最终组合验证，不替代审查。执行线程并行备料、回传 milestone/evidence，不能合并
+或关闭 milestone；主线程在里程碑处汇总，最后由运行时可确认的精确模型以 ultra
+推理配置审计，并保留人工收汁。
 
 ## 命令与状态
 

@@ -9,6 +9,7 @@ import { afterEach, describe, it } from "node:test";
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const harnessPath = resolve(testDirectory, "worktree-harness.mjs");
 const policyPath = resolve(testDirectory, "../../.governance/worktree-policy.json");
+const policyFixture = JSON.parse(readFileSync(policyPath, "utf8"));
 const fixtures = new Set();
 
 function git(root, args, { allowFailure = false } = {}) {
@@ -119,6 +120,55 @@ afterEach(() => {
 });
 
 describe("isolated worktree harness", () => {
+  it("requires risk-first Gate 0-3 orchestration and deterministic required statuses", () => {
+    const orchestration = policyFixture.ciOrchestration;
+    assert.equal(orchestration.riskFirst, true);
+    assert.equal(orchestration.localPreflightRequired, true);
+    assert.deepEqual(
+      orchestration.gates.map((gate) => gate.id),
+      ["gate-0", "gate-1", "gate-2", "gate-3"],
+    );
+    assert.equal(orchestration.requiredStatuses.alwaysEmit, true);
+    assert.equal(orchestration.requiredStatuses.unrelatedChange, "deterministic-no-op");
+    assert.equal(orchestration.requiredStatuses.relatedChange, "real-check");
+    assert.equal(orchestration.dynamicOrdering.gatesCannotBeRemoved, true);
+    assert.equal(orchestration.supersededCommitCancellation.enabled, true);
+    assert.deepEqual(orchestration.stackedPr.sequence, ["mise", "feature", "release"]);
+    assert.equal(orchestration.mergeQueue.purpose, "combined-validation-only");
+    const surface = policyFixture.githubRepositorySurface;
+    assert.equal(surface.harnessRemoteWrites, false);
+    assert.equal(surface.tabs.discussions.required, true);
+    assert.deepEqual(surface.tabs.discussions.requiredMetadata, [
+      "categories",
+      "pinned-governance-entry",
+      "moderation-owner",
+    ]);
+    assert.equal(surface.tabs.projects.mode, "optional-view-only");
+    assert.equal(surface.tabs.settings.mode, "admin-only-readback");
+  });
+
+  it("rejects a policy that disables dynamic ordering or required no-op statuses", () => {
+    const value = fixture();
+    const policyFile = join(value.root, ".governance/worktree-policy.json");
+    const policy = JSON.parse(readFileSync(policyFile, "utf8"));
+    policy.ciOrchestration.dynamicOrdering.enabled = false;
+    policy.ciOrchestration.requiredStatuses.unrelatedChange = "skip";
+    writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
+    const rejected = invoke(value, "check");
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.output, /risk-first Gate 0-3 orchestration/);
+  });
+
+  it("rejects a PR plan with no required label metadata", () => {
+    const value = fixture();
+    const missingLabel = invoke(value, "plan", {
+      ...claimArgs(value, "missing-pr-metadata", "src/a.ts"),
+      label: [],
+    });
+    assert.notEqual(missingLabel.status, 0);
+    assert.match(missingLabel.output, /labels/);
+  });
+
   it("keeps plan/claim preview read-only and refuses the root checkout", () => {
     const value = fixture();
     const rootBefore = git(value.root, ["status", "--porcelain"]);
@@ -137,6 +187,17 @@ describe("isolated worktree harness", () => {
     );
     assert.equal(preview.json.candidate.coordination.trackerIssue.number, 50);
     assert.equal(preview.json.candidate.coordination.dependencies.length, 0);
+    assert.equal(preview.json.candidate.coordination.pullRequest.assignee, "fixture-owner");
+    assert.deepEqual(preview.json.candidate.coordination.pullRequest.reviewerTeams, [
+      "piwork-core",
+      "piwork-leads",
+    ]);
+    assert.deepEqual(preview.json.candidate.coordination.pullRequest.labels, ["governance"]);
+    assert.deepEqual(
+      preview.json.candidate.coordination.pullRequest.development.links.map((link) => link.type),
+      ["tracker-issue", "depends-on", "stacked-pr"],
+    );
+    assert.equal(preview.json.candidate.coordination.pullRequest.project, null);
     assert.equal(
       preview.json.candidate.coordination.goal,
       "Prove isolated worktree governance locally",

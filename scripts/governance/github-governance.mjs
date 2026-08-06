@@ -160,6 +160,10 @@ function readbackDrift() {
   }
   if (!repositorySettings.delete_branch_on_merge)
     drift.push("merged branches are not configured for automatic deletion");
+  if (repositorySettings.has_issues !== true) drift.push("Issues tab is not enabled");
+  if (repositorySettings.has_discussions !== true) drift.push("Discussions tab is not enabled");
+  if (repositorySettings.has_projects !== true) drift.push("Projects tab is not enabled");
+  if (repositorySettings.has_wiki !== true) drift.push("Wiki tab is not enabled");
   const security = repositorySettings.security_and_analysis || {};
   for (const [key, label] of [
     ["secret_scanning", "Secret Scanning"],
@@ -340,6 +344,10 @@ try {
 
   applyOrReport("enable squash-only repository settings", () =>
     gh("PATCH", `/repos/${repository}`, {
+      has_issues: true,
+      has_discussions: true,
+      has_projects: true,
+      has_wiki: true,
       allow_squash_merge: true,
       allow_merge_commit: false,
       allow_rebase_merge: false,

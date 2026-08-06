@@ -191,6 +191,64 @@ export function validatePolicy(policy) {
       fail("GitHub milestone tracking entries must contain number, stableId, and title");
     }
   }
+  const repositorySurface = policy.githubRepositorySurface;
+  const requiredTabs = [
+    "code",
+    "issues",
+    "discussions",
+    "pullRequests",
+    "actions",
+    "securityAndQuality",
+    "insights",
+    "settings",
+  ];
+  if (
+    repositorySurface?.readback !== "github-governance-check" ||
+    repositorySurface.writeAuthority !== "root-coordinator-admin-only" ||
+    repositorySurface.harnessRemoteWrites !== false ||
+    requiredTabs.some((tab) => repositorySurface.tabs?.[tab]?.required !== true) ||
+    repositorySurface.tabs?.pullRequests?.mergeStrategy !== "squash-only" ||
+    repositorySurface.tabs?.agents?.mode !== "observational" ||
+    repositorySurface.tabs?.projects?.mode !== "optional-view-only" ||
+    repositorySurface.tabs?.projects?.sourceOfTruth !== "github-milestone-and-tracker-issue" ||
+    repositorySurface.tabs?.wiki?.mode !== "no-duplicate-governance-source" ||
+    repositorySurface.tabs?.insights?.mode !== "read-only" ||
+    repositorySurface.tabs?.settings?.mode !== "admin-only-readback"
+  ) {
+    fail(
+      "worktree policy must declare the GitHub Code/Issues/PR/Actions/Security/Insights/Settings surfaces and keep optional tabs view-only",
+    );
+  }
+  const requiredSurfaceMetadata = {
+    issues: ["labels", "milestone", "tracker-issue", "issue-forms"],
+    discussions: ["categories", "pinned-governance-entry", "moderation-owner"],
+    pullRequests: [
+      "template",
+      "assignee",
+      "reviewers",
+      "labels",
+      "milestone",
+      "development-links",
+      "required-checks",
+    ],
+    actions: ["required-workflows", "merge_group", "read-only-default-permissions", "sha-pinning"],
+    securityAndQuality: [
+      "private-vulnerability-reporting",
+      "secret-scanning",
+      "dependabot",
+      "codeql",
+      "dependency-review",
+    ],
+  };
+  if (
+    Object.entries(requiredSurfaceMetadata).some(
+      ([tab, metadata]) =>
+        JSON.stringify(repositorySurface.tabs?.[tab]?.requiredMetadata) !==
+        JSON.stringify(metadata),
+    )
+  ) {
+    fail("GitHub repository tabs must retain their required metadata controls");
+  }
   if (
     policy.milestoneOps?.sourceOfTruth !== "github-milestone-and-tracker-issue" ||
     policy.milestoneOps?.requiredTrackerIssue !== true ||
@@ -210,6 +268,31 @@ export function validatePolicy(policy) {
   ) {
     fail(
       "worktree policy must make GitHub milestone/tracker operations, dependencies, due dates, blocked updates, and root review explicit",
+    );
+  }
+  const pullRequestMetadata = policy.pullRequestMetadata;
+  if (
+    pullRequestMetadata?.required?.assignee !== true ||
+    pullRequestMetadata.required.reviewerTeams !== true ||
+    pullRequestMetadata.required.labels !== true ||
+    pullRequestMetadata.required.milestone !== true ||
+    pullRequestMetadata.required.developmentLink !== true ||
+    pullRequestMetadata.assignee?.required !== true ||
+    pullRequestMetadata.assignee.defaultFrom !== "owner" ||
+    JSON.stringify(pullRequestMetadata.reviewerTeams) !==
+      JSON.stringify(["piwork-core", "piwork-leads"]) ||
+    pullRequestMetadata.labels?.minimum !== 1 ||
+    pullRequestMetadata.labels.maximum !== policy.milestoneOps.maxLabels ||
+    pullRequestMetadata.labels.source !== "milestoneOps.allowedLabels" ||
+    pullRequestMetadata.project?.required !== false ||
+    pullRequestMetadata.project.mode !== "optional-view-only" ||
+    pullRequestMetadata.project.sourceOfTruth !== "github-milestone-and-tracker-issue" ||
+    pullRequestMetadata.development?.required !== true ||
+    JSON.stringify(pullRequestMetadata.development.linkTypes) !==
+      JSON.stringify(["tracker-issue", "depends-on", "stacked-pr"])
+  ) {
+    fail(
+      "worktree policy must require PR assignee, piwork-core/piwork-leads reviewers, labels, milestone, and development links while keeping Projects view-only",
     );
   }
   if (!Array.isArray(policy.scope?.highRiskPaths))
@@ -238,6 +321,60 @@ export function validatePolicy(policy) {
   ) {
     fail(
       "worktree policy must enforce root coordination, milestone evidence, handoff, and human review",
+    );
+  }
+  const ciOrchestration = policy.ciOrchestration;
+  const gateIds = ["gate-0", "gate-1", "gate-2", "gate-3"];
+  if (
+    ciOrchestration?.owner !== "root-coordinator" ||
+    ciOrchestration.riskFirst !== true ||
+    ciOrchestration.localPreflightRequired !== true ||
+    ciOrchestration.dynamicOrdering?.enabled !== true ||
+    ciOrchestration.dynamicOrdering.selection !== "highest-risk-first" ||
+    ciOrchestration.dynamicOrdering.failFast !== true ||
+    ciOrchestration.dynamicOrdering.gatesCannotBeRemoved !== true ||
+    ciOrchestration.requiredStatuses?.alwaysEmit !== true ||
+    ciOrchestration.requiredStatuses.unrelatedChange !== "deterministic-no-op" ||
+    ciOrchestration.requiredStatuses.relatedChange !== "real-check" ||
+    ciOrchestration.requiredStatuses.noSilentBypass !== true ||
+    !Array.isArray(ciOrchestration.gates) ||
+    ciOrchestration.gates.length !== gateIds.length ||
+    ciOrchestration.gates.some(
+      (gate, index) =>
+        !gate ||
+        gate.id !== gateIds[index] ||
+        typeof gate.name !== "string" ||
+        gate.local !== index < 2 ||
+        gate.failFast !== true ||
+        !Array.isArray(gate.checks) ||
+        gate.checks.length === 0,
+    )
+  ) {
+    fail(
+      "worktree policy must enforce risk-first Gate 0-3 orchestration, local preflight, deterministic no-op statuses, and fail-fast checks",
+    );
+  }
+  if (
+    ciOrchestration.supersededCommitCancellation?.enabled !== true ||
+    ciOrchestration.supersededCommitCancellation.sameScopeOnly !== true ||
+    ciOrchestration.supersededCommitCancellation.neverCancelsRequiredEvidence !== true ||
+    ciOrchestration.stackedPr?.enabled !== true ||
+    ciOrchestration.stackedPr.order !== "dependency-order-only" ||
+    JSON.stringify(ciOrchestration.stackedPr.sequence) !==
+      JSON.stringify(["mise", "feature", "release"]) ||
+    ciOrchestration.stackedPr.eachLayerChecksIndependently !== true ||
+    ciOrchestration.stackedPr.reviewBypass !== false ||
+    ciOrchestration.mergeQueue?.enabledWhenAvailable !== true ||
+    ciOrchestration.mergeQueue.purpose !== "combined-validation-only" ||
+    ciOrchestration.mergeQueue.requiredMergeGroupEvent !== true ||
+    ciOrchestration.mergeQueue.reviewBypass !== false ||
+    ciOrchestration.finalAudit?.modelSource !== "runtime" ||
+    ciOrchestration.finalAudit.minimumReasoning !== "ultra" ||
+    ciOrchestration.finalAudit.humanInTheLoop !== true ||
+    ciOrchestration.finalAudit.reviewBypass !== false
+  ) {
+    fail(
+      "worktree policy must keep superseded cancellation, stacked PR dependency order, merge-group validation, and final human audit explicit",
     );
   }
   if (!Array.isArray(policy.milestones) || !policy.milestones.length) {
@@ -493,6 +630,7 @@ function validateMetadata(entry, label = "worktree metadata", policy) {
   }
   if (
     !Array.isArray(coordination.labels) ||
+    coordination.labels.length < policy.pullRequestMetadata.labels.minimum ||
     coordination.labels.length > policy.milestoneOps.maxLabels ||
     new Set(coordination.labels).size !== coordination.labels.length ||
     coordination.labels.some(
@@ -501,6 +639,29 @@ function validateMetadata(entry, label = "worktree metadata", policy) {
     )
   ) {
     fail(`${label} must use sparse, stable governance labels`);
+  }
+  const pullRequest = coordination.pullRequest;
+  const requiredReviewerTeams = policy.pullRequestMetadata.reviewerTeams;
+  const developmentLinks = pullRequest?.development?.links;
+  if (
+    !pullRequest ||
+    typeof pullRequest.assignee !== "string" ||
+    !pullRequest.assignee.trim() ||
+    JSON.stringify(pullRequest.reviewerTeams) !== JSON.stringify(requiredReviewerTeams) ||
+    JSON.stringify(pullRequest.labels) !== JSON.stringify(coordination.labels) ||
+    JSON.stringify(pullRequest.milestone) !==
+      JSON.stringify(coordination.milestone.githubMilestone) ||
+    (pullRequest.project !== null && typeof pullRequest.project !== "string") ||
+    !pullRequest.development?.required ||
+    !Array.isArray(developmentLinks) ||
+    policy.pullRequestMetadata.development.linkTypes.some(
+      (type) =>
+        !developmentLinks.some((link) => link?.type === type && typeof link.value === "string"),
+    )
+  ) {
+    fail(
+      `${label} must include PR assignee, piwork-core/piwork-leads reviewer routing, labels, milestone, and development links`,
+    );
   }
   if (
     typeof coordination.status !== "string" ||
@@ -614,6 +775,7 @@ function metadataForCandidate(candidate, now, ttlMinutes) {
       labels: [...candidate.labels],
       scopeChangeAuthority: "root-coordinator-required",
       milestone: structuredClone(candidate.milestone),
+      pullRequest: structuredClone(candidate.pullRequest),
       evidence: [...candidate.evidence],
       handoff: {
         required: true,
@@ -1037,6 +1199,7 @@ function candidateFromOptions(repository, policy, options, now) {
     .map((value) => value.trim())
     .filter(Boolean);
   if (
+    labels.length < policy.pullRequestMetadata.labels.minimum ||
     labels.length > policy.milestoneOps.maxLabels ||
     new Set(labels).size !== labels.length ||
     labels.some((label) => !policy.milestoneOps.allowedLabels.includes(label))
@@ -1055,6 +1218,14 @@ function candidateFromOptions(repository, policy, options, now) {
   if (!branchMatchesPolicy(branch, policy)) fail(`branch violates policy: ${branch}`);
   const scopePaths = normalizedScope(options.scope);
   const githubMilestone = resolveGithubMilestone(policy, options.githubMilestone, milestone);
+  const assignee = (options.assignee || owner).trim();
+  if (!assignee) fail("claim/plan requires a non-empty PR assignee or owner");
+  const project = options.project?.trim() || null;
+  const developmentLinks = [
+    { type: "tracker-issue", value: `#${trackerIssue.number}` },
+    { type: "depends-on", value: dependencies.length ? dependencies.join(",") : "none" },
+    { type: "stacked-pr", value: options.pr || "none" },
+  ];
   const base = resolveBase(repository, policy, options);
   const worktreePath = canonicalPath(
     options.worktree
@@ -1086,6 +1257,17 @@ function candidateFromOptions(repository, policy, options, now) {
     milestone: { ...structuredClone(milestone), githubMilestone },
     evidence,
     requiredHandoffEvidence: [...policy.coordinationModel.requiredHandoffEvidence],
+    pullRequest: {
+      assignee,
+      reviewerTeams: [...policy.pullRequestMetadata.reviewerTeams],
+      labels: [...labels],
+      milestone: structuredClone(githubMilestone),
+      project,
+      development: {
+        required: true,
+        links: developmentLinks,
+      },
+    },
     now,
   };
 }
@@ -1278,6 +1460,13 @@ function checkCommand(repository, policy, statePaths) {
     lockPath: statePaths.lockPath,
     entries: state.manifest.entries.length,
     milestones: state.manifest.entries.map((entry) => entry.coordination?.milestone || null),
+    ciOrchestration: {
+      riskFirst: policy.ciOrchestration.riskFirst,
+      gates: policy.ciOrchestration.gates.map((gate) => gate.id),
+      requiredStatuses: policy.ciOrchestration.requiredStatuses,
+      stackedPr: policy.ciOrchestration.stackedPr.order,
+      mergeQueue: policy.ciOrchestration.mergeQueue.purpose,
+    },
     issues,
   };
   if (issues.length) {
@@ -1592,11 +1781,28 @@ function formatResult(result) {
     lines.push(
       `milestone: ${result.candidate.coordination.milestone.id} (${result.candidate.coordination.milestone.title})`,
     );
+    if (result.candidate.coordination.pullRequest) {
+      const pullRequest = result.candidate.coordination.pullRequest;
+      lines.push(
+        `pr: assignee=${pullRequest.assignee} reviewers=${pullRequest.reviewerTeams.join(",")} labels=${pullRequest.labels.join(",")} project=${pullRequest.project || "optional/unconfigured"}`,
+      );
+      lines.push(
+        `pr: development=${pullRequest.development.links.map((link) => `${link.type}:${link.value}`).join(",")}`,
+      );
+    }
     if (result.conflicts?.length) lines.push(`conflicts: ${result.conflicts.join("; ")}`);
   }
   if (result.entry) lines.push(`claimed: ${result.entry.branch}`);
   if (result.includedFiles) lines.push(`copied gitignored .env files: ${result.includedFiles}`);
   if (result.issues?.length) lines.push(...result.issues.map((issue) => `- ${issue}`));
+  if (result.ciOrchestration) {
+    lines.push(
+      `ci: risk-first=${result.ciOrchestration.riskFirst} gates=${result.ciOrchestration.gates.join(",")} statuses=${result.ciOrchestration.requiredStatuses.unrelatedChange}/${result.ciOrchestration.requiredStatuses.relatedChange}`,
+    );
+    lines.push(
+      `ci: stacked-pr=${result.ciOrchestration.stackedPr} merge-queue=${result.ciOrchestration.mergeQueue}`,
+    );
+  }
   if (Array.isArray(result.milestones)) {
     for (const milestone of result.milestones) {
       if (milestone)
@@ -1636,11 +1842,13 @@ export function parseCliArgs(argv) {
     "task-id",
     "thread-id",
     "owner",
+    "assignee",
     "branch",
     "worktree",
     "base",
     "base-ref",
     "pr",
+    "project",
     "milestone",
     "github-milestone",
     "tracker-issue",

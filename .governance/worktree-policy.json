@@ -40,6 +40,63 @@
       }
     ]
   },
+  "githubRepositorySurface": {
+    "readback": "github-governance-check",
+    "writeAuthority": "root-coordinator-admin-only",
+    "harnessRemoteWrites": false,
+    "tabs": {
+      "code": { "required": true, "sourceOfTruth": "repository" },
+      "issues": {
+        "required": true,
+        "requiredMetadata": ["labels", "milestone", "tracker-issue", "issue-forms"]
+      },
+      "discussions": {
+        "required": true,
+        "requiredMetadata": ["categories", "pinned-governance-entry", "moderation-owner"]
+      },
+      "pullRequests": {
+        "required": true,
+        "requiredMetadata": [
+          "template",
+          "assignee",
+          "reviewers",
+          "labels",
+          "milestone",
+          "development-links",
+          "required-checks"
+        ],
+        "mergeStrategy": "squash-only"
+      },
+      "agents": { "required": false, "mode": "observational" },
+      "actions": {
+        "required": true,
+        "requiredMetadata": [
+          "required-workflows",
+          "merge_group",
+          "read-only-default-permissions",
+          "sha-pinning"
+        ]
+      },
+      "projects": {
+        "required": false,
+        "mode": "optional-view-only",
+        "sourceOfTruth": "github-milestone-and-tracker-issue"
+      },
+      "wiki": { "required": false, "mode": "no-duplicate-governance-source" },
+      "securityAndQuality": {
+        "required": true,
+        "requiredMetadata": [
+          "private-vulnerability-reporting",
+          "secret-scanning",
+          "dependabot",
+          "codeql",
+          "dependency-review"
+        ]
+      },
+      "insights": { "required": true, "mode": "read-only" },
+      "settings": { "required": true, "mode": "admin-only-readback" }
+    }
+  },
   "milestoneOps": {
     "sourceOfTruth": "github-milestone-and-tracker-issue",
     "requiredTrackerIssue": true,
@@ -53,6 +110,34 @@
     "scopeChangeRequiresRootReview": true,
     "milestoneCloseRequiresRoot": true,
     "allowedStatuses": ["ready", "in-progress", "blocked", "handoff"]
+  },
+  "pullRequestMetadata": {
+    "required": {
+      "assignee": true,
+      "reviewerTeams": true,
+      "labels": true,
+      "milestone": true,
+      "developmentLink": true
+    },
+    "assignee": {
+      "required": true,
+      "defaultFrom": "owner"
+    },
+    "reviewerTeams": ["piwork-core", "piwork-leads"],
+    "labels": {
+      "minimum": 1,
+      "maximum": 4,
+      "source": "milestoneOps.allowedLabels"
+    },
+    "project": {
+      "required": false,
+      "mode": "optional-view-only",
+      "sourceOfTruth": "github-milestone-and-tracker-issue"
+    },
+    "development": {
+      "required": true,
+      "linkTypes": ["tracker-issue", "depends-on", "stacked-pr"]
+    }
   },
   "scope": {
     "highRiskPaths": [
@@ -98,6 +183,77 @@
     ],
     "parallelScopesMustBeDisjoint": true,
     "localSimulationPrecedesRemoteChecks": true,
+    "finalAudit": {
+      "modelSource": "runtime",
+      "minimumReasoning": "ultra",
+      "humanInTheLoop": true,
+      "reviewBypass": false
+    }
+  },
+  "ciOrchestration": {
+    "owner": "root-coordinator",
+    "riskFirst": true,
+    "localPreflightRequired": true,
+    "dynamicOrdering": {
+      "enabled": true,
+      "selection": "highest-risk-first",
+      "failFast": true,
+      "gatesCannotBeRemoved": true
+    },
+    "requiredStatuses": {
+      "alwaysEmit": true,
+      "unrelatedChange": "deterministic-no-op",
+      "relatedChange": "real-check",
+      "noSilentBypass": true
+    },
+    "gates": [
+      {
+        "id": "gate-0",
+        "name": "scope-and-risk",
+        "local": true,
+        "failFast": true,
+        "checks": ["manifest", "worktree-check", "risk-classification", "changed-files"]
+      },
+      {
+        "id": "gate-1",
+        "name": "local-fast-fail",
+        "local": true,
+        "failFast": true,
+        "checks": ["format", "lint", "typecheck", "targeted-tests", "security-fixtures"]
+      },
+      {
+        "id": "gate-2",
+        "name": "remote-required-checks",
+        "local": false,
+        "failFast": true,
+        "checks": ["governance", "quality", "dependency-review", "verify", "domain-canaries"]
+      },
+      {
+        "id": "gate-3",
+        "name": "combined-closeout",
+        "local": false,
+        "failFast": true,
+        "checks": ["stacked-dependency-order", "merge-group", "release-evidence", "human-review"]
+      }
+    ],
+    "supersededCommitCancellation": {
+      "enabled": true,
+      "sameScopeOnly": true,
+      "neverCancelsRequiredEvidence": true
+    },
+    "stackedPr": {
+      "enabled": true,
+      "order": "dependency-order-only",
+      "sequence": ["mise", "feature", "release"],
+      "eachLayerChecksIndependently": true,
+      "reviewBypass": false
+    },
+    "mergeQueue": {
+      "enabledWhenAvailable": true,
+      "purpose": "combined-validation-only",
+      "requiredMergeGroupEvent": true,
+      "reviewBypass": false
+    },
     "finalAudit": {
       "modelSource": "runtime",
       "minimumReasoning": "ultra",
