@@ -63,6 +63,9 @@ export function classifyDependabotFiles(files, policy) {
         reason: `${path} is an excluded release/security/governance workflow`,
       };
     }
+    if (Array.isArray(config.allowedPathGlobs) && !pathMatches(config.allowedPathGlobs, path)) {
+      return { eligible: false, reason: `${path} is outside the Dependabot allowed path globs` };
+    }
     const isWorkflowActionPin = pathMatches(config.workflowActionPinPaths || [], path);
     const isSupportingFixture = pathMatches(config.supportingFixturePaths || [], path);
     const isDependencyPath = pathMatches(config.dependencyPaths || [], path);

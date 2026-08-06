@@ -108,6 +108,12 @@ assert.deepEqual(policy.dependabotReview.authorLogins, ["dependabot[bot]", "app/
 assert.equal(policy.dependabotReview.leader, policy.leader);
 assert.equal(policy.dependabotReview.requiredApprovals, 1);
 assert.equal(policy.dependabotReview.workflowActionPinOnly, true);
+assert.ok(policy.dependabotReview.allowedPathGlobs.includes("**/package.json"));
+assert.ok(
+  policy.dependabotReview.allowedPathGlobs.includes("scripts/governance/dependabot-fixtures.mjs"),
+);
+assert.ok(policy.dependabotReview.excludedPathGlobs.includes("web/server/**"));
+assert.ok(policy.dependabotReview.excludedPathGlobs.includes(".github/workflows/deploy.yml"));
 assert.ok(policy.dependabotReview.workflowActionPinPaths.includes(".github/workflows/codeql.yml"));
 assert.ok(policy.dependabotReview.excludedWorkflowPaths.includes(".github/workflows/deploy.yml"));
 assert.ok(

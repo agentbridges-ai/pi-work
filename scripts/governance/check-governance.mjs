@@ -106,6 +106,9 @@ if (policy) {
     !Array.isArray(dependabot.dependencyPaths) ||
     !dependabot.dependencyPaths.includes("**/package.json") ||
     !dependabot.dependencyPaths.includes("**/bun.lock") ||
+    !Array.isArray(dependabot.allowedPathGlobs) ||
+    !dependabot.allowedPathGlobs.includes(".github/workflows/codeql.yml") ||
+    !dependabot.allowedPathGlobs.includes("scripts/governance/dependabot-fixtures.mjs") ||
     !Array.isArray(dependabot.workflowActionPinPaths) ||
     !dependabot.workflowActionPinPaths.includes(".github/workflows/codeql.yml") ||
     !Array.isArray(dependabot.excludedWorkflowPaths) ||
@@ -120,6 +123,10 @@ if (policy) {
     !["high-risk", "product", "security", "release"].every((item) =>
       dependabot.excludedPathClasses.includes(item),
     ) ||
+    !Array.isArray(dependabot.excludedPathGlobs) ||
+    !dependabot.excludedPathGlobs.includes("web/server/**") ||
+    !dependabot.excludedPathGlobs.includes("release/**") ||
+    !dependabot.excludedPathGlobs.includes(".github/workflows/deploy.yml") ||
     dependabot.requireCurrentHeadLeaderApproval !== true ||
     dependabot.nativeLastPushApprovalRequired !== true ||
     dependabot.signedCommitsRequired !== true ||
