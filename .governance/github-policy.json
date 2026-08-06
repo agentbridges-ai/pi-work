@@ -27,6 +27,7 @@
       "enforcedBy": "governance-review",
       "requireCurrentHeadReview": true,
       "leaderAuthorExempt": true,
+      "nonLeaderCannotBeHeadCommitter": true,
       "dependabotLeaderCannotBeHeadCommitter": true
     },
     "coreReviewerLogins": ["Misakago"],

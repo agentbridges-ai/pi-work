@@ -116,6 +116,7 @@ if (policy) {
     enforcement.authorAwareLastPush?.enforcedBy !== "governance-review" ||
     enforcement.authorAwareLastPush?.requireCurrentHeadReview !== true ||
     enforcement.authorAwareLastPush?.leaderAuthorExempt !== true ||
+    enforcement.authorAwareLastPush?.nonLeaderCannotBeHeadCommitter !== true ||
     enforcement.authorAwareLastPush?.dependabotLeaderCannotBeHeadCommitter !== true ||
     enforcement.unknownReviewerBehavior !== "reject" ||
     !Array.isArray(enforcement.coreReviewerLogins) ||

@@ -185,7 +185,15 @@ export function requiredApprovalsForAuthor(authorLogin, policy, authorAssociatio
   return policy.ordinaryApprovals;
 }
 
-export function approvedReviewersForHead(reviews, headSha, excludedAuthor = null) {
+export function approvedReviewersForHead(
+  reviews,
+  headSha,
+  excludedAuthor = null,
+  excludedReviewers = [],
+) {
+  const excludedLogins = new Set(
+    [excludedAuthor, ...excludedReviewers].filter((login) => typeof login === "string"),
+  );
   const latestReviews = new Map();
   for (const [index, review] of reviews.entries()) {
     const login = review.author?.login;
@@ -217,15 +225,21 @@ export function approvedReviewersForHead(reviews, headSha, excludedAuthor = null
     ...new Set(
       [...latestReviews.values()]
         .map(({ review }) => review)
-        .filter((review) => review.state === "APPROVED" && review.author.login !== excludedAuthor)
+        .filter((review) => review.state === "APPROVED" && !excludedLogins.has(review.author.login))
         .map((review) => review.author.login),
     ),
   ];
 }
 
-export function countableReviewersForHead(reviews, headSha, policy, excludedAuthor = null) {
-  return approvedReviewersForHead(reviews, headSha, excludedAuthor).filter((login) =>
-    isCountableReviewer(login, policy),
+export function countableReviewersForHead(
+  reviews,
+  headSha,
+  policy,
+  excludedAuthor = null,
+  excludedReviewers = [],
+) {
+  return approvedReviewersForHead(reviews, headSha, excludedAuthor, excludedReviewers).filter(
+    (login) => isCountableReviewer(login, policy),
   );
 }
 
@@ -237,17 +251,31 @@ export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
   );
 }
 
-export function approvalCountForHead({ reviews, headSha, authorLogin, policy }) {
-  const approvedReviewers = countableReviewersForHead(reviews, headSha, policy, authorLogin);
+export function approvalCountForHead({
+  reviews,
+  headSha,
+  authorLogin,
+  policy,
+  headCommit = null,
+}) {
+  const excludedPushers = [headCommit?.authorLogin, headCommit?.committerLogin];
+  const approvedReviewers = countableReviewersForHead(
+    reviews,
+    headSha,
+    policy,
+    authorLogin,
+    excludedPushers,
+  );
   return (
     approvedReviewers.length +
     (leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) ? 1 : 0)
   );
 }
 
-export function leaderParticipated({ authorLogin, reviews, headSha, policy }) {
+export function leaderParticipated({ authorLogin, reviews, headSha, policy, headCommit = null }) {
+  const excludedPushers = [headCommit?.authorLogin, headCommit?.committerLogin];
   return (
     authorLogin === policy.leader ||
-    approvedReviewersForHead(reviews, headSha).includes(policy.leader)
+    approvedReviewersForHead(reviews, headSha, null, excludedPushers).includes(policy.leader)
   );
 }

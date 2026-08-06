@@ -133,6 +133,7 @@ assert.equal(policy.reviewEnforcement.leaderVote.authorRule, "self-or-exempt");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.enforcedBy, "governance-review");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.requireCurrentHeadReview, true);
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, true);
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeHeadCommitter, true);
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
 assert.equal(policy.reviewEnforcement.reviewerAllowlist.minimumIdentitiesForNonLeaderCore, 2);
@@ -264,6 +265,19 @@ assert.equal(
   "an author approval cannot satisfy the non-Leader Core rule",
 );
 assert.equal(
+  approvalCountForHead({
+    reviews: [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } },
+    ],
+    headSha: "head",
+    authorLogin: "community-contributor",
+    policy: fixturePolicy,
+    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+  }),
+  0,
+  "a Leader who pushed a non-Leader head cannot self-count that approval",
+);
+assert.equal(
   leaderParticipated({ authorLogin: policy.leader, reviews: [], headSha: "head", policy }),
   true,
 );
@@ -275,6 +289,17 @@ assert.equal(
     policy,
   }),
   true,
+);
+assert.equal(
+  leaderParticipated({
+    authorLogin: "another-core-dev",
+    reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } }],
+    headSha: "head",
+    policy,
+    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+  }),
+  false,
+  "Leader participation cannot be self-counted after pushing a non-Leader head",
 );
 assert.equal(
   leaderParticipated({

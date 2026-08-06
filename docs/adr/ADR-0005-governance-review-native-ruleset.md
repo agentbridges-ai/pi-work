@@ -30,7 +30,7 @@ Leader 作者 0、非 Leader Core 2、社区 1 和 Dependabot 低风险 1（必�
 CODEOWNERS 保留为 ownership metadata 和评审路由提示，不作为 native merge gate。Ruleset
 继续强制签名提交、线性历史、线程解决、required checks、删除/force-push 保护；native
 `require_last_push_approval` 关闭，由 `governance-review` 对需要审批的作者执行
-current-head 约束，从而允许 Leader self-or-exempt。每个 required status 绑定 GitHub Actions
+current-head 和 last-pusher 排除约束，从而允许 Leader self-or-exempt。每个 required status 绑定 GitHub Actions
 integration `15368`，避免任意写权限凭据伪造治理状态。`governance-review` 缺失、allowlist
 漂移、未知 reviewer 或过期 head 均失败。
 `piwork-leads` 仍只能使用已登记的 PR-only bypass，不能静默直推或跳过 required status。

@@ -114,9 +114,14 @@ async function headCommitMetadata(repository, headSha) {
     { owner, name, oid: headSha },
   );
   const commit = data.repository?.object;
+  const authorLogin = commit?.author?.user?.login || null;
+  const committerLogin = commit?.committer?.user?.login || null;
+  if (!authorLogin && !committerLogin) {
+    throw new Error("head commit has no verifiable author or committer login");
+  }
   return {
-    authorLogin: commit?.author?.user?.login || null,
-    committerLogin: commit?.committer?.user?.login || null,
+    authorLogin,
+    committerLogin,
   };
 }
 
@@ -240,7 +245,7 @@ const dependabotScope = dependabotAuthor
   : { eligible: false, reason: "PR author is not Dependabot" };
 let headCommit = null;
 let headCommitError = null;
-if (dependabotAuthor && dependabotScope.eligible) {
+if (pullRequest.user.login !== policy.leader) {
   try {
     headCommit = await headCommitMetadata(repository, headSha);
   } catch (error) {
@@ -266,6 +271,7 @@ const approvalCount = approvalCountForHead({
   headSha,
   authorLogin: pullRequest.user.login,
   policy,
+  headCommit,
 });
 const allowlistedReviewers = coreReviewerLogins(policy);
 const reviewerCapacity =
@@ -277,13 +283,17 @@ const reviewerCapacity =
     : 0);
 const allowlistUnsatisfiable =
   coreAuthor && pullRequest.user.login !== policy.leader && reviewerCapacity < requiredApprovals;
-const approvalsSatisfied = !allowlistUnsatisfiable && approvalCount >= requiredApprovals;
-const leaderParticipatedForHead = leaderParticipated({
-  authorLogin: pullRequest.user.login,
-  reviews,
-  headSha,
-  policy,
-});
+const approvalsSatisfied =
+  !allowlistUnsatisfiable && !headCommitError && approvalCount >= requiredApprovals;
+const leaderParticipatedForHead =
+  !headCommitError &&
+  leaderParticipated({
+    authorLogin: pullRequest.user.login,
+    reviews,
+    headSha,
+    policy,
+    headCommit,
+  });
 const dependabotApproval = dependabotScope.eligible
   ? dependabotApprovalForHead({ reviews, headSha, policy, headCommit })
   : null;
