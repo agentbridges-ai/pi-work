@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { findMutableExternalActionUses } from "../verify-github-actions-pinning.mjs";
@@ -8,6 +9,12 @@ import { findMutableExternalActionUses } from "../verify-github-actions-pinning.
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const policy = JSON.parse(readFileSync(join(root, ".governance/github-policy.json"), "utf8"));
 const controls = JSON.parse(readFileSync(join(root, ".governance/controls.json"), "utf8"));
+const trackedOutputs = spawnSync("git", ["ls-files", "--", "outputs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+assert.equal(trackedOutputs.status, 0);
+assert.equal(trackedOutputs.stdout.trim(), "", "generated outputs must stay out of Git history");
 
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;

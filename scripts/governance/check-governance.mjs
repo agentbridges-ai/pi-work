@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, relative, resolve } from "node:path";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const fail = [];
+
+const trackedPrivateArtifacts = spawnSync("git", ["ls-files", "--", "outputs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (trackedPrivateArtifacts.status !== 0) {
+  fail.push("git: unable to inspect tracked private artifacts");
+} else if (trackedPrivateArtifacts.stdout.trim()) {
+  fail.push("outputs/: generated private artifacts must not be tracked");
+}
 
 function readJson(file) {
   try {

@@ -49,6 +49,13 @@ The worktree harness keeps concurrent tasks in separate directories, rejects
 the root checkout, detects scope overlap, and retains dirty or unpushed work.
 It is a development aid, not a product feature and not a review bypass.
 
+The coordinator runs checks in four fixed gates: local scope and risk, local
+fast-fail checks, remote required checks, and combined closeout. The order may
+move a higher-risk check earlier, but no gate or required status may be removed.
+Unrelated jobs return a deterministic no-op. Stacked pull requests express
+dependency order, Merge Queue validates a combined commit when enabled, and
+milestones provide the human review boundary.
+
 ## Decisions and exceptions
 
 Create an ADR for an accepted architectural decision and an RFC for a change

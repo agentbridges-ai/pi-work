@@ -244,6 +244,53 @@ export function validatePolicy(policy) {
       "worktree policy must enforce root coordination, milestone evidence, handoff, and human review",
     );
   }
+  const ciOrchestration = policy.ciOrchestration;
+  const gateIds = ["gate-0", "gate-1", "gate-2", "gate-3"];
+  if (
+    ciOrchestration?.riskFirst !== true ||
+    ciOrchestration.localPreflightRequired !== true ||
+    ciOrchestration.dynamicOrdering?.enabled !== true ||
+    ciOrchestration.dynamicOrdering.selection !== "highest-risk-first" ||
+    ciOrchestration.dynamicOrdering.failFast !== true ||
+    ciOrchestration.dynamicOrdering.gatesCannotBeRemoved !== true ||
+    ciOrchestration.requiredStatuses?.alwaysEmit !== true ||
+    ciOrchestration.requiredStatuses.unrelatedChange !== "deterministic-no-op" ||
+    ciOrchestration.requiredStatuses.relatedChange !== "real-check" ||
+    ciOrchestration.requiredStatuses.noSilentBypass !== true ||
+    !Array.isArray(ciOrchestration.gates) ||
+    ciOrchestration.gates.length !== gateIds.length ||
+    ciOrchestration.gates.some(
+      (gate, index) =>
+        !gate ||
+        gate.id !== gateIds[index] ||
+        typeof gate.name !== "string" ||
+        gate.local !== index < 2 ||
+        gate.failFast !== true ||
+        !Array.isArray(gate.checks) ||
+        gate.checks.length === 0,
+    ) ||
+    ciOrchestration.supersededCommitCancellation?.enabled !== true ||
+    ciOrchestration.supersededCommitCancellation.sameScopeOnly !== true ||
+    ciOrchestration.supersededCommitCancellation.neverCancelsRequiredEvidence !== true ||
+    ciOrchestration.stackedPr?.enabled !== true ||
+    ciOrchestration.stackedPr.order !== "dependency-order-only" ||
+    JSON.stringify(ciOrchestration.stackedPr.sequence) !==
+      JSON.stringify(["mise", "feature", "release"]) ||
+    ciOrchestration.stackedPr.eachLayerChecksIndependently !== true ||
+    ciOrchestration.stackedPr.reviewBypass !== false ||
+    ciOrchestration.mergeQueue?.enabledWhenAvailable !== true ||
+    ciOrchestration.mergeQueue.purpose !== "combined-validation-only" ||
+    ciOrchestration.mergeQueue.requiredMergeGroupEvent !== true ||
+    ciOrchestration.mergeQueue.reviewBypass !== false ||
+    ciOrchestration.finalAudit?.modelSource !== "runtime" ||
+    ciOrchestration.finalAudit.minimumReasoning !== "ultra" ||
+    ciOrchestration.finalAudit.humanInTheLoop !== true ||
+    ciOrchestration.finalAudit.reviewBypass !== false
+  ) {
+    fail(
+      "worktree policy must enforce risk-first Gate 0-3 orchestration, deterministic required statuses, and final human audit",
+    );
+  }
   if (!Array.isArray(policy.milestones) || !policy.milestones.length) {
     fail("worktree policy milestones are required");
   }

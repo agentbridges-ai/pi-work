@@ -9,6 +9,7 @@ import { afterEach, describe, it } from "node:test";
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const harnessPath = resolve(testDirectory, "worktree-harness.mjs");
 const policyPath = resolve(testDirectory, "../../.governance/worktree-policy.json");
+const policyFixture = JSON.parse(readFileSync(policyPath, "utf8"));
 const fixtures = new Set();
 
 function git(root, args, { allowFailure = false } = {}) {
@@ -119,6 +120,36 @@ afterEach(() => {
 });
 
 describe("isolated worktree harness", () => {
+  it("enforces risk-first gates and deterministic required statuses", () => {
+    const orchestration = policyFixture.ciOrchestration;
+    assert.equal(orchestration.riskFirst, true);
+    assert.equal(orchestration.localPreflightRequired, true);
+    assert.deepEqual(
+      orchestration.gates.map((gate) => gate.id),
+      ["gate-0", "gate-1", "gate-2", "gate-3"],
+    );
+    assert.equal(orchestration.dynamicOrdering.selection, "highest-risk-first");
+    assert.equal(orchestration.requiredStatuses.alwaysEmit, true);
+    assert.equal(orchestration.requiredStatuses.unrelatedChange, "deterministic-no-op");
+    assert.equal(orchestration.requiredStatuses.relatedChange, "real-check");
+    assert.equal(orchestration.supersededCommitCancellation.neverCancelsRequiredEvidence, true);
+    assert.deepEqual(orchestration.stackedPr.sequence, ["mise", "feature", "release"]);
+    assert.equal(orchestration.mergeQueue.purpose, "combined-validation-only");
+    assert.equal(orchestration.finalAudit.humanInTheLoop, true);
+  });
+
+  it("rejects a policy that disables risk-first ordering or no-op statuses", () => {
+    const value = fixture();
+    const policyFile = join(value.root, ".governance/worktree-policy.json");
+    const policy = JSON.parse(readFileSync(policyFile, "utf8"));
+    policy.ciOrchestration.dynamicOrdering.enabled = false;
+    policy.ciOrchestration.requiredStatuses.unrelatedChange = "skip";
+    writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
+    const rejected = invoke(value, "check");
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.output, /risk-first Gate 0-3 orchestration/);
+  });
+
   it("keeps plan/claim preview read-only and refuses the root checkout", () => {
     const value = fixture();
     const rootBefore = git(value.root, ["status", "--porcelain"]);
