@@ -19,6 +19,7 @@ import {
   leaderReviewMode,
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
+  selectLastPusherRun,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -114,6 +115,11 @@ const leaderReviewWorkflow = readFileSync(
 );
 assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
 assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
+assert.match(
+  leaderReviewWorkflow,
+  /^run-name:\s*governance-review:\$\{\{ github\.event_name \}\}:\$\{\{ github\.event\.action \|\| 'none' \}\}:\$\{\{ github\.actor \}\}$/m,
+);
+assert.match(leaderReviewWorkflow, /^\s*actions:\s*read\s*$/m);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
@@ -133,7 +139,20 @@ assert.equal(policy.reviewEnforcement.leaderVote.authorRule, "self-or-exempt");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.enforcedBy, "governance-review");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.requireCurrentHeadReview, true);
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, true);
-assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeHeadCommitter, true);
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeLastPusher, true);
+assert.equal(
+  policy.reviewEnforcement.authorAwareLastPush.lastPusherIdentitySource,
+  "trusted-pull-request-target-workflow-run-actor",
+);
+assert.equal(
+  policy.reviewEnforcement.authorAwareLastPush.lastPusherRunNamePrefix,
+  "governance-review:pull_request_target:",
+);
+assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.lastPusherActions, [
+  "opened",
+  "synchronize",
+]);
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.lastPusherFailClosed, true);
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
 assert.equal(policy.reviewEnforcement.reviewerAllowlist.minimumIdentitiesForNonLeaderCore, 2);
@@ -173,6 +192,65 @@ for (const excludedClass of ["high-risk", "product", "security", "release"]) {
 }
 assert.equal(leaderReviewMode(policy), "self-or-exempt");
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 0);
+assert.deepEqual(
+  selectLastPusherRun(
+    [
+      {
+        id: 10,
+        event: "pull_request_target",
+        head_sha: "head",
+        run_attempt: 1,
+        display_title: "governance-review:pull_request_target:opened:Dependabot[bot]",
+        actor: { login: "Dependabot[bot]" },
+        pull_requests: [{ number: 67 }],
+        created_at: "2026-08-06T00:00:00Z",
+      },
+      {
+        id: 11,
+        event: "pull_request_target",
+        head_sha: "head",
+        run_attempt: 1,
+        display_title: "governance-review:pull_request_target:synchronize:community-dev",
+        actor: { login: "community-dev" },
+        pull_requests: [{ number: 67 }],
+        created_at: "2026-08-06T00:01:00Z",
+      },
+      {
+        id: 12,
+        event: "pull_request_target",
+        head_sha: "head",
+        run_attempt: 1,
+        display_title: "governance-review:pull_request_target:ready_for_review:Misakago",
+        actor: { login: policy.leader },
+        pull_requests: [{ number: 67 }],
+        created_at: "2026-08-06T00:02:00Z",
+      },
+    ],
+    "head",
+    67,
+  ),
+  { login: "community-dev", runId: 11 },
+  "the latest actual opened/synchronize actor is the last-pusher identity",
+);
+assert.equal(
+  selectLastPusherRun(
+    [
+      {
+        id: 13,
+        event: "pull_request_target",
+        head_sha: "other-head",
+        run_attempt: 1,
+        display_title: "governance-review:pull_request_target:synchronize:community-dev",
+        actor: { login: "community-dev" },
+        pull_requests: [{ number: 67 }],
+      },
+    ],
+    "head",
+    67,
+  ),
+  null,
+  "missing matching workflow run must fail closed",
+);
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],
   headSha: "head",
@@ -270,7 +348,7 @@ assert.equal(
     headSha: "head",
     authorLogin: "community-contributor",
     policy: fixturePolicy,
-    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+    lastPusher: { login: policy.leader, runId: 101 },
   }),
   0,
   "a Leader who pushed a non-Leader head cannot self-count that approval",
@@ -294,7 +372,7 @@ assert.equal(
     reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } }],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+    lastPusher: { login: policy.leader, runId: 101 },
   }),
   false,
   "Leader participation cannot be self-counted after pushing a non-Leader head",
@@ -416,7 +494,7 @@ assert.equal(
     reviews: [dependabotLeaderReview],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+    lastPusher: { login: "dependabot[bot]", runId: 101 },
   }).satisfied,
   true,
   "Dependabot PR accepts one current-head Leader approval when Leader is not the pusher",
@@ -426,12 +504,22 @@ assert.equal(
     reviews: [dependabotLeaderReview],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
+    lastPusher: { login: policy.leader, runId: 101 },
   }).satisfied,
   false,
   "Leader cannot self-count governance current-head approval for a manually replayed head",
 );
-assert.equal(leaderIsLastPusher({ authorLogin: policy.leader }, policy), true);
+assert.equal(
+  dependabotApprovalForHead({
+    reviews: [dependabotLeaderReview],
+    headSha: "head",
+    policy,
+    lastPusher: null,
+  }).satisfied,
+  false,
+  "missing actual last-pusher evidence must fail closed",
+);
+assert.equal(leaderIsLastPusher({ login: policy.leader }, policy), true);
 assert.equal(
   dependabotApprovalForHead({
     reviews: [
@@ -439,7 +527,7 @@ assert.equal(
     ],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+    lastPusher: { login: "dependabot[bot]", runId: 101 },
   }).satisfied,
   false,
   "a non-Leader approval cannot satisfy the Dependabot-only Leader rule",
@@ -449,7 +537,7 @@ assert.equal(
     reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: "app/dependabot" } }],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+    lastPusher: { login: "dependabot[bot]", runId: 101 },
   }).satisfied,
   false,
   "an author approval cannot satisfy the Dependabot-only Leader rule",
@@ -459,7 +547,7 @@ assert.equal(
     reviews: [{ ...dependabotLeaderReview, commit: { oid: "old" } }],
     headSha: "head",
     policy,
-    headCommit: { authorLogin: "dependabot[bot]", committerLogin: "dependabot[bot]" },
+    lastPusher: { login: "dependabot[bot]", runId: 101 },
   }).satisfied,
   false,
   "an approval on an old head cannot satisfy Dependabot review",

@@ -13,6 +13,7 @@ import {
   leaderReviewMode,
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
+  selectLastPusherRun,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -88,41 +89,20 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
   }
 }
 
-async function headCommitMetadata(repository, headSha) {
-  const [owner, name] = repository.split("/", 2);
-  const data = await graphql(
-    `
-      query ($owner: String!, $name: String!, $oid: GitObjectID!) {
-        repository(owner: $owner, name: $name) {
-          object(oid: $oid) {
-            ... on Commit {
-              author {
-                user {
-                  login
-                }
-              }
-              committer {
-                user {
-                  login
-                }
-              }
-            }
-          }
-        }
-      }
-    `,
-    { owner, name, oid: headSha },
-  );
-  const commit = data.repository?.object;
-  const authorLogin = commit?.author?.user?.login || null;
-  const committerLogin = commit?.committer?.user?.login || null;
-  if (!authorLogin && !committerLogin) {
-    throw new Error("head commit has no verifiable author or committer login");
+async function lastPusherMetadata(repository, pullRequestNumber, headSha) {
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new Error("head SHA is not a canonical 40-character Git object id");
   }
-  return {
-    authorLogin,
-    committerLogin,
-  };
+  const workflowRuns = await restJson(
+    `/repos/${repository}/actions/runs?event=pull_request_target&head_sha=${encodeURIComponent(headSha)}&per_page=100`,
+  );
+  const lastPusher = selectLastPusherRun(workflowRuns.workflow_runs, headSha, pullRequestNumber);
+  if (!lastPusher) {
+    throw new Error(
+      "no trusted pull_request_target opened/synchronize run identifies the actual last pusher",
+    );
+  }
+  return lastPusher;
 }
 
 async function createCommitStatus({ sha, state, targetUrl }) {
@@ -243,13 +223,13 @@ const dependabotAuthor = isDependabotAuthor(pullRequest.user.login, policy);
 const dependabotScope = dependabotAuthor
   ? classifyDependabotFiles(files, policy)
   : { eligible: false, reason: "PR author is not Dependabot" };
-let headCommit = null;
-let headCommitError = null;
+let lastPusher = null;
+let lastPusherError = null;
 if (pullRequest.user.login !== policy.leader) {
   try {
-    headCommit = await headCommitMetadata(repository, headSha);
+    lastPusher = await lastPusherMetadata(repository, pullRequestNumber, headSha);
   } catch (error) {
-    headCommitError = error instanceof Error ? error.message : String(error);
+    lastPusherError = error instanceof Error ? error.message : String(error);
   }
 }
 const highRisk =
@@ -271,7 +251,7 @@ const approvalCount = approvalCountForHead({
   headSha,
   authorLogin: pullRequest.user.login,
   policy,
-  headCommit,
+  lastPusher,
 });
 const allowlistedReviewers = coreReviewerLogins(policy);
 const reviewerCapacity =
@@ -284,22 +264,22 @@ const reviewerCapacity =
 const allowlistUnsatisfiable =
   coreAuthor && pullRequest.user.login !== policy.leader && reviewerCapacity < requiredApprovals;
 const approvalsSatisfied =
-  !allowlistUnsatisfiable && !headCommitError && approvalCount >= requiredApprovals;
+  !allowlistUnsatisfiable && !lastPusherError && approvalCount >= requiredApprovals;
 const leaderParticipatedForHead =
-  !headCommitError &&
+  !lastPusherError &&
   leaderParticipated({
     authorLogin: pullRequest.user.login,
     reviews,
     headSha,
     policy,
-    headCommit,
+    lastPusher,
   });
 const dependabotApproval = dependabotScope.eligible
-  ? dependabotApprovalForHead({ reviews, headSha, policy, headCommit })
+  ? dependabotApprovalForHead({ reviews, headSha, policy, lastPusher })
   : null;
-if (dependabotApproval && headCommitError) {
+if (dependabotApproval && lastPusherError) {
   dependabotApproval.satisfied = false;
-  dependabotApproval.reason = `unable to verify head commit author/committer: ${headCommitError}`;
+  dependabotApproval.reason = `unable to verify actual last pusher: ${lastPusherError}`;
 }
 const state = dependabotScope.eligible
   ? dependabotApproval.satisfied && (!highRisk || leaderParticipatedForHead)
@@ -317,18 +297,20 @@ const authorDescription = dependabotScope.eligible
       : coreAuthor
         ? "非 Leader Core 作者"
         : "社区作者";
-const approvalDescription = allowlistUnsatisfiable
-  ? `${authorDescription}：显式 Core allowlist 仅可提供 ${Math.max(reviewerCapacity, 0)} 个非作者审批，但规则要求 ${requiredApprovals} 个；Leader 必须先登记足够 Core 身份`
-  : dependabotScope.eligible
-    ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
-    : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
-      ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
-      : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
+const approvalDescription = lastPusherError
+  ? `${authorDescription}：无法验证实际最后 push 者，治理状态 fail-closed（${lastPusherError}）`
+  : allowlistUnsatisfiable
+    ? `${authorDescription}：显式 Core allowlist 仅可提供 ${Math.max(reviewerCapacity, 0)} 个非作者审批，但规则要求 ${requiredApprovals} 个；Leader 必须先登记足够 Core 身份`
+    : dependabotScope.eligible
+      ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
+      : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
+        ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
+        : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
 const leaderDescription = !highRisk
   ? "普通改动：Leader 参与检查不适用"
   : leaderParticipatedForHead
-    ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
-    : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
+    ? `高风险改动：${policy.leader} 已作为作者或实际最新 push 者之外的当前 head 批准者参与`
+    : `高风险改动必须由 ${policy.leader} 作为作者或实际最新 push 者之外的当前 head 批准者参与`;
 const description = dependabotScope.eligible
   ? `${approvalDescription}；current-head 约束由 governance-review 执行，签名提交和必需状态仍由 GitHub Ruleset 强制`
   : approvalsSatisfied

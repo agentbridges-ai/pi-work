@@ -21,8 +21,9 @@ Dependabot 的常规依赖、锁文件和 SHA 固定 Actions 更新是可重复�
 `APPROVED` Review。路径分类在 trusted-base 脚本中完成，产品、服务器、共享协议、
 `.governance`、安全、发布和其他高风险路径一律退出该低风险分类。
 
-Leader 不能同时作为该 head 的最后提交 author/committer 来满足治理的
-current-head 约束；`governance-review` 在这种手工重放场景失败并提示重新生成 head，
+Leader 不能同时作为该 head 的实际最后 push 者来满足治理的
+current-head 约束；`governance-review` 从 trusted `pull_request_target` workflow run 的
+`opened/synchronize` actor 读取该身份，在这种手工重放场景失败并提示重新生成 head，
 绝不伪造 Review、修改 Ruleset 或使用 bypass。native `require_last_push_approval` 关闭
 以支持 Leader self-or-exempt；Verified 签名、CODEOWNERS ownership metadata、全部
 required checks、Dependency Review、安全扫描与发布门禁继续由平台强制。
@@ -36,5 +37,5 @@ required checks、Dependency Review、安全扫描与发布门禁继续由平台
 ## Verification
 
 `governance-fixtures.mjs` 覆盖合法依赖/Action pin、服务器和 release 清单拒绝、
-workflow 非 pin 拒绝、非 Leader reviewer、旧 head 审批以及 Leader 作为最后提交者
+workflow 非 pin 拒绝、非 Leader reviewer、旧 head 审批以及实际最后 push 者证据缺失/Leader 自推
 的 governance current-head 约束；机器策略位于 `.governance/github-policy.json`。

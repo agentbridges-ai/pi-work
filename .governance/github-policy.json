@@ -27,8 +27,12 @@
       "enforcedBy": "governance-review",
       "requireCurrentHeadReview": true,
       "leaderAuthorExempt": true,
-      "nonLeaderCannotBeHeadCommitter": true,
-      "dependabotLeaderCannotBeHeadCommitter": true
+      "nonLeaderCannotBeLastPusher": true,
+      "dependabotLeaderCannotBeLastPusher": true,
+      "lastPusherIdentitySource": "trusted-pull-request-target-workflow-run-actor",
+      "lastPusherRunNamePrefix": "governance-review:pull_request_target:",
+      "lastPusherActions": ["opened", "synchronize"],
+      "lastPusherFailClosed": true
     },
     "coreReviewerLogins": ["Misakago"],
     "reviewerAllowlist": {

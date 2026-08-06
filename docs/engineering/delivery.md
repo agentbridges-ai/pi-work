@@ -6,7 +6,8 @@ PR 必须通过治理、质量、认证 E2E、SRT、完整验证、Landing、依
 reviewer allowlist 计算 0/2/1 审批；Leader 对所有其他 PR（包括自动化作者）的一次当前-head
 有效审批计一票，Leader 作者为 self-or-exempt；CODEOWNERS 只记录 ownership，不再由 Ruleset
 强制 Team/CODEOWNER 审批。native last-push approval 为 false 以支持 Leader self/exempt，
-`governance-review` 对需审批作者执行 current-head 约束；Ruleset 仍强制签名、线性历史、
+`governance-review` 对需审批作者执行 current-head 与实际最后 push 者约束（身份来自 trusted
+workflow run 的 `opened/synchronize` actor，缺失时 fail-closed）；Ruleset 仍强制签名、线性历史、
 线程解决与全部 required checks，且状态只接受 GitHub Actions integration `15368`，因此状态缺失、
 allowlist 漂移或未知 reviewer 都 fail-closed。
 

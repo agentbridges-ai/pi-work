@@ -31,7 +31,8 @@ Leader `@Misakago` 对当前 head 单独投一票审批，但只适用于 `.gove
 高风险路径不会因为作者是 Dependabot 而降级；混入这些路径会回到普通/高风险评审。
 
 `governance-review` 要求 Leader 对低风险当前 head 有一个真实的 `APPROVED` Review，
-并拒绝 Leader 同时作为最新 head 的 author/committer 的手工重放；scope 不合规时回退
+并拒绝 Leader 同时作为实际最后 push 者的手工重放；该身份由 trusted
+`pull_request_target` workflow run 的 `opened/synchronize` actor 证明，缺失时 fail-closed；scope 不合规时回退
 普通/高风险规则。CODEOWNERS 只保留 ownership metadata，主/高风险 Ruleset 将 native reviewer
 count 设为 0 且关闭 native last-push approval 以避免阻断 Leader 自审；对需审批作者由
 `governance-review` 执行 current-head 约束。签名提交、线程解决、必需 CI 状态、Dependency

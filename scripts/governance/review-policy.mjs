@@ -136,32 +136,59 @@ export function classifyDependabotFiles(files, policy) {
   };
 }
 
-export function leaderIsLastPusher(headCommit, policy) {
+export function leaderIsLastPusher(lastPusher, policy) {
   const leader = policy.dependabotReview?.leader || policy.leader;
-  const identities = [
-    headCommit?.authorLogin,
-    headCommit?.committerLogin,
-    headCommit?.author?.login,
-    headCommit?.committer?.login,
-  ];
-  return identities.includes(leader);
+  return lastPusher?.login === leader;
 }
 
-export function dependabotApprovalForHead({ reviews, headSha, policy, headCommit }) {
+export function selectLastPusherRun(workflowRuns, headSha, pullRequestNumber) {
+  const candidates = (Array.isArray(workflowRuns) ? workflowRuns : [])
+    .filter(
+      (run) =>
+        run?.event === "pull_request_target" &&
+        run?.head_sha === headSha &&
+        Number(run?.run_attempt ?? 1) === 1 &&
+        /^governance-review:pull_request_target:(?:opened|synchronize):/.test(
+          run?.display_title || "",
+        ) &&
+        Array.isArray(run?.pull_requests) &&
+        run.pull_requests.some(
+          (pullRequest) => Number(pullRequest?.number) === pullRequestNumber,
+        ) &&
+        typeof run?.actor?.login === "string" &&
+        run.actor.login.length > 0,
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.created_at || "");
+      const rightTime = Date.parse(right.created_at || "");
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+      return Number(right.id || 0) - Number(left.id || 0);
+    });
+  const run = candidates[0];
+  if (!run) return null;
+  return { login: run.actor.login, runId: run.id };
+}
+
+export function dependabotApprovalForHead({ reviews, headSha, policy, lastPusher }) {
   const leader = policy.dependabotReview?.leader || policy.leader;
   const approvedReviewers = approvedReviewersForHead(reviews, headSha).filter((login) =>
     isCountableReviewer(login, policy),
   );
   const leaderApproved = approvedReviewers.includes(leader);
-  const lastPusherIsLeader = leaderIsLastPusher(headCommit, policy);
+  const lastPusherIsLeader = leaderIsLastPusher(lastPusher, policy);
+  const lastPusherVerified = typeof lastPusher?.login === "string" && lastPusher.login.length > 0;
   const satisfied =
     policy.dependabotReview?.requireCurrentHeadLeaderApproval === true &&
     leaderApproved &&
+    lastPusherVerified &&
     !lastPusherIsLeader;
   let reason;
   if (!leaderApproved) reason = `Leader ${leader} has no current-head APPROVED review`;
+  else if (!lastPusherVerified) reason = "actual last pusher identity is unavailable";
   else if (lastPusherIsLeader) {
-    reason = `Leader ${leader} is the latest commit author/committer; governance-review current-head approval cannot be self-counted`;
+    reason = `Leader ${leader} is the actual latest pusher; governance-review current-head approval cannot be self-counted`;
   } else reason = `Leader ${leader} has the required current-head APPROVED review`;
   return { satisfied, leaderApproved, lastPusherIsLeader, approvedReviewers, reason };
 }
@@ -251,8 +278,8 @@ export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
   );
 }
 
-export function approvalCountForHead({ reviews, headSha, authorLogin, policy, headCommit = null }) {
-  const excludedPushers = [headCommit?.authorLogin, headCommit?.committerLogin];
+export function approvalCountForHead({ reviews, headSha, authorLogin, policy, lastPusher = null }) {
+  const excludedPushers = [lastPusher?.login];
   const approvedReviewers = countableReviewersForHead(
     reviews,
     headSha,
@@ -266,8 +293,8 @@ export function approvalCountForHead({ reviews, headSha, authorLogin, policy, he
   );
 }
 
-export function leaderParticipated({ authorLogin, reviews, headSha, policy, headCommit = null }) {
-  const excludedPushers = [headCommit?.authorLogin, headCommit?.committerLogin];
+export function leaderParticipated({ authorLogin, reviews, headSha, policy, lastPusher = null }) {
+  const excludedPushers = [lastPusher?.login];
   return (
     authorLogin === policy.leader ||
     approvedReviewersForHead(reviews, headSha, null, excludedPushers).includes(policy.leader)

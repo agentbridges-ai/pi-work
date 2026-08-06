@@ -116,8 +116,17 @@ if (policy) {
     enforcement.authorAwareLastPush?.enforcedBy !== "governance-review" ||
     enforcement.authorAwareLastPush?.requireCurrentHeadReview !== true ||
     enforcement.authorAwareLastPush?.leaderAuthorExempt !== true ||
-    enforcement.authorAwareLastPush?.nonLeaderCannotBeHeadCommitter !== true ||
-    enforcement.authorAwareLastPush?.dependabotLeaderCannotBeHeadCommitter !== true ||
+    enforcement.authorAwareLastPush?.nonLeaderCannotBeLastPusher !== true ||
+    enforcement.authorAwareLastPush?.dependabotLeaderCannotBeLastPusher !== true ||
+    enforcement.authorAwareLastPush?.lastPusherIdentitySource !==
+      "trusted-pull-request-target-workflow-run-actor" ||
+    enforcement.authorAwareLastPush?.lastPusherRunNamePrefix !==
+      "governance-review:pull_request_target:" ||
+    !Array.isArray(enforcement.authorAwareLastPush?.lastPusherActions) ||
+    enforcement.authorAwareLastPush.lastPusherActions.length !== 2 ||
+    !enforcement.authorAwareLastPush.lastPusherActions.includes("opened") ||
+    !enforcement.authorAwareLastPush.lastPusherActions.includes("synchronize") ||
+    enforcement.authorAwareLastPush?.lastPusherFailClosed !== true ||
     enforcement.unknownReviewerBehavior !== "reject" ||
     !Array.isArray(enforcement.coreReviewerLogins) ||
     !enforcement.coreReviewerLogins.includes(policy.leader) ||
@@ -238,6 +247,18 @@ if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
 }
 if (!/ref:\s*refs\/heads\/main\s*$/m.test(leaderReviewWorkflow)) {
   fail.push("leader-review workflow must checkout trusted refs/heads/main governance code");
+}
+if (
+  !/^run-name:\s*governance-review:\$\{\{ github\.event_name \}\}:\$\{\{ github\.event\.action \|\| 'none' \}\}:\$\{\{ github\.actor \}\}$/m.test(
+    leaderReviewWorkflow,
+  )
+) {
+  fail.push(
+    "leader-review workflow must retain the event action and actor in its trusted run name",
+  );
+}
+if (!/^\s*actions:\s*read\s*$/m.test(leaderReviewWorkflow)) {
+  fail.push("leader-review workflow must read trusted workflow-run metadata");
 }
 
 const titlePattern =
