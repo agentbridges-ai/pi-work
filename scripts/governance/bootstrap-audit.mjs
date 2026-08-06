@@ -220,6 +220,31 @@ export function auditRulesetReadback(policy, rulesets, branchProtection = null) 
   return drift;
 }
 
+/**
+ * Validate checked-in permission declarations without asking a PR token for
+ * the repository Administration endpoint. That endpoint is reserved for the
+ * explicit administrator-only github-governance check/apply command.
+ */
+export function auditWorkflowPermissionDeclarations(leaderReviewWorkflow, auditWorkflow) {
+  const drift = [];
+  const requiredLeaderPermissions = [
+    /^\s*actions:\s*read\s*$/m,
+    /^\s*contents:\s*read\s*$/m,
+    /^\s*pull-requests:\s*read\s*$/m,
+    /^\s*statuses:\s*write\s*$/m,
+  ];
+  if (requiredLeaderPermissions.some((pattern) => !pattern.test(leaderReviewWorkflow))) {
+    drift.push("leader-review workflow permission declarations are incomplete");
+  }
+  if (/(?:actions|contents|pull-requests|issues):\s*write/m.test(leaderReviewWorkflow)) {
+    drift.push("leader-review workflow grants an unexpected write permission");
+  }
+  if (/(?:actions|contents|pull-requests|issues|statuses):\s*write/m.test(auditWorkflow)) {
+    drift.push("bootstrap audit workflow grants write permissions");
+  }
+  return drift;
+}
+
 export function isDocumentationPath(path) {
   return typeof path === "string" && (path.startsWith("docs/") || /^[^/]+\.md$/i.test(path));
 }
@@ -349,21 +374,22 @@ async function main() {
       "GITHUB_TOKEN is required for Ruleset readback; use --offline only for local fixtures",
     );
   }
-  const [rulesets, branchProtection, workflowPermissions] = await Promise.all([
+  const [rulesets, branchProtection] = await Promise.all([
     readRulesets(),
     githubJson(`/repos/${repository}/branches/${defaultBranch}/protection`, {
       allowNotFound: true,
     }),
-    githubJson(`/repos/${repository}/actions/permissions/workflow`),
   ]);
   const drift = auditRulesetReadback(policy, rulesets, branchProtection);
-  if (
-    workflowPermissions?.default_workflow_permissions !== policy.workflowPermissions?.default ||
-    workflowPermissions?.can_approve_pull_request_reviews !==
-      policy.workflowPermissions?.canApprovePullRequestReviews
-  ) {
-    drift.push("repository workflow permissions are not read-only/non-approving");
-  }
+  const leaderReviewWorkflow = readFileSync(
+    join(root, ".github/workflows/leader-review.yml"),
+    "utf8",
+  );
+  const auditWorkflow = readFileSync(
+    join(root, ".github/workflows/governance-bootstrap-audit.yml"),
+    "utf8",
+  );
+  drift.push(...auditWorkflowPermissionDeclarations(leaderReviewWorkflow, auditWorkflow));
   for (const item of drift) console.error(`[governance-bootstrap-audit] drift: ${item}`);
   if (!local.ok || drift.length > 0) {
     process.exitCode = 1;

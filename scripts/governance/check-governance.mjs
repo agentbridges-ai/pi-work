@@ -273,7 +273,12 @@ if (!/ref:\s*refs\/heads\/main\s*$/m.test(leaderReviewWorkflow)) {
 }
 if (!/^\s*actions:\s*read\s*$/m.test(leaderReviewWorkflow)) {
   fail.push(
-    "leader-review workflow must read Actions permission settings before publishing status",
+    "leader-review workflow must declare read-only Actions metadata before publishing status",
+  );
+}
+if (leaderReviewWorkflow.includes("/actions/permissions/workflow")) {
+  fail.push(
+    "leader-review workflow must not query the administrator-only Actions permissions endpoint with GITHUB_TOKEN",
   );
 }
 if (

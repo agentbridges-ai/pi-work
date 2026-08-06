@@ -91,19 +91,6 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
   }
 }
 
-async function verifyStatusProducerPermissions() {
-  const workflowPermissions = await restJson(`/repos/${repository}/actions/permissions/workflow`);
-  if (
-    workflowPermissions?.default_workflow_permissions !== policy.workflowPermissions?.default ||
-    workflowPermissions?.can_approve_pull_request_reviews !==
-      policy.workflowPermissions?.canApprovePullRequestReviews
-  ) {
-    throw new Error(
-      "repository Actions workflow permissions are not read-only/non-approving; refusing to publish governance status",
-    );
-  }
-}
-
 function statusTargetUrl() {
   return process.env.GITHUB_RUN_ID
     ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
@@ -201,8 +188,6 @@ async function createCommitStatus({
     );
   }
 }
-
-await verifyStatusProducerPermissions();
 
 function globToRegExp(pattern) {
   let expression = "";

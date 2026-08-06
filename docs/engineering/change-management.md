@@ -14,7 +14,8 @@ Dependabot 低风险依赖升级遵循 [ADR-0004](../adr/ADR-0004-dependabot-lea
 `bootstrap` 仅作用于非 Leader Core 作者路径：该路径在 allowlist 少于 3 人时继续
 fail-closed；Leader 作者、社区作者和低风险 Dependabot 的既有规则不被 Bootstrap 改写。
 `governance-bootstrap-audit` 从 trusted `main` 只读检查 allowlist、起始日、90 天期限、
-Ruleset/旧 Branch Protection readback 与 Actions 只读权限，并为 docs-only PR 输出确定的
-no-op 状态。达到 3 个显式 Core 身份或超过期限时，审计报告需要切换，直接失败；机器人
+Ruleset/旧 Branch Protection readback 与工作流权限声明，并为 docs-only PR 输出确定的
+no-op 状态；它不使用 PR token 查询仅管理员可读的 Actions 权限端点。仓库级 Actions
+权限的 readback/apply 只在显式管理员 `github-governance-check/apply` 中执行。达到 3 个显式 Core 身份或超过期限时，审计报告需要切换，直接失败；机器人
 不会写 policy、Team、Ruleset、Issue 或 PR。切换只能通过本机 Good signature 的策略 PR，
 将 `state` 明确迁移为 `full-core` 并同时更新显式 allowlist；不得读取组织成员清单或猜测身份。

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import {
   auditBootstrapPolicy,
   auditRulesetReadback,
+  auditWorkflowPermissionDeclarations,
   bootstrapExpiresAt,
   isDocsOnlyPullRequest,
 } from "./bootstrap-audit.mjs";
@@ -21,8 +22,23 @@ const auditWorkflow = readFileSync(
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.doesNotMatch(auditSource, /method:\s*["'](?:POST|PUT|PATCH)/);
 assert.doesNotMatch(auditSource, /--apply|createCommitStatus|createIssue/);
+assert.doesNotMatch(auditSource, /actions\/permissions\/workflow/);
 assert.doesNotMatch(auditWorkflow, /(?:contents|pull-requests|issues|actions):\s*write/);
 assert.match(auditWorkflow, /workflow_dispatch:/);
+
+assert.deepEqual(
+  auditWorkflowPermissionDeclarations(
+    `permissions:\n  actions: read\n  contents: read\n  pull-requests: read\n  statuses: write`,
+    `permissions:\n  actions: read\n  contents: read\n  pull-requests: read\n  statuses: read`,
+  ),
+  [],
+);
+assert.ok(
+  auditWorkflowPermissionDeclarations(
+    `permissions:\n  actions: read\n  contents: read\n  pull-requests: write\n  statuses: write`,
+    auditWorkflow,
+  ).some((item) => /unexpected write/.test(item)),
+);
 
 const healthy = auditBootstrapPolicy(policy, "2026-08-06T00:00:00Z");
 assert.equal(healthy.ok, true, "single-Leader bootstrap is healthy at its start");
