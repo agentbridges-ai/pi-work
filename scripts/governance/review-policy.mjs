@@ -57,6 +57,14 @@ function addedPatchLines(patch) {
 const workflowPathPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
 const trustedStatusWriterPath = ".github/workflows/leader-review.yml";
 
+function hasStatusWritePermission(source) {
+  return (
+    /["']?statuses["']?\s*:\s*(?:["']?write(?:-all)?["']?|\[[^\]]*["']?write(?:-all)?["']?[^\]]*\])/i.test(
+      source,
+    ) || /["']?permissions["']?\s*:\s*["']?write-all["']?/i.test(source)
+  );
+}
+
 /**
  * A PR-controlled workflow must not be able to mint the sole governance
  * status. The trusted `pull_request_target` workflow is the only checked-in
@@ -74,12 +82,7 @@ export function auditStatusWriterWorkflowChanges(files) {
       failures.push(`${path}: workflow patch is unavailable`);
       continue;
     }
-    if (
-      addedLines.some((line) =>
-        /\bstatuses\s*:\s*(?:write(?:-all)?|\[[^\]]*\bwrite\b[^\]]*\])/i.test(line),
-      ) ||
-      addedLines.some((line) => /\bpermissions\s*:\s*write-all\b/i.test(line))
-    ) {
+    if (addedLines.some((line) => hasStatusWritePermission(line))) {
       failures.push(`${path}: changed workflow requests status-writing permissions`);
     }
     if (
@@ -114,18 +117,24 @@ export function auditStatusWriterWorkflowContents(workflows) {
       continue;
     }
     if (path !== trustedStatusWriterPath) {
-      if (
-        /\bstatuses\s*:\s*(?:write(?:-all)?|\[[^\]]*\bwrite\b[^\]]*\])/i.test(source) ||
-        /\bpermissions\s*:\s*write-all\b/i.test(source)
-      ) {
+      if (hasStatusWritePermission(source)) {
         failures.push(`${path}: resulting workflow requests status-writing permissions`);
       }
       continue;
     }
+    const eventSection = source.split(/\n\s*concurrency\s*:/i, 1)[0];
     if (!/\bpull_request_target\s*:/i.test(source)) {
       failures.push(`${path}: trusted status writer lacks pull_request_target`);
     }
-    if (/^\s*pull_request\s*:/m.test(source) || /\bworkflow_dispatch\s*:/i.test(source)) {
+    if (
+      /^\s*pull_request\s*:/m.test(eventSection) ||
+      /["']?\b(?:push|schedule|workflow_dispatch|repository_dispatch|workflow_call|workflow_run)["']?\s*:/i.test(
+        eventSection,
+      ) ||
+      /\bon\s*:\s*\[[^\]]*\b(?:push|schedule|workflow_dispatch|repository_dispatch|workflow_call|workflow_run)\b/i.test(
+        eventSection,
+      )
+    ) {
       failures.push(`${path}: trusted status writer has an untrusted trigger`);
     }
     if (!/\bref:\s*refs\/heads\/main\s*$/m.test(source)) {

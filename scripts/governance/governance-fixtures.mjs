@@ -122,7 +122,7 @@ assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
 assert.match(leaderReviewWorkflow, /^\s*actions:\s*read\s*$/m);
 assert.match(
   leaderReviewWorkflow,
-  /group:\s*governance-review-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m,
+  /group:\s*governance-review-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m,
 );
 assert.deepEqual(
   auditStatusWriterWorkflowChanges([
@@ -143,6 +143,16 @@ assert.equal(
   ]).allowed,
   false,
   "PR-controlled workflows cannot add statuses: write",
+);
+assert.equal(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/example.yml",
+      patch: '@@ -1 +1 @@\n-  contents: read\n+  "statuses": "write"',
+    },
+  ]).allowed,
+  false,
+  "quoted status permission keys cannot evade the workflow audit",
 );
 assert.equal(
   auditStatusWriterWorkflowChanges([
@@ -210,6 +220,27 @@ assert.equal(
   ]).allowed,
   false,
   "status writer trigger and direct status commands are rejected",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/example.yml",
+      source: 'on:\n  pull_request:\npermissions:\n  "statuses": "write"\n',
+    },
+  ]).allowed,
+  false,
+  "quoted resulting status permission keys are rejected",
+);
+assert.equal(
+  auditStatusWriterWorkflowContents([
+    {
+      path: ".github/workflows/leader-review.yml",
+      source:
+        "on:\n  pull_request_target:\n  push:\npermissions:\n  statuses: write\njobs:\n  review:\n    steps:\n      - uses: actions/checkout@sha\n        with:\n          ref: refs/heads/main\n      - run: node scripts/governance/leader-review.mjs\n",
+    },
+  ]).allowed,
+  false,
+  "push trigger additions to the status writer are rejected",
 );
 assert.equal(
   auditStatusWriterWorkflowChanges([{ path: ".github/workflows/example.yml" }]).allowed,

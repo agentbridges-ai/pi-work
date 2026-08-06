@@ -303,12 +303,12 @@ if (bootstrapAuditSource.includes("/branches/${defaultBranch}/protection")) {
   );
 }
 if (
-  !/group:\s*governance-review-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m.test(
+  !/group:\s*governance-review-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m.test(
     leaderReviewWorkflow,
   )
 ) {
   fail.push(
-    "leader-review workflow must isolate concurrency by event type to avoid cancelling required status runs",
+    "leader-review workflow must serialize all events for one PR so stale governance status cannot win",
   );
 }
 if (
