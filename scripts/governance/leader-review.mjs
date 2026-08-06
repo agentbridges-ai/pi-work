@@ -5,8 +5,9 @@ import { join, resolve } from "node:path";
 import {
   approvalCountForHead,
   isCoreAuthor,
-  leaderAuthorCountsAsApproval,
   leaderParticipated,
+  leaderReviewMode,
+  leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
 } from "./review-policy.mjs";
 
@@ -166,7 +167,8 @@ const requiredApprovals = requiredApprovalsForAuthor(
   policy,
   authorAssociation,
 );
-const leaderAuthorApproval = leaderAuthorCountsAsApproval(pullRequest.user.login, policy);
+const leaderMode = leaderReviewMode(policy);
+const leaderSelfReview = leaderSelfReviewForHead(reviews, headSha, pullRequest.user.login, policy);
 const approvalCount = approvalCountForHead({
   reviews,
   headSha,
@@ -188,7 +190,10 @@ const authorDescription =
     : coreAuthor
       ? "非 Leader Core 作者"
       : "社区作者";
-const approvalDescription = `${authorDescription}：${approvalCount}/${requiredApprovals} 个最新提交有效审批${leaderAuthorApproval ? "（Leader 作者身份计入 1 个审计，不伪造 Review）" : ""}`;
+const approvalDescription =
+  pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
+    ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
+    : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
 const leaderDescription = !highRisk
   ? "普通改动：Leader 参与检查不适用"
   : leaderParticipatedForHead
