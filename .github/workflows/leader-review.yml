@@ -6,7 +6,6 @@ on:
   merge_group:
   pull_request_review:
     types: [submitted, dismissed, edited]
-  workflow_dispatch:
 
 concurrency:
   group: governance-review-${{ github.event.pull_request.number || github.ref }}

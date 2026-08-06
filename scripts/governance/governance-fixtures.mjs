@@ -108,6 +108,11 @@ assert.equal(pinResult.externalUses, 1);
 const codeowners = readFileSync(join(root, ".github/CODEOWNERS"), "utf8");
 assert.match(codeowners, /@agentbridges-ai\/piwork-core/);
 assert.match(codeowners, /@Misakago/);
+const leaderReviewWorkflow = readFileSync(
+  join(root, ".github/workflows/leader-review.yml"),
+  "utf8",
+);
+assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");

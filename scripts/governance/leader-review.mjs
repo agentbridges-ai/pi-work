@@ -23,6 +23,11 @@ if (!pullRequest || !process.env.GITHUB_TOKEN || !process.env.GITHUB_REPOSITORY)
   console.log("[governance-review] no pull request event; nothing to evaluate");
   process.exit(0);
 }
+if (!new Set(["pull_request_target", "pull_request_review"]).has(process.env.GITHUB_EVENT_NAME)) {
+  throw new Error(
+    `unsupported governance-review event: ${process.env.GITHUB_EVENT_NAME || "unknown"}`,
+  );
+}
 
 // Keep all REST URL components sourced from GitHub's runner environment rather
 // than from JSON files. The event and policy files are trusted metadata for the

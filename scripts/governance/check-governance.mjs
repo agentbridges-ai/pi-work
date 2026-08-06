@@ -228,6 +228,13 @@ const codeowners = existsSync(join(root, ".github/CODEOWNERS"))
 if (!codeowners.includes("@agentbridges-ai/piwork-core"))
   fail.push("CODEOWNERS: Core Team is missing");
 if (!codeowners.includes("@Misakago")) fail.push("CODEOWNERS: Leader is missing");
+const leaderReviewWorkflow = readFileSync(
+  join(root, ".github/workflows/leader-review.yml"),
+  "utf8",
+);
+if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
+  fail.push("leader-review workflow must not expose workflow_dispatch");
+}
 
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;
