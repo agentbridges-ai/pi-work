@@ -119,7 +119,7 @@ if (policy) {
     enforcement.authorAwareLastPush?.nonLeaderCannotBeLastPusher !== true ||
     enforcement.authorAwareLastPush?.dependabotLeaderCannotBeLastPusher !== true ||
     enforcement.authorAwareLastPush?.lastPusherIdentitySource !==
-      "trusted-pull-request-target-synchronize-sender-or-repository-push-event-actor" ||
+      "trusted-commit-status-or-pull-request-target-synchronize-sender-or-head-repository-push-event-actor" ||
     enforcement.authorAwareLastPush?.lastPusherFailClosed !== true ||
     enforcement.unknownReviewerBehavior !== "reject" ||
     !Array.isArray(enforcement.coreReviewerLogins) ||
@@ -241,6 +241,22 @@ if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
 }
 if (!/ref:\s*refs\/heads\/main\s*$/m.test(leaderReviewWorkflow)) {
   fail.push("leader-review workflow must checkout trusted refs/heads/main governance code");
+}
+if (!/^\s*actions:\s*read\s*$/m.test(leaderReviewWorkflow)) {
+  fail.push(
+    "leader-review workflow must read Actions permission settings before publishing status",
+  );
+}
+if (
+  policy?.reviewEnforcement?.authorAwareLastPush?.pusherEvidenceStatus?.context !==
+    "governance-review-pusher" ||
+  policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.source !==
+    "trusted-leader-review-commit-status" ||
+  policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.retention !== "commit-status" ||
+  policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus
+    .requiresReadOnlyWorkflowPermissions !== true
+) {
+  fail.push("github-policy.json: pusher evidence must be retained in a trusted commit status");
 }
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;

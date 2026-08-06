@@ -20,6 +20,7 @@ import {
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
   selectLastPusherEvent,
+  selectPersistedPusherStatus,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -115,6 +116,7 @@ const leaderReviewWorkflow = readFileSync(
 );
 assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
 assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
+assert.match(leaderReviewWorkflow, /^\s*actions:\s*read\s*$/m);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
@@ -137,9 +139,15 @@ assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, tr
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeLastPusher, true);
 assert.equal(
   policy.reviewEnforcement.authorAwareLastPush.lastPusherIdentitySource,
-  "trusted-pull-request-target-synchronize-sender-or-repository-push-event-actor",
+  "trusted-commit-status-or-pull-request-target-synchronize-sender-or-head-repository-push-event-actor",
 );
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.lastPusherFailClosed, true);
+assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus, {
+  context: "governance-review-pusher",
+  source: "trusted-leader-review-commit-status",
+  retention: "commit-status",
+  requiresReadOnlyWorkflowPermissions: true,
+});
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
 assert.equal(policy.reviewEnforcement.reviewerAllowlist.minimumIdentitiesForNonLeaderCore, 2);
@@ -225,6 +233,36 @@ assert.equal(
   ),
   null,
   "missing matching PushEvent must fail closed",
+);
+assert.deepEqual(
+  selectPersistedPusherStatus([
+    {
+      id: 20,
+      context: "governance-review-pusher",
+      state: "success",
+      description: `actual-pusher:${encodeURIComponent("community-dev")}`,
+      creator: { login: "github-actions[bot]" },
+      created_at: "2026-08-06T00:01:00Z",
+    },
+    {
+      id: 21,
+      context: "governance-review-pusher",
+      state: "success",
+      description: `actual-pusher:${encodeURIComponent("Misakago")}`,
+      creator: { login: "github-actions[bot]" },
+      created_at: "2026-08-06T00:02:00Z",
+    },
+    {
+      id: 22,
+      context: "governance-review-pusher",
+      state: "success",
+      description: `actual-pusher:${encodeURIComponent("spoofed")}`,
+      creator: { login: "write-capable-user" },
+      created_at: "2026-08-06T00:03:00Z",
+    },
+  ]),
+  { login: "Misakago", statusId: 21 },
+  "only trusted commit-status pusher evidence is retained and the latest record wins",
 );
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],

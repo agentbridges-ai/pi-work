@@ -14,6 +14,7 @@ import {
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
   selectLastPusherEvent,
+  selectPersistedPusherStatus,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -89,6 +90,35 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
   }
 }
 
+async function verifyStatusProducerPermissions() {
+  const workflowPermissions = await restJson(`/repos/${repository}/actions/permissions/workflow`);
+  if (
+    workflowPermissions?.default_workflow_permissions !== policy.workflowPermissions?.default ||
+    workflowPermissions?.can_approve_pull_request_reviews !==
+      policy.workflowPermissions?.canApprovePullRequestReviews
+  ) {
+    throw new Error(
+      "repository Actions workflow permissions are not read-only/non-approving; refusing to publish governance status",
+    );
+  }
+}
+
+function statusTargetUrl() {
+  return process.env.GITHUB_RUN_ID
+    ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+    : `https://github.com/${repository}/pull/${pullRequestNumber}`;
+}
+
+async function persistPusherEvidence(sha, login) {
+  await createCommitStatus({
+    sha,
+    state: "success",
+    context: "governance-review-pusher",
+    description: `actual-pusher:${encodeURIComponent(login)}`,
+    targetUrl: statusTargetUrl(),
+  });
+}
+
 async function lastPusherMetadata(headRepository, headSha, headRef) {
   if (!/^[0-9a-f]{40}$/.test(headSha)) {
     throw new Error("head SHA is not a canonical 40-character Git object id");
@@ -108,7 +138,24 @@ async function lastPusherMetadata(headRepository, headSha, headRef) {
     typeof event.sender?.login === "string" &&
     event.sender.login.length > 0
   ) {
+    await persistPusherEvidence(headSha, event.sender.login);
     return { login: event.sender.login, source: "synchronize-event" };
+  }
+  const persistedStatuses = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const pageStatuses = await restJson(
+      `/repos/${repository}/commits/${headSha}/statuses?per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(pageStatuses)) {
+      throw new Error("REST commit statuses response is invalid");
+    }
+    persistedStatuses.push(...pageStatuses);
+    if (pageStatuses.length < 100) break;
+  }
+  const persistedPusher = selectPersistedPusherStatus(persistedStatuses);
+  if (persistedPusher) {
+    await persistPusherEvidence(headSha, persistedPusher.login);
+    return { ...persistedPusher, source: "trusted-commit-status" };
   }
   const [headOwner, headRepositoryName] = headRepository.split("/", 2);
   const eventsPathRepository = `${encodeURIComponent(headOwner)}/${encodeURIComponent(headRepositoryName)}`;
@@ -118,20 +165,29 @@ async function lastPusherMetadata(headRepository, headSha, headRef) {
     );
     if (!Array.isArray(events)) throw new Error("REST repository events response is invalid");
     const lastPusher = selectLastPusherEvent(events, headSha, headRef);
-    if (lastPusher) return { ...lastPusher, source: "repository-push-event" };
+    if (lastPusher) {
+      await persistPusherEvidence(headSha, lastPusher.login);
+      return { ...lastPusher, source: "repository-push-event" };
+    }
     if (events.length < 100) break;
   }
   throw new Error("no authoritative PushEvent identifies the actual last pusher");
 }
 
-async function createCommitStatus({ sha, state, targetUrl }) {
+async function createCommitStatus({
+  sha,
+  state,
+  context = "governance-review",
+  description = "author-aware governance review",
+  targetUrl,
+}) {
   const response = await fetch(`https://api.github.com/repos/${repository}/statuses/${sha}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
       state: state === "success" ? "success" : "failure",
-      context: "governance-review",
-      description: "author-aware governance review",
+      context,
+      description,
       target_url: targetUrl,
     }),
   });
@@ -141,6 +197,8 @@ async function createCommitStatus({ sha, state, targetUrl }) {
     );
   }
 }
+
+await verifyStatusProducerPermissions();
 
 function globToRegExp(pattern) {
   let expression = "";
@@ -344,14 +402,10 @@ const description = dependabotScope.eligible
     ? `${approvalDescription}；${leaderDescription}`
     : `${approvalDescription}；审批数不足`;
 
-const workflowUrl = process.env.GITHUB_RUN_ID
-  ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
-  : `https://github.com/${repository}/pull/${pullRequestNumber}`;
-
 await createCommitStatus({
   sha: headSha,
   state,
-  targetUrl: workflowUrl,
+  targetUrl: statusTargetUrl(),
 });
 
 if (state !== "success") process.exit(1);

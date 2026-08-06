@@ -1,6 +1,7 @@
 const coreAuthorAssociations = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
 const leaderReviewModes = new Set(["required", "self-or-exempt"]);
 const countableReviewStates = new Set(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]);
+const pusherEvidenceStatusContext = "governance-review-pusher";
 
 function globToRegExp(pattern) {
   let expression = "";
@@ -163,6 +164,39 @@ export function selectLastPusherEvent(events, headSha, headRef = null) {
   const event = candidates[0];
   if (!event) return null;
   return { login: event.actor.login, eventId: event.id };
+}
+
+export function selectPersistedPusherStatus(statuses) {
+  const candidates = (Array.isArray(statuses) ? statuses : [])
+    .filter(
+      (status) =>
+        status?.context === pusherEvidenceStatusContext &&
+        status?.state === "success" &&
+        status?.creator?.login === "github-actions[bot]" &&
+        typeof status?.description === "string" &&
+        status.description.startsWith("actual-pusher:"),
+    )
+    .map((status) => {
+      try {
+        const login = decodeURIComponent(status.description.slice("actual-pusher:".length));
+        if (!login) return null;
+        return { login, statusId: status.id, createdAt: status.created_at || "" };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.createdAt);
+      const rightTime = Date.parse(right.createdAt);
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+      return Number(right.statusId || 0) - Number(left.statusId || 0);
+    });
+  const status = candidates[0];
+  if (!status) return null;
+  return { login: status.login, statusId: status.statusId };
 }
 
 export function dependabotApprovalForHead({ reviews, headSha, policy, lastPusher }) {
