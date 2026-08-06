@@ -41,7 +41,9 @@ Use the smallest relevant local check first, then the complete check before a
 push. Every required status must report either a real check or a deterministic
 no-op. Stacked pull requests express dependency order; Merge Queue validates a
 combined commit when enabled. Neither mechanism changes review or security
-requirements.
+requirements. `governance-review.yml` is a read-only compatibility status for
+the existing remote Ruleset and can be retired after an administrator reads
+back the replacement policy.
 
 The worktree harness keeps concurrent tasks in separate directories, rejects
 the root checkout, detects scope overlap, and retains dirty or unpushed work.
