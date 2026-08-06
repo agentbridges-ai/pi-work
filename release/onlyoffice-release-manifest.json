@@ -11,34 +11,34 @@
     },
     "onlyoffice-browser": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
-      "version": "0.5.13",
-      "commitSha": "b1759ee83975885d8f346560a99f1b2e94260b57"
+      "version": "0.5.14",
+      "commitSha": "376b6bbb45a357e7f492f68eda11e5797603e6c5"
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
       "version": "0.95.0",
-      "integrationBaseCommit": "26fa2e544d22bdd666b6041a3144c2001335dc0f"
+      "integrationBaseCommit": "8a2c7194f73dbb92c310f75b6db093dc96034a79"
     }
   },
   "npmPackage": {
     "name": "@agentbridges-ai/onlyoffice-browser",
-    "version": "0.5.13",
+    "version": "0.5.14",
     "publish": true,
-    "integrity": "sha512-00SSlMuSqLk4khEiVN+oaMEXfgC9FpMpczYJ0Yl/9xucqR8HWLY2ffc+yHRg2H7zpvljq7txIngWCMauzxy/uw==",
-    "gitHead": "4ed9febf1d4851279f817abd0b857bc874943128",
-    "sourceCommit": "4ed9febf1d4851279f817abd0b857bc874943128"
+    "integrity": "sha512-+TyZ2OBSdVt61/sDMpGbtzk+98oT1XaFu4ETjXzFDVUYH1XHolnQZ1aNJjL1UpCl3vSILj4UzAlj0XynqgBCYA==",
+    "gitHead": "376b6bbb45a357e7f492f68eda11e5797603e6c5",
+    "sourceCommit": "376b6bbb45a357e7f492f68eda11e5797603e6c5"
   },
   "runtimeIdentity": {
-    "packageVersion": "0.5.13",
-    "sourceCommit": "b1759ee83975885d8f346560a99f1b2e94260b57",
-    "hostBuildId": "office-host-0.5.13-r1",
-    "assetManifestDigest": "d20aa1bebc446a4a6bbb1b36e8fde93af6ba404a5c57abdba12eac9b6bc96e77"
+    "packageVersion": "0.5.14",
+    "sourceCommit": "376b6bbb45a357e7f492f68eda11e5797603e6c5",
+    "hostBuildId": "office-host-0.5.14-r1",
+    "assetManifestDigest": "5bdf32e9b2dadca1e15b9a962d23021afbcab28084a9d9cbc5c0a7e9c37258cd"
   },
   "releaseManifest": {
     "version": 5,
-    "releaseId": "v0.5.13-b9f16cb6fece3d63",
-    "sha256": "e85e5050085eb7bffffcfece17c819518062613ad3b7921147905696c10eae66",
-    "hostBuildId": "42f78c4cfea1b77f0ae5caa339aebaadfd8f48946b7ea8cbbfe54f1d4f1d13da",
+    "releaseId": "v0.5.14-9cfcfbd8d847d300",
+    "sha256": "d6f7bd28a7b03cd12fa79d1842ed73d1eaa25120037a39a87c7f6f9ba98c20f5",
+    "hostBuildId": "fe4b762c7c59b9ce15b500ec97309452c63c599592d612813c6e5da261b0ff1d",
     "channel": "stable-v5"
   },
   "lifecycle": "candidate",
@@ -50,7 +50,7 @@
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "0e16c9b10c98945578ab2d11103b81a29e317914820bd45f2234bdaaec11df19"
+      "sha256": "ba729a95a00126d900688d90a489963d082dc790a0881d62587719b00e68af33"
     },
     {
       "repository": "onlyoffice-browser",
