@@ -220,7 +220,14 @@ export function validatePolicy(policy) {
     );
   }
   const requiredSurfaceMetadata = {
-    issues: ["labels", "milestone", "tracker-issue", "issue-forms"],
+    issues: [
+      "labels",
+      "milestone",
+      "tracker-issue",
+      "issue-forms",
+      "public-read-issue-creation",
+      "blank-issues",
+    ],
     discussions: ["categories", "governance-entry", "moderation-owner"],
     pullRequests: [
       "template",

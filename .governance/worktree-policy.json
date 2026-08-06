@@ -48,7 +48,14 @@
       "code": { "required": true, "sourceOfTruth": "repository" },
       "issues": {
         "required": true,
-        "requiredMetadata": ["labels", "milestone", "tracker-issue", "issue-forms"]
+        "requiredMetadata": [
+          "labels",
+          "milestone",
+          "tracker-issue",
+          "issue-forms",
+          "public-read-issue-creation",
+          "blank-issues"
+        ]
       },
       "discussions": {
         "required": true,

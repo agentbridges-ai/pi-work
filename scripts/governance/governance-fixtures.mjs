@@ -99,6 +99,22 @@ assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
+assert.equal(policy.issueCreation.publicReadAccess, true);
+assert.equal(policy.issueCreation.allowBlankIssues, true);
+assert.deepEqual(policy.issueCreation.templates, [
+  ".github/ISSUE_TEMPLATE/bug.yml",
+  ".github/ISSUE_TEMPLATE/feature.yml",
+]);
+assert.match(
+  readFileSync(join(root, ".github/ISSUE_TEMPLATE/config.yml"), "utf8"),
+  /^blank_issues_enabled:\s*true\s*$/m,
+);
+for (const template of policy.issueCreation.templates) {
+  const source = readFileSync(join(root, template), "utf8");
+  assert.match(source, /^name:\s*.+$/m);
+  assert.match(source, /^description:\s*.+$/m);
+  assert.match(source, /^body:\s*$/m);
+}
 assert.equal(leaderReviewMode(policy), "self-or-exempt");
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 0);
 const leaderNoReviewCount = approvalCountForHead({

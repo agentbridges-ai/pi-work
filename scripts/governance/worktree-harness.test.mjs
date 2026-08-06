@@ -137,6 +137,14 @@ describe("isolated worktree harness", () => {
     assert.equal(orchestration.mergeQueue.purpose, "combined-validation-only");
     const surface = policyFixture.githubRepositorySurface;
     assert.equal(surface.harnessRemoteWrites, false);
+    assert.deepEqual(surface.tabs.issues.requiredMetadata, [
+      "labels",
+      "milestone",
+      "tracker-issue",
+      "issue-forms",
+      "public-read-issue-creation",
+      "blank-issues",
+    ]);
     assert.equal(surface.tabs.discussions.required, true);
     assert.deepEqual(surface.tabs.discussions.requiredMetadata, [
       "categories",

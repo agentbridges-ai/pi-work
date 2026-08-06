@@ -35,8 +35,11 @@ milestone 和 Development 链接（tracker issue、依赖和 stacked-pr 关系�
 必须有 labels/milestones/issue forms，Discussions 必须有 categories、明确的治理入口和
 moderation owner，PR 必须有 template、required checks，Actions 必须有
 `merge_group`/只读默认权限/SHA pinning，Security and quality 必须覆盖 PVR、Secret
-Scanning、Dependabot、CodeQL 和 Dependency Review。Projects 仅作为可选视图，Wiki
-不能成为第二治理事实源；Insights 只读，Settings 只允许 root-coordinator 的显式
+Scanning、Dependabot、CodeQL 和 Dependency Review。公开仓库允许有 read access 的
+用户创建 Issue；`config.yml` 开启 blank issues 并提供 Bug/Feature Forms。安全问题
+只进入 Private Vulnerability Reporting。Projects 作为 milestone/tracker 的可选视图，
+可以按 milestone、状态和风险做汇总，但不能成为第二事实源；Wiki 提供入口和操作
+摘要，链接回仓库文档，不复制策略。Insights 只读，Settings 只允许 root-coordinator 的显式
 管理员 readback/apply。harness 不直接写 GitHub，缺字段会在本地 plan/claim 失败。
 
 ### Tracker、依赖与阻塞约定

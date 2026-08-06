@@ -26,6 +26,22 @@ function gh(method, endpoint, body) {
   return result.stdout ? JSON.parse(result.stdout) : null;
 }
 
+function graphql(query, variables = {}) {
+  const args = ["api", "graphql", "-f", `query=${query}`];
+  for (const [key, value] of Object.entries(variables)) {
+    args.push("-f", `${key}=${value}`);
+  }
+  const result = spawnSync("gh", args, { cwd: root, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`GraphQL readback failed: ${result.stderr || result.stdout}`);
+  }
+  const payload = result.stdout ? JSON.parse(result.stdout) : {};
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message).join("; "));
+  }
+  return payload.data;
+}
+
 function requiredReviewers(teamId, approvals, filePatterns) {
   return [
     {
@@ -164,6 +180,20 @@ function readbackDrift() {
   if (repositorySettings.has_discussions !== true) drift.push("Discussions tab is not enabled");
   if (repositorySettings.has_projects !== true) drift.push("Projects tab is not enabled");
   if (repositorySettings.has_wiki !== true) drift.push("Wiki tab is not enabled");
+  try {
+    const [, name] = repository.split("/");
+    const issueCreation = graphql(
+      "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){isBlankIssuesEnabled}}",
+      { owner: org, name },
+    );
+    if (
+      issueCreation?.repository?.isBlankIssuesEnabled !== policy.issueCreation?.publicReadAccess
+    ) {
+      drift.push("public readers are not allowed to create issues");
+    }
+  } catch {
+    drift.push("public issue creation readback is unavailable");
+  }
   const security = repositorySettings.security_and_analysis || {};
   for (const [key, label] of [
     ["secret_scanning", "Secret Scanning"],

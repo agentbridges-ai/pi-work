@@ -17,6 +17,12 @@
     "default": "read",
     "canApprovePullRequestReviews": false
   },
+  "issueCreation": {
+    "publicReadAccess": true,
+    "allowBlankIssues": true,
+    "templates": [".github/ISSUE_TEMPLATE/bug.yml", ".github/ISSUE_TEMPLATE/feature.yml"],
+    "securityContactLink": "https://github.com/agentbridges-ai/pi-work/security/advisories/new"
+  },
   "requiredRepositorySecrets": ["PIWORK_RELEASE_TOKEN"],
   "securityFeatures": [
     "private-vulnerability-reporting",

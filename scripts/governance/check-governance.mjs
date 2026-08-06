@@ -27,6 +27,9 @@ for (const file of [
   "LICENSE",
   ".github/CODEOWNERS",
   ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/ISSUE_TEMPLATE/bug.yml",
+  ".github/ISSUE_TEMPLATE/feature.yml",
   ".governance/controls.json",
   ".governance/github-policy.json",
   ".governance/license-policy.json",
@@ -86,6 +89,21 @@ if (policy) {
   if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
     fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
   }
+  const issueCreation = policy.issueCreation;
+  if (
+    issueCreation?.publicReadAccess !== true ||
+    issueCreation?.allowBlankIssues !== true ||
+    !Array.isArray(issueCreation?.templates) ||
+    issueCreation.templates.length < 2 ||
+    !issueCreation.securityContactLink?.startsWith("https://github.com/")
+  ) {
+    fail.push(
+      "github-policy.json: public issue creation, blank issues, templates, and security contact are required",
+    );
+  }
+  for (const template of issueCreation?.templates || []) {
+    requireFile(template);
+  }
   if (!Array.isArray(policy.securityFeatures) || policy.securityFeatures.length < 5) {
     fail.push("github-policy.json: security feature policy is incomplete");
   }
@@ -95,6 +113,15 @@ if (policy) {
   if (!Array.isArray(policy.highRiskPaths) || policy.highRiskPaths.length < 10) {
     fail.push("github-policy.json: high-risk path policy is incomplete");
   }
+}
+
+const issueConfig = existsSync(join(root, ".github/ISSUE_TEMPLATE/config.yml"))
+  ? readFileSync(join(root, ".github/ISSUE_TEMPLATE/config.yml"), "utf8")
+  : "";
+if (!/^blank_issues_enabled:\s*true\s*$/m.test(issueConfig)) {
+  fail.push(
+    ".github/ISSUE_TEMPLATE/config.yml: blank issue creation must be enabled for public readers",
+  );
 }
 
 const exceptions = readJson(".governance/exceptions.json");
