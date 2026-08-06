@@ -251,13 +251,7 @@ export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
   );
 }
 
-export function approvalCountForHead({
-  reviews,
-  headSha,
-  authorLogin,
-  policy,
-  headCommit = null,
-}) {
+export function approvalCountForHead({ reviews, headSha, authorLogin, policy, headCommit = null }) {
   const excludedPushers = [headCommit?.authorLogin, headCommit?.committerLogin];
   const approvedReviewers = countableReviewersForHead(
     reviews,

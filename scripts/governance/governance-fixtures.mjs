@@ -266,9 +266,7 @@ assert.equal(
 );
 assert.equal(
   approvalCountForHead({
-    reviews: [
-      { state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } },
-    ],
+    reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: policy.leader } }],
     headSha: "head",
     authorLogin: "community-contributor",
     policy: fixturePolicy,
