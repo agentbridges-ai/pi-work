@@ -244,7 +244,7 @@ assert.deepEqual(
 );
 assert.equal(
   classifyDependabotFiles(
-    [{ path: "web/package.json", patch: "@@ -1 +1 @@\n-  \"x\": 1\n+  \"x\": 2" }],
+    [{ path: "web/package.json", patch: '@@ -1 +1 @@\n-  "x": 1\n+  "x": 2' }],
     policy,
   ).eligible,
   true,
@@ -258,17 +258,20 @@ for (const forbiddenPath of ["web/server/index.ts", "release/onlyoffice-release-
   );
 assert.equal(
   classifyDependabotFiles(
-    [{ path: ".github/workflows/codeql.yml", patch: "@@ -1 +1 @@\n-        run: old\n+        run: new" }],
+    [
+      {
+        path: ".github/workflows/codeql.yml",
+        patch: "@@ -1 +1 @@\n-        run: old\n+        run: new",
+      },
+    ],
     policy,
   ).eligible,
   false,
   "workflow code changes are not action-pin-only",
 );
 assert.equal(
-  classifyDependabotFiles(
-    [{ path: ".github/workflows/deploy.yml", patch: actionPinPatch }],
-    policy,
-  ).eligible,
+  classifyDependabotFiles([{ path: ".github/workflows/deploy.yml", patch: actionPinPatch }], policy)
+    .eligible,
   false,
   "deploy workflow action pins remain high-risk",
 );
@@ -305,10 +308,7 @@ assert.equal(
   false,
   "Leader cannot satisfy native last-push approval for a manually replayed head",
 );
-assert.equal(
-  leaderIsLastPusher({ authorLogin: policy.leader }, policy),
-  true,
-);
+assert.equal(leaderIsLastPusher({ authorLogin: policy.leader }, policy), true);
 assert.equal(
   dependabotApprovalForHead({
     reviews: [{ ...dependabotLeaderReview, commit: { oid: "old" } }],

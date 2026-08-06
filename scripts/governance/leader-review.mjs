@@ -185,7 +185,7 @@ while (!filesDone || !reviewsDone) {
     reviews.push(...(reviewsConnection?.nodes || []));
     const reviewsPage = reviewsConnection?.pageInfo;
     reviewsDone = !reviewsPage?.hasNextPage;
-  reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
+    reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
   }
 }
 // GraphQL exposes paths but not patches on PullRequestChangedFile. Read the
@@ -205,9 +205,11 @@ if (dependabotAuthor && dependabotScope.eligible) {
     headCommitError = error instanceof Error ? error.message : String(error);
   }
 }
-const highRisk = !dependabotScope.eligible && files.some((file) =>
-  policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
-);
+const highRisk =
+  !dependabotScope.eligible &&
+  files.some((file) =>
+    policy.highRiskPaths.some((pattern) => globToRegExp(pattern).test(file.path)),
+  );
 const authorAssociation = pullRequest.author_association || "NONE";
 const coreAuthor = isCoreAuthor(pullRequest.user.login, policy, authorAssociation);
 const requiredApprovals = requiredApprovalsForAuthor(
@@ -244,10 +246,9 @@ const state = dependabotScope.eligible
   : approvalsSatisfied && (!highRisk || leaderParticipatedForHead)
     ? "success"
     : "failure";
-const authorDescription =
-  dependabotScope.eligible
-    ? "Dependabot 低风险自动化"
-    : pullRequest.user.login === policy.leader
+const authorDescription = dependabotScope.eligible
+  ? "Dependabot 低风险自动化"
+  : pullRequest.user.login === policy.leader
     ? policy.leader
     : coreAuthor
       ? "非 Leader Core 作者"
@@ -265,8 +266,8 @@ const leaderDescription = !highRisk
 const description = dependabotScope.eligible
   ? `${approvalDescription}；原生 last-push、签名提交和必需状态仍由 GitHub Ruleset 强制`
   : approvalsSatisfied
-  ? `${approvalDescription}；${leaderDescription}`
-  : `${approvalDescription}；审批数不足`;
+    ? `${approvalDescription}；${leaderDescription}`
+    : `${approvalDescription}；审批数不足`;
 
 const workflowUrl = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`

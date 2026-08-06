@@ -19,10 +19,8 @@ export function pathMatches(patterns, path) {
 }
 
 export function isDependabotAuthor(authorLogin, policy) {
-  const actors =
-    policy.dependabotReview?.authorLogins ||
-    policy.dependabotReview?.actorLogins ||
-    ["dependabot[bot]", "app/dependabot"];
+  const actors = policy.dependabotReview?.authorLogins ||
+    policy.dependabotReview?.actorLogins || ["dependabot[bot]", "app/dependabot"];
   return typeof authorLogin === "string" && actors.includes(authorLogin);
 }
 
@@ -60,7 +58,10 @@ export function classifyDependabotFiles(files, policy) {
     if (typeof path !== "string") return { eligible: false, reason: "changed file has no path" };
 
     if (pathMatches(config.excludedWorkflowPaths || [], path)) {
-      return { eligible: false, reason: `${path} is an excluded release/security/governance workflow` };
+      return {
+        eligible: false,
+        reason: `${path} is an excluded release/security/governance workflow`,
+      };
     }
     const isWorkflowActionPin = pathMatches(config.workflowActionPinPaths || [], path);
     const isSupportingFixture = pathMatches(config.supportingFixturePaths || [], path);
@@ -94,10 +95,16 @@ export function classifyDependabotFiles(files, policy) {
     }
 
     if (pathMatches(config.excludedPaths || [], path)) {
-      return { eligible: false, reason: `${path} is in an excluded high-risk/product/security/release path` };
+      return {
+        eligible: false,
+        reason: `${path} is in an excluded high-risk/product/security/release path`,
+      };
     }
     if (!isDependencyPath) {
-      return { eligible: false, reason: `${path} is outside dependency manifests, lockfiles, and action pins` };
+      return {
+        eligible: false,
+        reason: `${path} is outside dependency manifests, lockfiles, and action pins`,
+      };
     }
   }
 
