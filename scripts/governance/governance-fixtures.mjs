@@ -113,6 +113,7 @@ const leaderReviewWorkflow = readFileSync(
   "utf8",
 );
 assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
+assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");

@@ -235,6 +235,9 @@ const leaderReviewWorkflow = readFileSync(
 if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
   fail.push("leader-review workflow must not expose workflow_dispatch");
 }
+if (!/ref:\s*refs\/heads\/main\s*$/m.test(leaderReviewWorkflow)) {
+  fail.push("leader-review workflow must checkout trusted refs/heads/main governance code");
+}
 
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;

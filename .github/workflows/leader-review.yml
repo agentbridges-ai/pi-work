@@ -23,7 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          # Never execute governance code from a PR-controlled base branch.
+          # The default branch is the only trusted governance source.
+          ref: refs/heads/main
           persist-credentials: false
       - name: Governance review no-op for merge group
         if: ${{ github.event_name == 'merge_group' }}
@@ -36,13 +38,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PIWORK_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
         run: |
-          # pull_request_target checks out the trusted base ref. During the
-          # governance bootstrap that ref predates this script, so report a
-          # controlled no-op instead of executing untrusted PR code or
-          # producing a missing-module failure. After the baseline merges,
-          # the same step executes the full read-only metadata check.
+          # The checkout is always the trusted default branch. During the
+          # governance bootstrap that branch may predate this script, so
+          # report a controlled no-op instead of producing a missing-module
+          # failure. After the baseline merges, run the full metadata check.
           if [[ -f scripts/governance/leader-review.mjs ]]; then
             node scripts/governance/leader-review.mjs
           else
-            echo "Governance baseline is not present on the trusted base ref; controlled bootstrap no-op."
+            echo "Governance baseline is not present on trusted main; controlled bootstrap no-op."
           fi
