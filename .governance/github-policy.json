@@ -16,6 +16,13 @@
     "failClosed": true,
     "ownershipMetadata": "CODEOWNERS",
     "lastPushApprovalEnforcement": "governance-review",
+    "leaderVote": {
+      "reviewer": "Misakago",
+      "scope": "all-pull-requests-including-automation",
+      "currentHead": true,
+      "countsOnce": true,
+      "authorRule": "self-or-exempt"
+    },
     "authorAwareLastPush": {
       "enforcedBy": "governance-review",
       "requireCurrentHeadReview": true,
@@ -23,6 +30,12 @@
       "dependabotLeaderCannotBeHeadCommitter": true
     },
     "coreReviewerLogins": ["Misakago"],
+    "reviewerAllowlist": {
+      "source": "leader-managed-explicit-identities",
+      "minimumIdentitiesForNonLeaderCore": 2,
+      "bootstrapState": "leader-only",
+      "unsatisfiableBehavior": "fail-closed-until-leader-enrolls-identities"
+    },
     "unknownReviewerBehavior": "reject",
     "authorAwareRules": {
       "leader": {
@@ -99,7 +112,7 @@
       ".github/workflows/verify.yml"
     ],
     "workflowActionPinOnly": true,
-    "workflowActionPinPattern": "^\\s*uses:\\s*[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}(?:\\s+#.*)?$",
+    "workflowActionPinPattern": "^\\s*(?:-\\s*)?uses:\\s*[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}(?:\\s+#.*)?$",
     "supportingFixturePaths": ["scripts/governance/dependabot-fixtures.mjs"],
     "supportingFixturePattern": "^\\s*\"[0-9a-f]{40}\",?\\s*$",
     "excludedWorkflowPaths": [
@@ -157,6 +170,7 @@
     "canApprovePullRequestReviews": false
   },
   "requiredRepositorySecrets": ["PIWORK_RELEASE_TOKEN"],
+  "requiredStatusCheckIntegrationId": 15368,
   "securityFeatures": [
     "private-vulnerability-reporting",
     "secret-scanning",

@@ -3,10 +3,12 @@
 PR 必须通过治理、质量、认证 E2E、SRT、完整验证、Landing、依赖和治理评审状态。路径无关的作业也必须报告确定的成功 no-op 状态。
 
 `governance-review` 是 trusted `pull_request_target` 产生的必需状态，负责按作者和显式
-reviewer allowlist 计算 0/2/1 审批；CODEOWNERS 只记录 ownership，不再由 Ruleset
+reviewer allowlist 计算 0/2/1 审批；Leader 对所有其他 PR（包括自动化作者）的一次当前-head
+有效审批计一票，Leader 作者为 self-or-exempt；CODEOWNERS 只记录 ownership，不再由 Ruleset
 强制 Team/CODEOWNER 审批。native last-push approval 为 false 以支持 Leader self/exempt，
 `governance-review` 对需审批作者执行 current-head 约束；Ruleset 仍强制签名、线性历史、
-线程解决与全部 required checks，因此状态缺失、allowlist 漂移或未知 reviewer 都 fail-closed。
+线程解决与全部 required checks，且状态只接受 GitHub Actions integration `15368`，因此状态缺失、
+allowlist 漂移或未知 reviewer 都 fail-closed。
 
 主分支保持可发布。Release Please 使用 SemVer 标签和根 CHANGELOG；Landing 构建一次并部署同一 artifact。OnlyOffice 的候选、生产身份和 Promotion 规则继续由现有 manifest 和独立仓治理。
 

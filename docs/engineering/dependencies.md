@@ -25,7 +25,7 @@ JavaScript/TypeScript 分支并移除 `autobuild`；GitHub Actions 分支保留�
 ## Dependabot 低风险审批
 
 Dependabot 作者（`dependabot[bot]` 或 `app/dependabot`）的依赖升级 PR 可以由
-Leader `@Misakago` 单独审批，但只适用于 `.governance/github-policy.json` 中列明的
+Leader `@Misakago` 对当前 head 单独投一票审批，但只适用于 `.governance/github-policy.json` 中列明的
 依赖清单、锁文件、SHA 固定 Actions，以及随 Actions 一起变化的精确 SHA fixture。
 `web/server`、`web/shared`、前端产品代码、认证/安全、发布清单、治理配置和其他
 高风险路径不会因为作者是 Dependabot 而降级；混入这些路径会回到普通/高风险评审。

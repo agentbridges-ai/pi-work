@@ -113,16 +113,24 @@ assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
+assert.equal(policy.requiredStatusCheckIntegrationId, 15368);
 assert.equal(policy.reviewEnforcement.statusCheck, "governance-review");
 assert.equal(policy.reviewEnforcement.mode, "trusted-pull-request-target");
 assert.equal(policy.reviewEnforcement.failClosed, true);
 assert.equal(policy.reviewEnforcement.ownershipMetadata, "CODEOWNERS");
 assert.equal(policy.reviewEnforcement.lastPushApprovalEnforcement, "governance-review");
+assert.equal(policy.reviewEnforcement.leaderVote.reviewer, policy.leader);
+assert.equal(policy.reviewEnforcement.leaderVote.scope, "all-pull-requests-including-automation");
+assert.equal(policy.reviewEnforcement.leaderVote.currentHead, true);
+assert.equal(policy.reviewEnforcement.leaderVote.countsOnce, true);
+assert.equal(policy.reviewEnforcement.leaderVote.authorRule, "self-or-exempt");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.enforcedBy, "governance-review");
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.requireCurrentHeadReview, true);
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, true);
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
+assert.equal(policy.reviewEnforcement.reviewerAllowlist.minimumIdentitiesForNonLeaderCore, 2);
+assert.equal(policy.reviewEnforcement.reviewerAllowlist.bootstrapState, "leader-only");
 assert.equal(policy.reviewEnforcement.nativeRuleset.requiredApprovingReviewCount, 0);
 assert.deepEqual(policy.reviewEnforcement.nativeRuleset.requiredReviewers, []);
 assert.equal(policy.reviewEnforcement.nativeRuleset.requireCodeOwnerReview, false);
@@ -305,7 +313,7 @@ assert.deepEqual(
   "a later CHANGES_REQUESTED review supersedes an earlier approval",
 );
 
-const actionPinPatch = `@@ -1 +1 @@\n-        uses: github/codeql-action/init@${"a".repeat(40)} # v4.37.4\n+        uses: github/codeql-action/init@${"b".repeat(40)} # v4.37.5`;
+const actionPinPatch = `@@ -1 +1 @@\n--        uses: github/codeql-action/init@${"a".repeat(40)} # v4.37.4\n+-        uses: github/codeql-action/init@${"b".repeat(40)} # v4.37.5`;
 const fixturePatch = `@@ -1 +1 @@\n-  "${"a".repeat(40)}",\n+  "${"b".repeat(40)}",`;
 assert.equal(isDependabotAuthor("dependabot[bot]", policy), true);
 assert.equal(isDependabotAuthor("app/dependabot", policy), true);

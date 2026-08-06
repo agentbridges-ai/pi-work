@@ -61,7 +61,10 @@ function mainRuleset(leadsId) {
         parameters: {
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: false,
-          required_status_checks: policy.requiredChecks.map((context) => ({ context })),
+          required_status_checks: policy.requiredChecks.map((context) => ({
+            context,
+            integration_id: policy.requiredStatusCheckIntegrationId,
+          })),
         },
       },
     ],
@@ -254,13 +257,22 @@ function readbackDrift() {
       "main ruleset native reviewer settings must defer approval counting to governance-review",
     );
   }
-  const contexts =
-    main?.rules
-      ?.find((rule) => rule.type === "required_status_checks")
-      ?.parameters?.required_status_checks?.map((check) => check.context) || [];
-  for (const requiredCheck of policy.requiredChecks) {
-    if (!contexts.includes(requiredCheck))
-      drift.push(`main ruleset is missing required check ${requiredCheck}`);
+  const mainStatusChecks =
+    main?.rules?.find((rule) => rule.type === "required_status_checks")?.parameters
+      ?.required_status_checks || [];
+  const expectedStatusChecks = policy.requiredChecks.map((context) => ({
+    context,
+    integration_id: policy.requiredStatusCheckIntegrationId,
+  }));
+  if (
+    mainStatusChecks.length !== expectedStatusChecks.length ||
+    expectedStatusChecks.some(
+      (expected, index) =>
+        mainStatusChecks[index]?.context !== expected.context ||
+        mainStatusChecks[index]?.integration_id !== expected.integration_id,
+    )
+  ) {
+    drift.push("main ruleset required checks are not bound to GitHub Actions");
   }
   const highRisk = rulesets.find((item) => item.name === "Piwork high-risk review");
   const highRiskParameters =

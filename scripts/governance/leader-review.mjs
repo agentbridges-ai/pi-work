@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import {
   approvalCountForHead,
   classifyDependabotFiles,
+  coreReviewerLogins,
   dependabotApprovalForHead,
   isCoreAuthor,
   isDependabotAuthor,
@@ -32,14 +33,12 @@ const repository = process.env.GITHUB_REPOSITORY;
 if (repository !== policy.repository) {
   throw new Error(`runner repository ${repository} does not match governance policy`);
 }
-const pullRequestRef = /^refs\/pull\/([1-9][0-9]*)\/merge$/.exec(process.env.GITHUB_REF || "");
-if (!pullRequestRef) throw new Error("GITHUB_REF is not a pull request merge ref");
-const pullRequestNumber = Number(pullRequestRef[1]);
+const pullRequestNumber = Number(process.env.PIWORK_PULL_REQUEST_NUMBER);
 if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber < 1) {
-  throw new Error("pull request ref number is invalid");
+  throw new Error("PIWORK_PULL_REQUEST_NUMBER is invalid");
 }
 if (Number(pullRequest.number) !== pullRequestNumber) {
-  throw new Error("event pull request number does not match GITHUB_REF");
+  throw new Error("event pull request number does not match PIWORK_PULL_REQUEST_NUMBER");
 }
 
 const graphqlEndpoint = "https://api.github.com/graphql";
@@ -263,7 +262,17 @@ const approvalCount = approvalCountForHead({
   authorLogin: pullRequest.user.login,
   policy,
 });
-const approvalsSatisfied = approvalCount >= requiredApprovals;
+const allowlistedReviewers = coreReviewerLogins(policy);
+const reviewerCapacity =
+  allowlistedReviewers.size -
+  (coreAuthor &&
+  pullRequest.user.login !== policy.leader &&
+  allowlistedReviewers.has(pullRequest.user.login)
+    ? 1
+    : 0);
+const allowlistUnsatisfiable =
+  coreAuthor && pullRequest.user.login !== policy.leader && reviewerCapacity < requiredApprovals;
+const approvalsSatisfied = !allowlistUnsatisfiable && approvalCount >= requiredApprovals;
 const leaderParticipatedForHead = leaderParticipated({
   authorLogin: pullRequest.user.login,
   reviews,
@@ -293,11 +302,13 @@ const authorDescription = dependabotScope.eligible
       : coreAuthor
         ? "非 Leader Core 作者"
         : "社区作者";
-const approvalDescription = dependabotScope.eligible
-  ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
-  : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
-    ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
-    : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
+const approvalDescription = allowlistUnsatisfiable
+  ? `${authorDescription}：显式 Core allowlist 仅可提供 ${Math.max(reviewerCapacity, 0)} 个非作者审批，但规则要求 ${requiredApprovals} 个；Leader 必须先登记足够 Core 身份`
+  : dependabotScope.eligible
+    ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
+    : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
+      ? `${authorDescription}：Leader 作者规则免除额外治理审批（要求 ${requiredApprovals}）${leaderSelfReview ? "；检测到当前 head 的 Leader self-review（仅显示，不创建 Review）" : "；无 self-review 也通过"}`
+      : `${authorDescription}：${approvalCount}/${requiredApprovals} 个当前 head 有效审批`;
 const leaderDescription = !highRisk
   ? "普通改动：Leader 参与检查不适用"
   : leaderParticipatedForHead

@@ -86,6 +86,9 @@ if (policy) {
   if (!policy.requiredRepositorySecrets?.includes("PIWORK_RELEASE_TOKEN")) {
     fail.push("github-policy.json: PIWORK_RELEASE_TOKEN repository secret is required");
   }
+  if (policy.requiredStatusCheckIntegrationId !== 15368) {
+    fail.push("github-policy.json: required status checks must be bound to GitHub Actions (15368)");
+  }
   if (!Array.isArray(policy.securityFeatures) || policy.securityFeatures.length < 5) {
     fail.push("github-policy.json: security feature policy is incomplete");
   }
@@ -105,6 +108,11 @@ if (policy) {
     enforcement.failClosed !== true ||
     enforcement.ownershipMetadata !== "CODEOWNERS" ||
     enforcement.lastPushApprovalEnforcement !== "governance-review" ||
+    enforcement.leaderVote?.reviewer !== policy.leader ||
+    enforcement.leaderVote?.scope !== "all-pull-requests-including-automation" ||
+    enforcement.leaderVote?.currentHead !== true ||
+    enforcement.leaderVote?.countsOnce !== true ||
+    enforcement.leaderVote?.authorRule !== "self-or-exempt" ||
     enforcement.authorAwareLastPush?.enforcedBy !== "governance-review" ||
     enforcement.authorAwareLastPush?.requireCurrentHeadReview !== true ||
     enforcement.authorAwareLastPush?.leaderAuthorExempt !== true ||
@@ -112,6 +120,11 @@ if (policy) {
     enforcement.unknownReviewerBehavior !== "reject" ||
     !Array.isArray(enforcement.coreReviewerLogins) ||
     !enforcement.coreReviewerLogins.includes(policy.leader) ||
+    enforcement.reviewerAllowlist?.source !== "leader-managed-explicit-identities" ||
+    enforcement.reviewerAllowlist?.minimumIdentitiesForNonLeaderCore !== 2 ||
+    enforcement.reviewerAllowlist?.bootstrapState !== "leader-only" ||
+    enforcement.reviewerAllowlist?.unsatisfiableBehavior !==
+      "fail-closed-until-leader-enrolls-identities" ||
     !nativeReview ||
     nativeReview.requiredApprovingReviewCount !== 0 ||
     !Array.isArray(nativeReview.requiredReviewers) ||
