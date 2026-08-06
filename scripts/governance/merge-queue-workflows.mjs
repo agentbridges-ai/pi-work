@@ -61,11 +61,14 @@ function requireOnlyOfficeEventRange(file, text) {
       `ONLYOFFICE_INTEGRATION_EVENT_${side}_SHA: \${{ ` +
       `github.event_name == 'pull_request' && github.event.pull_request.${pullRequestPath} || ` +
       `github.event_name == 'merge_group' && github.event.merge_group.${mergeGroupPath} || ` +
+      (side === "BASE"
+        ? "github.event_name == 'push' && github.event.before || "
+        : "github.event_name == 'push' && github.sha || ") +
       "github.sha }}";
     if (!text.includes(expression)) {
       failures.push(
         file +
-          `: OnlyOffice ${side.toLowerCase()} range must use PR metadata, merge-group metadata, or the current commit`,
+          `: OnlyOffice ${side.toLowerCase()} range must use PR, merge-group, push metadata, or the current commit`,
       );
     }
   }
