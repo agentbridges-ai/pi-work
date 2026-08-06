@@ -261,8 +261,13 @@ const leaderReviewWorkflow = readFileSync(
   join(root, ".github/workflows/leader-review.yml"),
   "utf8",
 );
+const leaderReviewSource = readFileSync(join(root, "scripts/governance/leader-review.mjs"), "utf8");
 const bootstrapAuditWorkflow = readFileSync(
   join(root, ".github/workflows/governance-bootstrap-audit.yml"),
+  "utf8",
+);
+const bootstrapAuditSource = readFileSync(
+  join(root, "scripts/governance/bootstrap-audit.mjs"),
   "utf8",
 );
 if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
@@ -279,6 +284,19 @@ if (!/^\s*actions:\s*read\s*$/m.test(leaderReviewWorkflow)) {
 if (leaderReviewWorkflow.includes("/actions/permissions/workflow")) {
   fail.push(
     "leader-review workflow must not query the administrator-only Actions permissions endpoint with GITHUB_TOKEN",
+  );
+}
+if (
+  !leaderReviewSource.includes("auditStatusWriterWorkflowChanges") ||
+  !leaderReviewSource.includes("statusWriterAudit.allowed")
+) {
+  fail.push(
+    "leader-review must reject PR-controlled workflow status writers before publishing governance status",
+  );
+}
+if (bootstrapAuditSource.includes("/branches/${defaultBranch}/protection")) {
+  fail.push(
+    "bootstrap audit must not query the administrator-only branch-protection endpoint with GITHUB_TOKEN",
   );
 }
 if (
@@ -301,9 +319,7 @@ if (
   !/pull-requests:\s*read/m.test(bootstrapAuditWorkflow) ||
   !/statuses:\s*read/m.test(bootstrapAuditWorkflow) ||
   !/node scripts\/governance\/bootstrap-audit\.mjs/.test(bootstrapAuditWorkflow) ||
-  !/docs-only PR no-op/.test(
-    readFileSync(join(root, "scripts/governance/bootstrap-audit.mjs"), "utf8"),
-  ) ||
+  !/docs-only PR no-op/.test(bootstrapAuditSource) ||
   /(?:contents|pull-requests|issues|actions):\s*write/m.test(bootstrapAuditWorkflow)
 ) {
   fail.push(
@@ -326,7 +342,7 @@ if (
     "trusted-leader-review-commit-status" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.retention !== "commit-status" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.format !==
-    "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>" ||
+    "actual-pusher:v2:<sha256(repository\\u0000pullRequestNumber\\u0000headRef)>:<urlEncodedLogin>" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus
     .requiresReadOnlyWorkflowPermissions !== true
 ) {

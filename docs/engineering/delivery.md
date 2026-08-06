@@ -7,7 +7,7 @@ reviewer allowlist 计算 0/2/1 审批；Leader 对所有其他 PR（包括自�
 有效审批计一票，Leader 作者为 self-or-exempt；CODEOWNERS 只记录 ownership，不再由 Ruleset
 强制 Team/CODEOWNER 审批。native last-push approval 为 false 以支持 Leader self/exempt，
 `governance-review` 对需审批作者执行 current-head 与实际最后 push 者约束（身份优先来自绑定当前
-`repository + PR number + headRef` 的 trusted `governance-review-pusher` commit status，否则来自匹配当前 head/分支的 head 仓库 `PushEvent` actor；旧格式、跨 PR/分支记录和 PR `opened` opener 不被接受，缺失时 fail-closed；trusted workflow 写入前验证仓库 Actions 默认权限为 read-only 且禁止批准 PR；同一 PR 的 `pull_request_target` 与 `pull_request_review` 并发组隔离，避免跨事件取消 required status）；Ruleset 仍强制签名、线性历史、
+`repository + PR number + headRef` 的 v2 compact trusted `governance-review-pusher` commit status，否则来自匹配当前 head/分支的 head 仓库 `PushEvent` actor；旧格式、超长、跨 PR/分支记录和 PR `opened` opener 不被接受，缺失时 fail-closed；trusted workflow 固定从 main 执行并拒绝 PR workflow 增加 status-writing permission；仓库 Actions 默认权限和禁止批准 PR 设置由管理员治理工具 readback；同一 PR 的 `pull_request_target` 与 `pull_request_review` 并发组隔离，避免跨事件取消 required status）；Ruleset 仍强制签名、线性历史、
 线程解决与全部 required checks，且状态只接受 GitHub Actions integration `15368`，因此状态缺失、
 allowlist 漂移或未知 reviewer 都 fail-closed。
 

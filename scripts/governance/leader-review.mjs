@@ -14,6 +14,7 @@ import {
   leaderSelfReviewForHead,
   pusherEvidenceDescription,
   requiredApprovalsForAuthor,
+  auditStatusWriterWorkflowChanges,
   selectLastPusherEvent,
   selectPersistedPusherStatus,
 } from "./review-policy.mjs";
@@ -105,7 +106,7 @@ async function persistPusherEvidence(sha, login, headRef) {
     sha,
     state: "success",
     context: "governance-review-pusher",
-    description: `actual-pusher:v1:${pusherEvidenceDescription({
+    description: `actual-pusher:v2:${pusherEvidenceDescription({
       repository,
       pullRequestNumber,
       headRef,
@@ -307,6 +308,12 @@ if (typeof authorLogin !== "string" || authorLogin.length === 0) {
 // same trusted PR metadata through REST so Dependabot workflow changes can be
 // restricted to exact SHA-pinned action lines.
 files = await listPullRequestFiles(repository, pullRequestNumber);
+const statusWriterAudit = auditStatusWriterWorkflowChanges(files);
+if (!statusWriterAudit.allowed) {
+  throw new Error(
+    `PR-controlled workflow status writer change rejected: ${statusWriterAudit.failures.join("; ")}`,
+  );
+}
 const dependabotAuthor = isDependabotAuthor(authorLogin, policy);
 const dependabotScope = dependabotAuthor
   ? classifyDependabotFiles(files, policy)

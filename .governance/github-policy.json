@@ -46,7 +46,7 @@
         "source": "trusted-leader-review-commit-status",
         "retention": "commit-status",
         "requiresReadOnlyWorkflowPermissions": true,
-        "format": "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>"
+        "format": "actual-pusher:v2:<sha256(repository\\u0000pullRequestNumber\\u0000headRef)>:<urlEncodedLogin>"
       }
     },
     "coreReviewerLogins": ["Misakago"],

@@ -23,6 +23,7 @@ assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.doesNotMatch(auditSource, /method:\s*["'](?:POST|PUT|PATCH)/);
 assert.doesNotMatch(auditSource, /--apply|createCommitStatus|createIssue/);
 assert.doesNotMatch(auditSource, /actions\/permissions\/workflow/);
+assert.doesNotMatch(auditSource, /branches\/\$\{defaultBranch\}\/protection/);
 assert.doesNotMatch(auditWorkflow, /(?:contents|pull-requests|issues|actions):\s*write/);
 assert.match(auditWorkflow, /workflow_dispatch:/);
 

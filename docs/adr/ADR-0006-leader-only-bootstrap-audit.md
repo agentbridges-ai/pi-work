@@ -24,9 +24,9 @@ Bootstrap 只影响非 Leader Core 作者路径；allowlist 不足以提供两�
 
 `.github/workflows/governance-bootstrap-audit.yml` 在 trusted `main` 上以 read-only 权限
 运行 PR/merge group、main push、schedule 和 workflow dispatch 审计。它只读策略、显式
-allowlist、PR 元数据、工作流权限声明、Ruleset 和旧 Branch Protection readback；PR token
-不查询仅管理员可读的 Actions 权限端点，仓库级 Actions 权限只由显式管理员治理工具
-readback/apply；
+allowlist、PR 元数据、工作流权限声明和 Ruleset readback；PR token 不查询仅管理员可读的
+Actions 权限或 legacy branch-protection 端点，仓库级 Actions/legacy protection readback
+只由显式管理员治理工具执行；
 不修改 policy、Team、Ruleset、Issue、Review 或 PR。docs-only PR 与 merge group 没有可用的
 作者感知数据时仍产生确定的 no-op/审计状态。过期、范围扩大、未知 state、Core allowlist
 达到 3 人或远端 reviewer 漂移均报告失败并要求人工收口。

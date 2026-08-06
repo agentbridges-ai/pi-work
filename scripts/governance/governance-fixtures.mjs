@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { findMutableExternalActionUses } from "../verify-github-actions-pinning.mjs";
 import {
   approvalCountForHead,
+  auditStatusWriterWorkflowChanges,
   approvedReviewersForHead,
   classifyDependabotFiles,
   countableReviewersForHead,
@@ -122,6 +123,38 @@ assert.match(
   leaderReviewWorkflow,
   /group:\s*governance-review-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m,
 );
+assert.deepEqual(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/example.yml",
+      patch: "@@ -1 +1 @@\n-  contents: read\n+  contents: read",
+    },
+  ]),
+  { allowed: true, failures: [] },
+  "ordinary workflow permission changes remain auditable",
+);
+assert.equal(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/example.yml",
+      patch: "@@ -1 +1 @@\n-  contents: read\n+  statuses: write",
+    },
+  ]).allowed,
+  false,
+  "PR-controlled workflows cannot add statuses: write",
+);
+assert.equal(
+  auditStatusWriterWorkflowChanges([
+    { path: ".github/workflows/example.yml", patch: "@@ -1 +1 @@\n+permissions: write-all" },
+  ]).allowed,
+  false,
+  "PR-controlled workflows cannot add permissions: write-all",
+);
+assert.equal(
+  auditStatusWriterWorkflowChanges([{ path: ".github/workflows/example.yml" }]).allowed,
+  false,
+  "workflow changes without an auditable patch fail closed",
+);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
@@ -152,7 +185,8 @@ assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStat
   source: "trusted-leader-review-commit-status",
   retention: "commit-status",
   requiresReadOnlyWorkflowPermissions: true,
-  format: "actual-pusher:v1:<repository>:<pullRequestNumber>:<headRef>:<login>",
+  format:
+    "actual-pusher:v2:<sha256(repository\\u0000pullRequestNumber\\u0000headRef)>:<urlEncodedLogin>",
 });
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
@@ -241,47 +275,50 @@ assert.equal(
   "missing matching PushEvent must fail closed",
 );
 assert.deepEqual(
-  selectPersistedPusherStatus([
-    {
-      id: 20,
-      context: "governance-review-pusher",
-      state: "success",
-      description: `actual-pusher:v1:${pusherEvidenceDescription({
-        repository: policy.repository,
-        pullRequestNumber: 67,
-        headRef: "feature",
-        login: "community-dev",
-      })}`,
-      creator: { login: "github-actions[bot]" },
-      created_at: "2026-08-06T00:01:00Z",
-    },
-    {
-      id: 21,
-      context: "governance-review-pusher",
-      state: "success",
-      description: `actual-pusher:v1:${pusherEvidenceDescription({
-        repository: policy.repository,
-        pullRequestNumber: 67,
-        headRef: "feature",
-        login: "Misakago",
-      })}`,
-      creator: { login: "github-actions[bot]" },
-      created_at: "2026-08-06T00:02:00Z",
-    },
-    {
-      id: 22,
-      context: "governance-review-pusher",
-      state: "success",
-      description: `actual-pusher:v1:${pusherEvidenceDescription({
-        repository: policy.repository,
-        pullRequestNumber: 67,
-        headRef: "feature",
-        login: "spoofed",
-      })}`,
-      creator: { login: "write-capable-user" },
-      created_at: "2026-08-06T00:03:00Z",
-    },
-  ]),
+  selectPersistedPusherStatus(
+    [
+      {
+        id: 20,
+        context: "governance-review-pusher",
+        state: "success",
+        description: `actual-pusher:v2:${pusherEvidenceDescription({
+          repository: policy.repository,
+          pullRequestNumber: 67,
+          headRef: "feature",
+          login: "community-dev",
+        })}`,
+        creator: { login: "github-actions[bot]" },
+        created_at: "2026-08-06T00:01:00Z",
+      },
+      {
+        id: 21,
+        context: "governance-review-pusher",
+        state: "success",
+        description: `actual-pusher:v2:${pusherEvidenceDescription({
+          repository: policy.repository,
+          pullRequestNumber: 67,
+          headRef: "feature",
+          login: "Misakago",
+        })}`,
+        creator: { login: "github-actions[bot]" },
+        created_at: "2026-08-06T00:02:00Z",
+      },
+      {
+        id: 22,
+        context: "governance-review-pusher",
+        state: "success",
+        description: `actual-pusher:v2:${pusherEvidenceDescription({
+          repository: policy.repository,
+          pullRequestNumber: 67,
+          headRef: "feature",
+          login: "spoofed",
+        })}`,
+        creator: { login: "write-capable-user" },
+        created_at: "2026-08-06T00:03:00Z",
+      },
+    ],
+    { repository: policy.repository, pullRequestNumber: 67, headRef: "feature" },
+  ),
   {
     login: "Misakago",
     repository: policy.repository,
@@ -298,7 +335,7 @@ assert.equal(
         id: 23,
         context: "governance-review-pusher",
         state: "success",
-        description: `actual-pusher:v1:${pusherEvidenceDescription({
+        description: `actual-pusher:v2:${pusherEvidenceDescription({
           repository: policy.repository,
           pullRequestNumber: 66,
           headRef: "feature",
@@ -311,6 +348,32 @@ assert.equal(
   ),
   null,
   "pusher evidence from another PR cannot be reused by SHA",
+);
+const compactPusherDescription = `actual-pusher:v2:${pusherEvidenceDescription({
+  repository: policy.repository,
+  pullRequestNumber: 67,
+  headRef: `feature/${"long-branch-segment-".repeat(20)}`,
+  login: "github-actions[bot]",
+})}`;
+assert.ok(
+  compactPusherDescription.length <= 140,
+  "compact pusher evidence remains within GitHub's commit-status description limit",
+);
+assert.equal(
+  selectPersistedPusherStatus(
+    [
+      {
+        id: 24,
+        context: "governance-review-pusher",
+        state: "success",
+        description: "actual-pusher:v1:agentbridges-ai%2Fpi-work:67:feature:community-dev",
+        creator: { login: "github-actions[bot]" },
+      },
+    ],
+    { repository: policy.repository, pullRequestNumber: 67, headRef: "feature" },
+  ),
+  null,
+  "legacy v1 pusher evidence is rejected",
 );
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],

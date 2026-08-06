@@ -228,6 +228,27 @@ function readbackDrift() {
     }
   }
 
+  try {
+    const legacyProtection = gh(
+      "GET",
+      `/repos/${repository}/branches/${policy.defaultBranch}/protection`,
+    );
+    const legacyReviews = legacyProtection?.required_pull_request_reviews;
+    if (legacyReviews?.required_approving_review_count > 0) {
+      drift.push("legacy branch protection still requires approving reviewers");
+    }
+    if (legacyReviews?.require_code_owner_reviews === true) {
+      drift.push("legacy branch protection still requires CODEOWNER approval");
+    }
+    if (legacyReviews?.require_last_push_approval === true) {
+      drift.push("legacy branch protection still requires last-push approval");
+    }
+  } catch (error) {
+    if (!String(error).includes("HTTP 404")) {
+      drift.push("legacy branch-protection readback is unavailable");
+    }
+  }
+
   const rulesetsResponse = gh("GET", `/repos/${repository}/rulesets?includes_parents=false`);
   const rulesetSummaries = Array.isArray(rulesetsResponse)
     ? rulesetsResponse

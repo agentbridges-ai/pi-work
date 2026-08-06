@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const coreAuthorAssociations = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
 const leaderReviewModes = new Set(["required", "self-or-exempt"]);
 const countableReviewStates = new Set(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]);
@@ -42,6 +44,45 @@ function changedPatchLines(patch) {
     .split(/\r?\n/)
     .filter((line) => /^[+-]/.test(line) && !/^(?:---|\+\+\+)/.test(line))
     .map((line) => line.slice(1));
+}
+
+function addedPatchLines(patch) {
+  if (typeof patch !== "string" || patch.length === 0) return null;
+  return patch
+    .split(/\r?\n/)
+    .filter((line) => /^\+(?!\+\+\+)/.test(line))
+    .map((line) => line.slice(1));
+}
+
+const workflowPathPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
+
+/**
+ * A PR-controlled workflow must not be able to mint the sole governance
+ * status. The trusted `pull_request_target` workflow is the only checked-in
+ * status writer; reject any changed workflow that adds status-writing or
+ * write-all permissions. Missing patches fail closed because the changed
+ * workflow contents cannot then be audited.
+ */
+export function auditStatusWriterWorkflowChanges(files) {
+  const failures = [];
+  for (const file of Array.isArray(files) ? files : []) {
+    const path = file?.path || file?.filename;
+    if (typeof path !== "string" || !workflowPathPattern.test(path)) continue;
+    const addedLines = addedPatchLines(file.patch);
+    if (!addedLines) {
+      failures.push(`${path}: workflow patch is unavailable`);
+      continue;
+    }
+    if (
+      addedLines.some((line) =>
+        /\bstatuses\s*:\s*(?:write(?:-all)?|\[[^\]]*\bwrite\b[^\]]*\])/i.test(line),
+      ) ||
+      addedLines.some((line) => /\bpermissions\s*:\s*write-all\b/i.test(line))
+    ) {
+      failures.push(`${path}: changed workflow requests status-writing permissions`);
+    }
+  }
+  return { allowed: failures.length === 0, failures };
 }
 
 function patchMatches(patch, pattern) {
@@ -179,9 +220,15 @@ export function pusherEvidenceDescription({ repository, pullRequestNumber, headR
   ) {
     throw new Error("pusher evidence metadata is invalid");
   }
-  return [repository, String(pullRequestNumber), headRef, login]
-    .map((value) => encodeURIComponent(value))
-    .join(":");
+  const contextDigest = createHash("sha256")
+    .update(`${repository}\u0000${pullRequestNumber}\u0000${headRef}`)
+    .digest("hex");
+  const encodedLogin = encodeURIComponent(login);
+  const description = `${contextDigest}:${encodedLogin}`;
+  if (`actual-pusher:v2:${description}`.length > 140) {
+    throw new Error("pusher evidence description exceeds GitHub's 140-character limit");
+  }
+  return description;
 }
 
 export function selectPersistedPusherStatus(
@@ -195,26 +242,39 @@ export function selectPersistedPusherStatus(
         status?.state === "success" &&
         status?.creator?.login === "github-actions[bot]" &&
         typeof status?.description === "string" &&
-        status.description.startsWith("actual-pusher:v1:"),
+        status.description.startsWith("actual-pusher:v2:"),
     )
     .map((status) => {
       try {
-        const values = status.description
-          .slice("actual-pusher:v1:".length)
-          .split(":")
-          .map((value) => decodeURIComponent(value));
-        if (values.length !== 4) return null;
-        const [statusRepository, statusPullRequestNumber, statusHeadRef, login] = values;
-        const parsedPullRequestNumber = Number(statusPullRequestNumber);
         if (
-          !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(statusRepository) ||
-          !Number.isSafeInteger(parsedPullRequestNumber) ||
-          parsedPullRequestNumber < 1 ||
-          !statusHeadRef ||
-          !login ||
-          (repository !== null && statusRepository !== repository) ||
-          (pullRequestNumber !== null && parsedPullRequestNumber !== pullRequestNumber) ||
-          (headRef !== null && statusHeadRef !== headRef)
+          typeof repository !== "string" ||
+          !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
+          !Number.isSafeInteger(pullRequestNumber) ||
+          pullRequestNumber < 1 ||
+          typeof headRef !== "string" ||
+          headRef.length === 0
+        )
+          return null;
+        const values = status.description.slice("actual-pusher:v2:".length).split(":");
+        if (values.length !== 2) return null;
+        const [contextDigest, encodedLogin] = values;
+        const expectedDigest = createHash("sha256")
+          .update(`${repository}\u0000${pullRequestNumber}\u0000${headRef}`)
+          .digest("hex");
+        if (contextDigest !== expectedDigest) return null;
+        const login = decodeURIComponent(encodedLogin);
+        if (!login || login.includes(":")) return null;
+        const statusRepository = repository;
+        const parsedPullRequestNumber = pullRequestNumber;
+        const statusHeadRef = headRef;
+        if (
+          status.description.length > 140 ||
+          pusherEvidenceDescription({
+            repository: statusRepository,
+            pullRequestNumber: parsedPullRequestNumber,
+            headRef: statusHeadRef,
+            login,
+          }) !== `${contextDigest}:${encodedLogin}`
         )
           return null;
         return {

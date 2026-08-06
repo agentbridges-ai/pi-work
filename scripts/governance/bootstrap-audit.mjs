@@ -374,13 +374,8 @@ async function main() {
       "GITHUB_TOKEN is required for Ruleset readback; use --offline only for local fixtures",
     );
   }
-  const [rulesets, branchProtection] = await Promise.all([
-    readRulesets(),
-    githubJson(`/repos/${repository}/branches/${defaultBranch}/protection`, {
-      allowNotFound: true,
-    }),
-  ]);
-  const drift = auditRulesetReadback(policy, rulesets, branchProtection);
+  const [rulesets] = await Promise.all([readRulesets()]);
+  const drift = auditRulesetReadback(policy, rulesets);
   const leaderReviewWorkflow = readFileSync(
     join(root, ".github/workflows/leader-review.yml"),
     "utf8",
