@@ -23,6 +23,25 @@ if (!pullRequest || !process.env.GITHUB_TOKEN || !process.env.GITHUB_REPOSITORY)
   process.exit(0);
 }
 
+// Keep all REST URL components sourced from GitHub's runner environment rather
+// than from JSON files. The event and policy files are trusted metadata for the
+// review calculation, but CodeQL must not model their contents as an arbitrary
+// outbound URL. Fail closed if the runner identity and checked-in policy do not
+// describe this repository/PR exactly.
+const repository = process.env.GITHUB_REPOSITORY;
+if (repository !== policy.repository) {
+  throw new Error(`runner repository ${repository} does not match governance policy`);
+}
+const pullRequestRef = /^refs\/pull\/([1-9][0-9]*)\/merge$/.exec(process.env.GITHUB_REF || "");
+if (!pullRequestRef) throw new Error("GITHUB_REF is not a pull request merge ref");
+const pullRequestNumber = Number(pullRequestRef[1]);
+if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber < 1) {
+  throw new Error("pull request ref number is invalid");
+}
+if (Number(pullRequest.number) !== pullRequestNumber) {
+  throw new Error("event pull request number does not match GITHUB_REF");
+}
+
 const graphqlEndpoint = "https://api.github.com/graphql";
 const headers = {
   Accept: "application/vnd.github+json",
@@ -66,27 +85,48 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
 }
 
 async function headCommitMetadata(repository, headSha) {
-  const payload = await restJson(`/repos/${repository}/commits/${headSha}`);
+  const [owner, name] = repository.split("/", 2);
+  const data = await graphql(
+    `
+      query ($owner: String!, $name: String!, $oid: GitObjectID!) {
+        repository(owner: $owner, name: $name) {
+          object(oid: $oid) {
+            ... on Commit {
+              author {
+                user {
+                  login
+                }
+              }
+              committer {
+                user {
+                  login
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { owner, name, oid: headSha },
+  );
+  const commit = data.repository?.object;
   return {
-    authorLogin: payload.author?.login || null,
-    committerLogin: payload.committer?.login || null,
+    authorLogin: commit?.author?.user?.login || null,
+    committerLogin: commit?.committer?.user?.login || null,
   };
 }
 
 async function createCommitStatus({ sha, state, context, description, targetUrl }) {
-  const response = await fetch(
-    `https://api.github.com/repos/${policy.repository}/statuses/${sha}`,
-    {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        state,
-        context,
-        description,
-        target_url: targetUrl,
-      }),
-    },
-  );
+  const response = await fetch(`https://api.github.com/repos/${repository}/statuses/${sha}`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      state,
+      context,
+      description,
+      target_url: targetUrl,
+    }),
+  });
   if (!response.ok) {
     throw new Error(
       `REST commit status request failed: ${response.status} ${await response.text()}`,
@@ -107,18 +147,14 @@ function globToRegExp(pattern) {
   return new RegExp(`^${expression}$`);
 }
 
-const pullRequestNumber = Number(pullRequest.number);
-if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber < 1) {
-  throw new Error("Pull request number is invalid");
-}
-const [owner, repositoryName] = policy.repository.split("/", 2);
+const [owner, repositoryName] = repository.split("/", 2);
 let files = [];
 let reviews = [];
 let filesCursor = null;
 let reviewsCursor = null;
 let filesDone = false;
 let reviewsDone = false;
-let headSha = pullRequest.head.sha;
+let headSha = null;
 while (!filesDone || !reviewsDone) {
   const data = await graphql(
     `
@@ -188,10 +224,11 @@ while (!filesDone || !reviewsDone) {
     reviewsCursor = reviewsDone ? null : reviewsPage.endCursor;
   }
 }
+if (!headSha) throw new Error("GitHub did not return a pull request head SHA");
 // GraphQL exposes paths but not patches on PullRequestChangedFile. Read the
 // same trusted PR metadata through REST so Dependabot workflow changes can be
 // restricted to exact SHA-pinned action lines.
-files = await listPullRequestFiles(policy.repository, pullRequestNumber);
+files = await listPullRequestFiles(repository, pullRequestNumber);
 const dependabotAuthor = isDependabotAuthor(pullRequest.user.login, policy);
 const dependabotScope = dependabotAuthor
   ? classifyDependabotFiles(files, policy)
@@ -200,7 +237,7 @@ let headCommit = null;
 let headCommitError = null;
 if (dependabotAuthor && dependabotScope.eligible) {
   try {
-    headCommit = await headCommitMetadata(policy.repository, headSha);
+    headCommit = await headCommitMetadata(repository, headSha);
   } catch (error) {
     headCommitError = error instanceof Error ? error.message : String(error);
   }
@@ -273,7 +310,7 @@ const description = dependabotScope.eligible
 
 const workflowUrl = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
-  : `https://github.com/${policy.repository}/pull/${pullRequestNumber}`;
+  : `https://github.com/${repository}/pull/${pullRequestNumber}`;
 
 await createCommitStatus({
   sha: headSha,
