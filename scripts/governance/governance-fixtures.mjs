@@ -117,6 +117,10 @@ const leaderReviewWorkflow = readFileSync(
 assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
 assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
 assert.match(leaderReviewWorkflow, /^\s*actions:\s*read\s*$/m);
+assert.match(
+  leaderReviewWorkflow,
+  /group:\s*governance-review-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m,
+);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");

@@ -248,6 +248,15 @@ if (!/^\s*actions:\s*read\s*$/m.test(leaderReviewWorkflow)) {
   );
 }
 if (
+  !/group:\s*governance-review-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/m.test(
+    leaderReviewWorkflow,
+  )
+) {
+  fail.push(
+    "leader-review workflow must isolate concurrency by event type to avoid cancelling required status runs",
+  );
+}
+if (
   policy?.reviewEnforcement?.authorAwareLastPush?.pusherEvidenceStatus?.context !==
     "governance-review-pusher" ||
   policy.reviewEnforcement.authorAwareLastPush.pusherEvidenceStatus.source !==
