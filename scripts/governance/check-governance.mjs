@@ -288,10 +288,11 @@ if (leaderReviewWorkflow.includes("/actions/permissions/workflow")) {
 }
 if (
   !leaderReviewSource.includes("auditStatusWriterWorkflowChanges") ||
-  !leaderReviewSource.includes("statusWriterAudit.allowed")
+  !leaderReviewSource.includes("statusWriterAudit.allowed") ||
+  !leaderReviewSource.includes('state: "failure"')
 ) {
   fail.push(
-    "leader-review must reject PR-controlled workflow status writers before publishing governance status",
+    "leader-review must fail closed before publishing governance status when a PR controls a workflow status writer",
   );
 }
 if (bootstrapAuditSource.includes("/branches/${defaultBranch}/protection")) {

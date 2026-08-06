@@ -55,6 +55,7 @@ function addedPatchLines(patch) {
 }
 
 const workflowPathPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
+const trustedStatusWriterPath = ".github/workflows/leader-review.yml";
 
 /**
  * A PR-controlled workflow must not be able to mint the sole governance
@@ -80,6 +81,16 @@ export function auditStatusWriterWorkflowChanges(files) {
       addedLines.some((line) => /\bpermissions\s*:\s*write-all\b/i.test(line))
     ) {
       failures.push(`${path}: changed workflow requests status-writing permissions`);
+    }
+    if (
+      path === trustedStatusWriterPath &&
+      addedLines.some(
+        (line) => /\bpull_request\b(?!_target)/i.test(line) || /\bworkflow_dispatch\b/i.test(line),
+      )
+    ) {
+      failures.push(
+        `${path}: status writer may only add changes that retain the trusted pull_request_target entry point`,
+      );
     }
   }
   return { allowed: failures.length === 0, failures };

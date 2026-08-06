@@ -150,6 +150,24 @@ assert.equal(
   false,
   "PR-controlled workflows cannot add permissions: write-all",
 );
+assert.match(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/leader-review.yml",
+      patch: "@@ -1 +1 @@\n-  pull_request_target:\n+  pull_request:\n",
+    },
+  ]).failures.join("\n"),
+  /trusted pull_request_target entry point/,
+);
+assert.match(
+  auditStatusWriterWorkflowChanges([
+    {
+      path: ".github/workflows/leader-review.yml",
+      patch: "@@ -1 +1 @@\n+  workflow_dispatch:\n",
+    },
+  ]).failures.join("\n"),
+  /trusted pull_request_target entry point/,
+);
 assert.equal(
   auditStatusWriterWorkflowChanges([{ path: ".github/workflows/example.yml" }]).allowed,
   false,

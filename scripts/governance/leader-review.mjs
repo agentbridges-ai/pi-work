@@ -310,9 +310,20 @@ if (typeof authorLogin !== "string" || authorLogin.length === 0) {
 files = await listPullRequestFiles(repository, pullRequestNumber);
 const statusWriterAudit = auditStatusWriterWorkflowChanges(files);
 if (!statusWriterAudit.allowed) {
-  throw new Error(
-    `PR-controlled workflow status writer change rejected: ${statusWriterAudit.failures.join("; ")}`,
-  );
+  const reason = `PR-controlled workflow status writer change rejected: ${statusWriterAudit.failures.join("; ")}`;
+  try {
+    await createCommitStatus({
+      sha: headSha,
+      state: "failure",
+      description: "trusted governance rejected a PR-controlled workflow status writer",
+      targetUrl: statusTargetUrl(),
+    });
+  } catch (error) {
+    throw new Error(
+      `${reason}; failed to publish the fail-closed governance status: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  throw new Error(reason);
 }
 const dependabotAuthor = isDependabotAuthor(authorLogin, policy);
 const dependabotScope = dependabotAuthor
