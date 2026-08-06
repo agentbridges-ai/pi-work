@@ -1,7 +1,11 @@
 {
   "schemaVersion": 5,
   "createdAt": "2026-08-04T12:00:00.000Z",
-  "releaseOrder": ["onlyoffice-x2t-wasm", "onlyoffice-browser", "Piwork"],
+  "releaseOrder": [
+    "onlyoffice-x2t-wasm",
+    "onlyoffice-browser",
+    "Piwork"
+  ],
   "repositories": {
     "onlyoffice-x2t-wasm": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-x2t-wasm.git",
@@ -16,7 +20,7 @@
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
-      "version": "0.95.0",
+      "version": "0.96.0",
       "integrationBaseCommit": "f1a407956f3368026f47206ab0284cd6053f7666"
     }
   },
