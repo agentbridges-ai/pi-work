@@ -30,7 +30,10 @@ Leader `@Misakago` 单独审批，但只适用于 `.governance/github-policy.jso
 `web/server`、`web/shared`、前端产品代码、认证/安全、发布清单、治理配置和其他
 高风险路径不会因为作者是 Dependabot 而降级；混入这些路径会回到普通/高风险评审。
 
-`governance-review` 要求 Leader 对当前 head 有一个真实的 `APPROVED` Review，并
-拒绝 Leader 同时作为最新 head 的 author/committer 的手工重放。最后推送审批、签名
-提交、CODEOWNERS、必需 CI 状态、Dependency Review 和安全扫描仍由 GitHub 原生
-Ruleset/工作流强制；该分类不是 bypass，也不会创建 Dependabot 或 Leader 专用绕过人。
+`governance-review` 要求 Leader 对低风险当前 head 有一个真实的 `APPROVED` Review，
+并拒绝 Leader 同时作为最新 head 的 author/committer 的手工重放；scope 不合规时回退
+普通/高风险规则。CODEOWNERS 只保留 ownership metadata，主/高风险 Ruleset 将 native reviewer
+count 设为 0 且关闭 native last-push approval 以避免阻断 Leader 自审；对需审批作者由
+`governance-review` 执行 current-head 约束。签名提交、线程解决、必需 CI 状态、Dependency
+Review 和安全扫描仍由 GitHub 原生 Ruleset/工作流强制。该分类
+不是 bypass，也不会创建 Dependabot 或 Leader 专用绕过人。

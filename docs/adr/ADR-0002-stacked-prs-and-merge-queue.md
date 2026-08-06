@@ -36,7 +36,7 @@ Piwork 需要把分层开发的可审查性和 main 的合并安全边界同时�
 - mise 层只承载工具链/基础设施前置变更，底层 PR 目标为 main。
 - feature 层目标为 mise 分支的 head；它依赖 mise，但仍是独立 PR。
 - release 层目标为 feature 分支的 head；只有下层 PR 已合并或被明确纳入同一合并计划后，才从下往上合并。
-- 每层必须独立获得自己的 required checks、CODEOWNERS 审批、author-aware 审批和高风险审查；Stacked preview 不改变规则计算，也不提供 bypass。
+- 每层必须独立获得自己的 required checks、CODEOWNERS ownership 路由、author-aware 审批和高风险审查；Stacked preview 不改变规则计算，也不提供 bypass。
 - 上层 PR 不得把下层未审查的变化伪装成已审查的 main 变化；必要时拆分 PR 或等待下层收口。
 
 ### Merge Queue workflow 合约

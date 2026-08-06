@@ -8,9 +8,12 @@ import {
   approvalCountForHead,
   approvedReviewersForHead,
   classifyDependabotFiles,
+  countableReviewersForHead,
   dependabotApprovalForHead,
+  coreReviewerLogins,
   isCoreAuthor,
   isDependabotAuthor,
+  isCountableReviewer,
   leaderIsLastPusher,
   leaderParticipated,
   leaderReviewMode,
@@ -20,6 +23,13 @@ import {
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const policy = JSON.parse(readFileSync(join(root, ".governance/github-policy.json"), "utf8"));
+const fixturePolicy = {
+  ...policy,
+  reviewEnforcement: {
+    ...policy.reviewEnforcement,
+    coreReviewerLogins: [policy.leader, "core-a", "core-b", "reviewer-a"],
+  },
+};
 
 const titlePattern =
   /^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+$/;
@@ -103,6 +113,27 @@ assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
 assert.equal(policy.nonLeaderCoreApprovals, 2);
 assert.deepEqual(policy.requiredRepositorySecrets, ["PIWORK_RELEASE_TOKEN"]);
+assert.equal(policy.reviewEnforcement.statusCheck, "governance-review");
+assert.equal(policy.reviewEnforcement.mode, "trusted-pull-request-target");
+assert.equal(policy.reviewEnforcement.failClosed, true);
+assert.equal(policy.reviewEnforcement.ownershipMetadata, "CODEOWNERS");
+assert.equal(policy.reviewEnforcement.lastPushApprovalEnforcement, "governance-review");
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.enforcedBy, "governance-review");
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.requireCurrentHeadReview, true);
+assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, true);
+assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
+assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
+assert.equal(policy.reviewEnforcement.nativeRuleset.requiredApprovingReviewCount, 0);
+assert.deepEqual(policy.reviewEnforcement.nativeRuleset.requiredReviewers, []);
+assert.equal(policy.reviewEnforcement.nativeRuleset.requireCodeOwnerReview, false);
+assert.equal(policy.reviewEnforcement.nativeRuleset.requireLastPushApproval, false);
+assert.equal(policy.reviewEnforcement.nativeRuleset.requiredReviewThreadResolution, true);
+assert.equal(policy.reviewEnforcement.authorAwareRules.nonLeaderCore.requiredApprovals, 2);
+assert.equal(policy.reviewEnforcement.authorAwareRules.community.requiredApprovals, 1);
+assert.equal(policy.reviewEnforcement.authorAwareRules.dependabot.requiredReviewer, policy.leader);
+assert.equal(policy.reviewEnforcement.authorAwareRules.dependabot.currentHead, true);
+assert.equal(coreReviewerLogins(policy).has(policy.leader), true);
+assert.equal(isCountableReviewer("unknown-reviewer", policy), false);
 assert.equal(policy.dependabotReview.enabled, true);
 assert.deepEqual(policy.dependabotReview.authorLogins, ["dependabot[bot]", "app/dependabot"]);
 assert.equal(policy.dependabotReview.leader, policy.leader);
@@ -119,7 +150,7 @@ assert.ok(policy.dependabotReview.excludedWorkflowPaths.includes(".github/workfl
 assert.ok(
   policy.dependabotReview.excludedWorkflowPaths.includes(".github/workflows/governance.yml"),
 );
-assert.equal(policy.dependabotReview.nativeLastPushApprovalRequired, true);
+assert.equal(policy.dependabotReview.lastPushApprovalEnforcement, "governance-review");
 assert.equal(policy.dependabotReview.signedCommitsRequired, true);
 assert.equal(policy.dependabotReview.requiredChecks, "requiredChecks");
 for (const excludedClass of ["high-risk", "product", "security", "release"]) {
@@ -165,7 +196,7 @@ assert.equal(
     ],
     headSha: "head",
     authorLogin: "another-core-dev",
-    policy,
+    policy: fixturePolicy,
   }),
   2,
 );
@@ -179,9 +210,32 @@ assert.equal(
     reviews: [{ state: "APPROVED", commit: { oid: "head" }, author: { login: "reviewer-a" } }],
     headSha: "head",
     authorLogin: "community-contributor",
-    policy,
+    policy: fixturePolicy,
   }),
   1,
+);
+assert.equal(
+  approvalCountForHead({
+    reviews: [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "unknown-reviewer" } },
+    ],
+    headSha: "head",
+    authorLogin: "community-contributor",
+    policy,
+  }),
+  0,
+  "unknown reviewer identities cannot satisfy community approval",
+);
+assert.deepEqual(
+  countableReviewersForHead(
+    [
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "reviewer-a" } },
+      { state: "APPROVED", commit: { oid: "head" }, author: { login: "unknown-reviewer" } },
+    ],
+    "head",
+    fixturePolicy,
+  ),
+  ["reviewer-a"],
 );
 assert.equal(
   approvalCountForHead({
@@ -263,6 +317,11 @@ for (const forbiddenPath of ["web/server/index.ts", "release/onlyoffice-release-
     `${forbiddenPath} must remain outside Dependabot low-risk scope`,
   );
 assert.equal(
+  requiredApprovalsForAuthor("app/dependabot", policy, "BOT"),
+  policy.ordinaryApprovals,
+  "out-of-scope Dependabot changes fall back to the ordinary author-aware rule",
+);
+assert.equal(
   classifyDependabotFiles(
     [
       {
@@ -312,7 +371,7 @@ assert.equal(
     headCommit: { authorLogin: policy.leader, committerLogin: policy.leader },
   }).satisfied,
   false,
-  "Leader cannot satisfy native last-push approval for a manually replayed head",
+  "Leader cannot self-count governance current-head approval for a manually replayed head",
 );
 assert.equal(leaderIsLastPusher({ authorLogin: policy.leader }, policy), true);
 assert.equal(

@@ -95,6 +95,46 @@ if (policy) {
   if (!Array.isArray(policy.highRiskPaths) || policy.highRiskPaths.length < 10) {
     fail.push("github-policy.json: high-risk path policy is incomplete");
   }
+  const enforcement = policy.reviewEnforcement;
+  const nativeReview = enforcement?.nativeRuleset;
+  const authorAware = enforcement?.authorAwareRules;
+  if (
+    enforcement?.statusCheck !== "governance-review" ||
+    !policy.requiredChecks?.includes("governance-review") ||
+    enforcement.mode !== "trusted-pull-request-target" ||
+    enforcement.failClosed !== true ||
+    enforcement.ownershipMetadata !== "CODEOWNERS" ||
+    enforcement.lastPushApprovalEnforcement !== "governance-review" ||
+    enforcement.authorAwareLastPush?.enforcedBy !== "governance-review" ||
+    enforcement.authorAwareLastPush?.requireCurrentHeadReview !== true ||
+    enforcement.authorAwareLastPush?.leaderAuthorExempt !== true ||
+    enforcement.authorAwareLastPush?.dependabotLeaderCannotBeHeadCommitter !== true ||
+    enforcement.unknownReviewerBehavior !== "reject" ||
+    !Array.isArray(enforcement.coreReviewerLogins) ||
+    !enforcement.coreReviewerLogins.includes(policy.leader) ||
+    !nativeReview ||
+    nativeReview.requiredApprovingReviewCount !== 0 ||
+    !Array.isArray(nativeReview.requiredReviewers) ||
+    nativeReview.requiredReviewers.length !== 0 ||
+    nativeReview.requireCodeOwnerReview !== false ||
+    nativeReview.requireLastPushApproval !== false ||
+    nativeReview.dismissStaleReviewsOnPush !== true ||
+    nativeReview.requiredReviewThreadResolution !== true ||
+    authorAware?.leader?.requiredApprovals !== 0 ||
+    authorAware?.leader?.selfOrExempt !== true ||
+    authorAware?.nonLeaderCore?.requiredApprovals !== 2 ||
+    authorAware?.nonLeaderCore?.reviewerSet !== "coreReviewerLogins" ||
+    authorAware?.nonLeaderCore?.excludeAuthor !== true ||
+    authorAware?.community?.requiredApprovals !== 1 ||
+    authorAware?.community?.reviewerSet !== "coreReviewerLogins" ||
+    authorAware?.dependabot?.requiredApprovals !== 1 ||
+    authorAware?.dependabot?.requiredReviewer !== policy.leader ||
+    authorAware?.dependabot?.currentHead !== true
+  ) {
+    fail.push(
+      "github-policy.json: governance-review must be the fail-closed approval authority with an explicit reviewer allowlist; native Rulesets must not require Team/CODEOWNER approvals",
+    );
+  }
   const dependabot = policy.dependabotReview;
   if (
     !dependabot?.enabled ||
@@ -128,12 +168,12 @@ if (policy) {
     !dependabot.excludedPathGlobs.includes("release/**") ||
     !dependabot.excludedPathGlobs.includes(".github/workflows/deploy.yml") ||
     dependabot.requireCurrentHeadLeaderApproval !== true ||
-    dependabot.nativeLastPushApprovalRequired !== true ||
+    dependabot.lastPushApprovalEnforcement !== "governance-review" ||
     dependabot.signedCommitsRequired !== true ||
     dependabot.requiredChecks !== "requiredChecks"
   ) {
     fail.push(
-      "github-policy.json: Dependabot low-risk review must require one current-head Leader approval while retaining native last-push, signature, and required-check gates",
+      "github-policy.json: Dependabot low-risk review must require one current-head Leader approval while delegating author-aware last-push semantics to governance-review",
     );
   }
 }

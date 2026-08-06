@@ -240,7 +240,7 @@ if (dependabotApproval && headCommitError) {
   dependabotApproval.reason = `unable to verify head commit author/committer: ${headCommitError}`;
 }
 const state = dependabotScope.eligible
-  ? dependabotApproval.satisfied
+  ? dependabotApproval.satisfied && (!highRisk || leaderParticipatedForHead)
     ? "success"
     : "failure"
   : approvalsSatisfied && (!highRisk || leaderParticipatedForHead)
@@ -248,11 +248,13 @@ const state = dependabotScope.eligible
     : "failure";
 const authorDescription = dependabotScope.eligible
   ? "Dependabot 低风险自动化"
-  : pullRequest.user.login === policy.leader
-    ? policy.leader
-    : coreAuthor
-      ? "非 Leader Core 作者"
-      : "社区作者";
+  : dependabotAuthor
+    ? "Dependabot（普通/高风险规则）"
+    : pullRequest.user.login === policy.leader
+      ? policy.leader
+      : coreAuthor
+        ? "非 Leader Core 作者"
+        : "社区作者";
 const approvalDescription = dependabotScope.eligible
   ? `${authorDescription}：${dependabotApproval.leaderApproved ? "Leader 当前 head 已批准" : "缺少 Leader 当前 head 批准"}；${dependabotApproval.reason}`
   : pullRequest.user.login === policy.leader && leaderMode === "self-or-exempt"
@@ -264,7 +266,7 @@ const leaderDescription = !highRisk
     ? `高风险改动：${policy.leader} 已作为作者或最新提交批准者参与`
     : `高风险改动必须由 ${policy.leader} 作为作者或最新提交批准者参与`;
 const description = dependabotScope.eligible
-  ? `${approvalDescription}；原生 last-push、签名提交和必需状态仍由 GitHub Ruleset 强制`
+  ? `${approvalDescription}；current-head 约束由 governance-review 执行，签名提交和必需状态仍由 GitHub Ruleset 强制`
   : approvalsSatisfied
     ? `${approvalDescription}；${leaderDescription}`
     : `${approvalDescription}；审批数不足`;

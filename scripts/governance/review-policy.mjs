@@ -24,6 +24,16 @@ export function isDependabotAuthor(authorLogin, policy) {
   return typeof authorLogin === "string" && actors.includes(authorLogin);
 }
 
+export function coreReviewerLogins(policy) {
+  const configured = policy.reviewEnforcement?.coreReviewerLogins;
+  if (!Array.isArray(configured)) return new Set([policy.leader]);
+  return new Set(configured.filter((login) => typeof login === "string" && login.length > 0));
+}
+
+export function isCountableReviewer(login, policy) {
+  return typeof login === "string" && coreReviewerLogins(policy).has(login);
+}
+
 function changedPatchLines(patch) {
   if (typeof patch !== "string" || patch.length === 0) return null;
   return patch
@@ -41,8 +51,9 @@ function patchMatches(patch, pattern) {
 
 /**
  * Classify whether a Dependabot PR is the narrow, low-risk automation case.
- * The caller must still enforce native CODEOWNERS, signature, last-push and
- * required-check rules; this function only classifies changed paths/content.
+ * The caller must still enforce native signature/required-check rules and the
+ * trusted governance-review current-head policy; this function only classifies
+ * changed paths/content.
  */
 export function classifyDependabotFiles(files, policy) {
   const config = policy.dependabotReview;
@@ -138,7 +149,9 @@ export function leaderIsLastPusher(headCommit, policy) {
 
 export function dependabotApprovalForHead({ reviews, headSha, policy, headCommit }) {
   const leader = policy.dependabotReview?.leader || policy.leader;
-  const approvedReviewers = approvedReviewersForHead(reviews, headSha);
+  const approvedReviewers = approvedReviewersForHead(reviews, headSha).filter((login) =>
+    isCountableReviewer(login, policy),
+  );
   const leaderApproved = approvedReviewers.includes(leader);
   const lastPusherIsLeader = leaderIsLastPusher(headCommit, policy);
   const satisfied =
@@ -148,7 +161,7 @@ export function dependabotApprovalForHead({ reviews, headSha, policy, headCommit
   let reason;
   if (!leaderApproved) reason = `Leader ${leader} has no current-head APPROVED review`;
   else if (lastPusherIsLeader) {
-    reason = `Leader ${leader} is the latest commit author/committer; native last-push approval cannot be bypassed`;
+    reason = `Leader ${leader} is the latest commit author/committer; governance-review current-head approval cannot be self-counted`;
   } else reason = `Leader ${leader} has the required current-head APPROVED review`;
   return { satisfied, leaderApproved, lastPusherIsLeader, approvedReviewers, reason };
 }
@@ -188,6 +201,12 @@ export function approvedReviewersForHead(reviews, headSha, excludedAuthor = null
   ];
 }
 
+export function countableReviewersForHead(reviews, headSha, policy, excludedAuthor = null) {
+  return approvedReviewersForHead(reviews, headSha, excludedAuthor).filter((login) =>
+    isCountableReviewer(login, policy),
+  );
+}
+
 export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
   return (
     leaderReviewMode(policy) === "self-or-exempt" &&
@@ -202,7 +221,7 @@ export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
 }
 
 export function approvalCountForHead({ reviews, headSha, authorLogin, policy }) {
-  const approvedReviewers = approvedReviewersForHead(reviews, headSha, authorLogin);
+  const approvedReviewers = countableReviewersForHead(reviews, headSha, policy, authorLogin);
   return (
     approvedReviewers.length +
     (leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) ? 1 : 0)

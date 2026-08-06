@@ -10,6 +10,50 @@
   "leaderApprovals": 0,
   "leaderReviewMode": "self-or-exempt",
   "nonLeaderCoreApprovals": 2,
+  "reviewEnforcement": {
+    "statusCheck": "governance-review",
+    "mode": "trusted-pull-request-target",
+    "failClosed": true,
+    "ownershipMetadata": "CODEOWNERS",
+    "lastPushApprovalEnforcement": "governance-review",
+    "authorAwareLastPush": {
+      "enforcedBy": "governance-review",
+      "requireCurrentHeadReview": true,
+      "leaderAuthorExempt": true,
+      "dependabotLeaderCannotBeHeadCommitter": true
+    },
+    "coreReviewerLogins": ["Misakago"],
+    "unknownReviewerBehavior": "reject",
+    "authorAwareRules": {
+      "leader": {
+        "requiredApprovals": 0,
+        "selfOrExempt": true,
+        "currentHeadSelfReviewOptional": true
+      },
+      "nonLeaderCore": {
+        "requiredApprovals": 2,
+        "reviewerSet": "coreReviewerLogins",
+        "excludeAuthor": true
+      },
+      "community": {
+        "requiredApprovals": 1,
+        "reviewerSet": "coreReviewerLogins"
+      },
+      "dependabot": {
+        "requiredApprovals": 1,
+        "requiredReviewer": "Misakago",
+        "currentHead": true
+      }
+    },
+    "nativeRuleset": {
+      "requiredApprovingReviewCount": 0,
+      "requiredReviewers": [],
+      "requireCodeOwnerReview": false,
+      "requireLastPushApproval": false,
+      "dismissStaleReviewsOnPush": true,
+      "requiredReviewThreadResolution": true
+    }
+  },
   "dependabotReview": {
     "enabled": true,
     "authorLogins": ["dependabot[bot]", "app/dependabot"],
@@ -100,10 +144,10 @@
     ],
     "excludedPathClasses": ["high-risk", "product", "security", "release"],
     "requireCurrentHeadLeaderApproval": true,
-    "nativeLastPushApprovalRequired": true,
+    "lastPushApprovalEnforcement": "governance-review",
     "signedCommitsRequired": true,
     "requiredChecks": "requiredChecks",
-    "scope": "Dependabot-only dependency manifests, lockfiles, SHA-pinned workflow actions, and their exact SHA fixture; native CODEOWNERS, last-push, signature, required-check, security, and release gates remain enforced."
+    "scope": "Dependabot-only dependency manifests, lockfiles, SHA-pinned workflow actions, and their exact SHA fixture; native CODEOWNERS/reviewer and last-push approvals are disabled for author-aware governance-review, while signature, required-check, security, and release gates remain enforced."
   },
   "productionEnvironment": "production",
   "productionBranch": "main",
@@ -156,7 +200,7 @@
       "baseChain": "main <- mise <- feature <- release",
       "mergeOrder": "bottom-up",
       "independentReview": "Every layer keeps its own checks, approvals, CODEOWNERS evaluation, and high-risk review.",
-      "securityBoundary": "Stacked PR preview is not a bypass for CODEOWNERS, author-aware governance, last-push approval, signed commits, linear history, required checks, or production gates."
+      "securityBoundary": "Stacked PR preview is not a bypass for CODEOWNERS ownership metadata, author-aware governance current-head review, signed commits, linear history, required checks, or production gates."
     },
     "readback": {
       "at": "2026-08-05",

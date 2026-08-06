@@ -26,17 +26,19 @@ function gh(method, endpoint, body) {
   return result.stdout ? JSON.parse(result.stdout) : null;
 }
 
-function requiredReviewers(teamId, approvals, filePatterns) {
-  return [
-    {
-      reviewer: { type: "Team", id: teamId },
-      minimum_approvals: approvals,
-      file_patterns: filePatterns,
-    },
-  ];
+function nativeReviewParameters() {
+  const native = policy.reviewEnforcement.nativeRuleset;
+  return {
+    dismiss_stale_reviews_on_push: native.dismissStaleReviewsOnPush,
+    require_code_owner_review: native.requireCodeOwnerReview,
+    require_last_push_approval: native.requireLastPushApproval,
+    required_approving_review_count: native.requiredApprovingReviewCount,
+    required_review_thread_resolution: native.requiredReviewThreadResolution,
+    required_reviewers: native.requiredReviewers,
+  };
 }
 
-function mainRuleset(coreId, leadsId) {
+function mainRuleset(leadsId) {
   return {
     name: "Piwork main governance",
     target: "branch",
@@ -51,12 +53,7 @@ function mainRuleset(coreId, leadsId) {
       {
         type: "pull_request",
         parameters: {
-          dismiss_stale_reviews_on_push: true,
-          require_code_owner_review: true,
-          require_last_push_approval: true,
-          required_approving_review_count: policy.ordinaryApprovals,
-          required_review_thread_resolution: true,
-          required_reviewers: requiredReviewers(coreId, policy.ordinaryApprovals, ["**"]),
+          ...nativeReviewParameters(),
         },
       },
       {
@@ -71,7 +68,7 @@ function mainRuleset(coreId, leadsId) {
   };
 }
 
-function highRiskRuleset(coreId, leadsId) {
+function highRiskRuleset(leadsId) {
   return {
     name: "Piwork high-risk review",
     target: "branch",
@@ -82,16 +79,7 @@ function highRiskRuleset(coreId, leadsId) {
       {
         type: "pull_request",
         parameters: {
-          dismiss_stale_reviews_on_push: true,
-          require_code_owner_review: true,
-          require_last_push_approval: true,
-          required_approving_review_count: policy.ordinaryApprovals,
-          required_review_thread_resolution: true,
-          required_reviewers: requiredReviewers(
-            coreId,
-            policy.highRiskApprovals,
-            policy.highRiskPaths,
-          ),
+          ...nativeReviewParameters(),
         },
       },
     ],
@@ -251,12 +239,20 @@ function readbackDrift() {
   }
   const main = rulesets.find((item) => item.name === "Piwork main governance");
   const mainPullRequest = main?.rules?.find((rule) => rule.type === "pull_request");
-  const mainReviewers = mainPullRequest?.parameters?.required_reviewers || [];
+  const native = policy.reviewEnforcement.nativeRuleset;
+  const mainParameters = mainPullRequest?.parameters || {};
+  const mainReviewers = mainParameters.required_reviewers || [];
   if (
-    mainPullRequest?.parameters?.required_approving_review_count !== policy.ordinaryApprovals ||
-    mainReviewers[0]?.minimum_approvals !== policy.ordinaryApprovals
+    mainParameters.required_approving_review_count !== native.requiredApprovingReviewCount ||
+    mainReviewers.length !== native.requiredReviewers.length ||
+    mainParameters.require_code_owner_review !== native.requireCodeOwnerReview ||
+    mainParameters.require_last_push_approval !== native.requireLastPushApproval ||
+    mainParameters.dismiss_stale_reviews_on_push !== native.dismissStaleReviewsOnPush ||
+    mainParameters.required_review_thread_resolution !== native.requiredReviewThreadResolution
   ) {
-    drift.push("main ruleset approval baseline does not match policy");
+    drift.push(
+      "main ruleset native reviewer settings must defer approval counting to governance-review",
+    );
   }
   const contexts =
     main?.rules
@@ -267,11 +263,20 @@ function readbackDrift() {
       drift.push(`main ruleset is missing required check ${requiredCheck}`);
   }
   const highRisk = rulesets.find((item) => item.name === "Piwork high-risk review");
-  const highRiskReviewers =
-    highRisk?.rules?.find((rule) => rule.type === "pull_request")?.parameters?.required_reviewers ||
-    [];
-  if (highRiskReviewers[0]?.minimum_approvals !== policy.highRiskApprovals) {
-    drift.push("high-risk ruleset approval baseline does not match policy");
+  const highRiskParameters =
+    highRisk?.rules?.find((rule) => rule.type === "pull_request")?.parameters || {};
+  const highRiskReviewers = highRiskParameters.required_reviewers || [];
+  if (
+    highRiskParameters.required_approving_review_count !== native.requiredApprovingReviewCount ||
+    highRiskReviewers.length !== native.requiredReviewers.length ||
+    highRiskParameters.require_code_owner_review !== native.requireCodeOwnerReview ||
+    highRiskParameters.require_last_push_approval !== native.requireLastPushApproval ||
+    highRiskParameters.dismiss_stale_reviews_on_push !== native.dismissStaleReviewsOnPush ||
+    highRiskParameters.required_review_thread_resolution !== native.requiredReviewThreadResolution
+  ) {
+    drift.push(
+      "high-risk ruleset native reviewer settings must defer approval counting to governance-review",
+    );
   }
   const tag = rulesets.find((item) => item.name === "Piwork release tags");
   const tagRuleTypes = new Set((tag?.rules || []).map((rule) => rule.type));
@@ -378,8 +383,8 @@ try {
     "[github-governance] GitHub Actions cannot be added as a repository ruleset bypass actor on this Free organization; release tag creation remains workflow-compatible while update/deletion protection is enforced.",
   );
   for (const desired of [
-    mainRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
-    highRiskRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
+    mainRuleset(teams[policy.leadsTeam].id),
+    highRiskRuleset(teams[policy.leadsTeam].id),
     releaseTagRuleset(teams[policy.leadsTeam].id),
   ]) {
     const existing = rulesets.find((item) => item.name === desired.name);
