@@ -186,16 +186,38 @@ export function requiredApprovalsForAuthor(authorLogin, policy, authorAssociatio
 }
 
 export function approvedReviewersForHead(reviews, headSha, excludedAuthor = null) {
+  const latestReviews = new Map();
+  for (const [index, review] of reviews.entries()) {
+    const login = review.author?.login;
+    if (review.commit?.oid !== headSha || typeof login !== "string") continue;
+    const submittedAt = Date.parse(
+      review.submittedAt || review.updatedAt || review.createdAt || "",
+    );
+    const previous = latestReviews.get(login);
+    const previousAt = previous
+      ? Date.parse(
+          previous.review.submittedAt ||
+            previous.review.updatedAt ||
+            previous.review.createdAt ||
+            "",
+        )
+      : NaN;
+    if (
+      !previous ||
+      (Number.isFinite(submittedAt) &&
+        (!Number.isFinite(previousAt) ||
+          submittedAt > previousAt ||
+          (submittedAt === previousAt && index > previous.index))) ||
+      (!Number.isFinite(submittedAt) && !Number.isFinite(previousAt) && index > previous.index)
+    ) {
+      latestReviews.set(login, { index, review });
+    }
+  }
   return [
     ...new Set(
-      reviews
-        .filter(
-          (review) =>
-            review.state === "APPROVED" &&
-            review.commit?.oid === headSha &&
-            typeof review.author?.login === "string" &&
-            review.author.login !== excludedAuthor,
-        )
+      [...latestReviews.values()]
+        .map(({ review }) => review)
+        .filter((review) => review.state === "APPROVED" && review.author.login !== excludedAuthor)
         .map((review) => review.author.login),
     ),
   ];
@@ -211,12 +233,7 @@ export function leaderSelfReviewForHead(reviews, headSha, authorLogin, policy) {
   return (
     leaderReviewMode(policy) === "self-or-exempt" &&
     authorLogin === policy.leader &&
-    reviews.some(
-      (review) =>
-        review.state === "APPROVED" &&
-        review.commit?.oid === headSha &&
-        review.author?.login === authorLogin,
-    )
+    approvedReviewersForHead(reviews, headSha).includes(authorLogin)
   );
 }
 
@@ -231,11 +248,6 @@ export function approvalCountForHead({ reviews, headSha, authorLogin, policy }) 
 export function leaderParticipated({ authorLogin, reviews, headSha, policy }) {
   return (
     authorLogin === policy.leader ||
-    reviews.some(
-      (review) =>
-        review.author?.login === policy.leader &&
-        review.state === "APPROVED" &&
-        review.commit?.oid === headSha,
-    )
+    approvedReviewersForHead(reviews, headSha).includes(policy.leader)
   );
 }

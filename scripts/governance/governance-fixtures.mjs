@@ -283,6 +283,27 @@ assert.deepEqual(
   ),
   ["reviewer-a"],
 );
+assert.deepEqual(
+  approvedReviewersForHead(
+    [
+      {
+        state: "APPROVED",
+        submittedAt: "2026-08-06T10:00:00Z",
+        commit: { oid: "head" },
+        author: { login: "reviewer-a" },
+      },
+      {
+        state: "CHANGES_REQUESTED",
+        submittedAt: "2026-08-06T10:01:00Z",
+        commit: { oid: "head" },
+        author: { login: "reviewer-a" },
+      },
+    ],
+    "head",
+  ),
+  [],
+  "a later CHANGES_REQUESTED review supersedes an earlier approval",
+);
 
 const actionPinPatch = `@@ -1 +1 @@\n-        uses: github/codeql-action/init@${"a".repeat(40)} # v4.37.4\n+        uses: github/codeql-action/init@${"b".repeat(40)} # v4.37.5`;
 const fixturePatch = `@@ -1 +1 @@\n-  "${"a".repeat(40)}",\n+  "${"b".repeat(40)}",`;

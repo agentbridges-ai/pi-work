@@ -116,14 +116,14 @@ async function headCommitMetadata(repository, headSha) {
   };
 }
 
-async function createCommitStatus({ sha, state, context, description, targetUrl }) {
+async function createCommitStatus({ sha, state, targetUrl }) {
   const response = await fetch(`https://api.github.com/repos/${repository}/statuses/${sha}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
-      state,
-      context,
-      description,
+      state: state === "success" ? "success" : "failure",
+      context: "governance-review",
+      description: "author-aware governance review",
       target_url: targetUrl,
     }),
   });
@@ -185,6 +185,7 @@ while (!filesDone || !reviewsDone) {
                   login
                 }
                 state
+                submittedAt
                 commit {
                   oid
                 }
@@ -315,8 +316,6 @@ const workflowUrl = process.env.GITHUB_RUN_ID
 await createCommitStatus({
   sha: headSha,
   state,
-  context: "governance-review",
-  description: description.slice(0, 140),
   targetUrl: workflowUrl,
 });
 
