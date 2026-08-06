@@ -29,9 +29,7 @@
       "leaderAuthorExempt": true,
       "nonLeaderCannotBeLastPusher": true,
       "dependabotLeaderCannotBeLastPusher": true,
-      "lastPusherIdentitySource": "trusted-pull-request-target-workflow-run-actor",
-      "lastPusherRunNamePrefix": "governance-review:pull_request_target:",
-      "lastPusherActions": ["opened", "synchronize"],
+      "lastPusherIdentitySource": "trusted-pull-request-target-synchronize-sender-or-repository-push-event-actor",
       "lastPusherFailClosed": true
     },
     "coreReviewerLogins": ["Misakago"],

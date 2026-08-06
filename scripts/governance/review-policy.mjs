@@ -1,5 +1,6 @@
 const coreAuthorAssociations = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
 const leaderReviewModes = new Set(["required", "self-or-exempt"]);
+const countableReviewStates = new Set(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]);
 
 function globToRegExp(pattern) {
   let expression = "";
@@ -141,22 +142,15 @@ export function leaderIsLastPusher(lastPusher, policy) {
   return lastPusher?.login === leader;
 }
 
-export function selectLastPusherRun(workflowRuns, headSha, pullRequestNumber) {
-  const candidates = (Array.isArray(workflowRuns) ? workflowRuns : [])
+export function selectLastPusherEvent(events, headSha, headRef = null) {
+  const candidates = (Array.isArray(events) ? events : [])
     .filter(
-      (run) =>
-        run?.event === "pull_request_target" &&
-        run?.head_sha === headSha &&
-        Number(run?.run_attempt ?? 1) === 1 &&
-        /^governance-review:pull_request_target:(?:opened|synchronize):/.test(
-          run?.display_title || "",
-        ) &&
-        Array.isArray(run?.pull_requests) &&
-        run.pull_requests.some(
-          (pullRequest) => Number(pullRequest?.number) === pullRequestNumber,
-        ) &&
-        typeof run?.actor?.login === "string" &&
-        run.actor.login.length > 0,
+      (event) =>
+        event?.type === "PushEvent" &&
+        event?.payload?.head === headSha &&
+        (!headRef || event.payload.ref === `refs/heads/${headRef}`) &&
+        typeof event?.actor?.login === "string" &&
+        event.actor.login.length > 0,
     )
     .sort((left, right) => {
       const leftTime = Date.parse(left.created_at || "");
@@ -166,9 +160,9 @@ export function selectLastPusherRun(workflowRuns, headSha, pullRequestNumber) {
       }
       return Number(right.id || 0) - Number(left.id || 0);
     });
-  const run = candidates[0];
-  if (!run) return null;
-  return { login: run.actor.login, runId: run.id };
+  const event = candidates[0];
+  if (!event) return null;
+  return { login: event.actor.login, eventId: event.id };
 }
 
 export function dependabotApprovalForHead({ reviews, headSha, policy, lastPusher }) {
@@ -224,7 +218,12 @@ export function approvedReviewersForHead(
   const latestReviews = new Map();
   for (const [index, review] of reviews.entries()) {
     const login = review.author?.login;
-    if (review.commit?.oid !== headSha || typeof login !== "string") continue;
+    if (
+      review.commit?.oid !== headSha ||
+      typeof login !== "string" ||
+      !countableReviewStates.has(review.state)
+    )
+      continue;
     const submittedAt = Date.parse(
       review.submittedAt || review.updatedAt || review.createdAt || "",
     );

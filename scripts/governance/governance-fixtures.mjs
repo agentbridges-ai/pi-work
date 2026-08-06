@@ -19,7 +19,7 @@ import {
   leaderReviewMode,
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
-  selectLastPusherRun,
+  selectLastPusherEvent,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -115,11 +115,6 @@ const leaderReviewWorkflow = readFileSync(
 );
 assert.doesNotMatch(leaderReviewWorkflow, /^\s*workflow_dispatch\s*:/m);
 assert.match(leaderReviewWorkflow, /ref:\s*refs\/heads\/main\s*$/m);
-assert.match(
-  leaderReviewWorkflow,
-  /^run-name:\s*governance-review:\$\{\{ github\.event_name \}\}:\$\{\{ github\.event\.action \|\| 'none' \}\}:\$\{\{ github\.actor \}\}$/m,
-);
-assert.match(leaderReviewWorkflow, /^\s*actions:\s*read\s*$/m);
 assert.equal(new Set(policy.requiredChecks).size, policy.requiredChecks.length);
 assert.equal(policy.leaderApprovals, 0);
 assert.equal(policy.leaderReviewMode, "self-or-exempt");
@@ -142,16 +137,8 @@ assert.equal(policy.reviewEnforcement.authorAwareLastPush.leaderAuthorExempt, tr
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.nonLeaderCannotBeLastPusher, true);
 assert.equal(
   policy.reviewEnforcement.authorAwareLastPush.lastPusherIdentitySource,
-  "trusted-pull-request-target-workflow-run-actor",
+  "trusted-pull-request-target-synchronize-sender-or-repository-push-event-actor",
 );
-assert.equal(
-  policy.reviewEnforcement.authorAwareLastPush.lastPusherRunNamePrefix,
-  "governance-review:pull_request_target:",
-);
-assert.deepEqual(policy.reviewEnforcement.authorAwareLastPush.lastPusherActions, [
-  "opened",
-  "synchronize",
-]);
 assert.equal(policy.reviewEnforcement.authorAwareLastPush.lastPusherFailClosed, true);
 assert.deepEqual(policy.reviewEnforcement.coreReviewerLogins, [policy.leader]);
 assert.equal(policy.reviewEnforcement.unknownReviewerBehavior, "reject");
@@ -193,63 +180,51 @@ for (const excludedClass of ["high-risk", "product", "security", "release"]) {
 assert.equal(leaderReviewMode(policy), "self-or-exempt");
 assert.equal(requiredApprovalsForAuthor(policy.leader, policy), 0);
 assert.deepEqual(
-  selectLastPusherRun(
+  selectLastPusherEvent(
     [
       {
         id: 10,
-        event: "pull_request_target",
-        head_sha: "head",
-        run_attempt: 1,
-        display_title: "governance-review:pull_request_target:opened:Dependabot[bot]",
-        actor: { login: "Dependabot[bot]" },
-        pull_requests: [{ number: 67 }],
-        created_at: "2026-08-06T00:00:00Z",
-      },
-      {
-        id: 11,
-        event: "pull_request_target",
-        head_sha: "head",
-        run_attempt: 1,
-        display_title: "governance-review:pull_request_target:synchronize:community-dev",
+        type: "PushEvent",
+        payload: { head: "head", ref: "refs/heads/feature" },
         actor: { login: "community-dev" },
-        pull_requests: [{ number: 67 }],
         created_at: "2026-08-06T00:01:00Z",
       },
       {
-        id: 12,
-        event: "pull_request_target",
-        head_sha: "head",
-        run_attempt: 1,
-        display_title: "governance-review:pull_request_target:ready_for_review:Misakago",
-        actor: { login: policy.leader },
-        pull_requests: [{ number: 67 }],
+        id: 11,
+        type: "PushEvent",
+        payload: { head: "head", ref: "refs/heads/other" },
+        actor: { login: "unrelated-pusher" },
         created_at: "2026-08-06T00:02:00Z",
+      },
+      {
+        id: 12,
+        type: "PullRequestEvent",
+        payload: { action: "opened", head: "head" },
+        actor: { login: "opener" },
+        created_at: "2026-08-06T00:03:00Z",
       },
     ],
     "head",
-    67,
+    "feature",
   ),
-  { login: "community-dev", runId: 11 },
-  "the latest actual opened/synchronize actor is the last-pusher identity",
+  { login: "community-dev", eventId: 10 },
+  "repository PushEvent actor identifies the matching head branch pusher; PR opener is ignored",
 );
 assert.equal(
-  selectLastPusherRun(
+  selectLastPusherEvent(
     [
       {
         id: 13,
-        event: "pull_request_target",
-        head_sha: "other-head",
-        run_attempt: 1,
-        display_title: "governance-review:pull_request_target:synchronize:community-dev",
+        type: "PushEvent",
+        payload: { head: "other-head", ref: "refs/heads/feature" },
         actor: { login: "community-dev" },
-        pull_requests: [{ number: 67 }],
       },
     ],
     "head",
-    67,
+    "feature",
   ),
   null,
-  "missing matching workflow run must fail closed",
+  "missing matching PushEvent must fail closed",
 );
 const leaderNoReviewCount = approvalCountForHead({
   reviews: [],
@@ -418,6 +393,27 @@ assert.deepEqual(
   ),
   [],
   "a later CHANGES_REQUESTED review supersedes an earlier approval",
+);
+assert.deepEqual(
+  approvedReviewersForHead(
+    [
+      {
+        state: "APPROVED",
+        submittedAt: "2026-08-06T10:00:00Z",
+        commit: { oid: "head" },
+        author: { login: "reviewer-a" },
+      },
+      {
+        state: "COMMENTED",
+        submittedAt: "2026-08-06T10:01:00Z",
+        commit: { oid: "head" },
+        author: { login: "reviewer-a" },
+      },
+    ],
+    "head",
+  ),
+  ["reviewer-a"],
+  "a later COMMENTED review does not revoke an approval",
 );
 
 const actionPinPatch = `@@ -1 +1 @@\n--        uses: github/codeql-action/init@${"a".repeat(40)} # v4.37.4\n+-        uses: github/codeql-action/init@${"b".repeat(40)} # v4.37.5`;

@@ -13,7 +13,7 @@ import {
   leaderReviewMode,
   leaderSelfReviewForHead,
   requiredApprovalsForAuthor,
-  selectLastPusherRun,
+  selectLastPusherEvent,
 } from "./review-policy.mjs";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
@@ -89,20 +89,26 @@ async function listPullRequestFiles(repository, pullRequestNumber) {
   }
 }
 
-async function lastPusherMetadata(repository, pullRequestNumber, headSha) {
+async function lastPusherMetadata(repository, headSha, headRef) {
   if (!/^[0-9a-f]{40}$/.test(headSha)) {
     throw new Error("head SHA is not a canonical 40-character Git object id");
   }
-  const workflowRuns = await restJson(
-    `/repos/${repository}/actions/runs?event=pull_request_target&head_sha=${encodeURIComponent(headSha)}&per_page=100`,
-  );
-  const lastPusher = selectLastPusherRun(workflowRuns.workflow_runs, headSha, pullRequestNumber);
-  if (!lastPusher) {
-    throw new Error(
-      "no trusted pull_request_target opened/synchronize run identifies the actual last pusher",
-    );
+  if (
+    process.env.GITHUB_EVENT_NAME === "pull_request_target" &&
+    event.action === "synchronize" &&
+    typeof event.sender?.login === "string" &&
+    event.sender.login.length > 0
+  ) {
+    return { login: event.sender.login, source: "synchronize-event" };
   }
-  return lastPusher;
+  for (let page = 1; page <= 10; page += 1) {
+    const events = await restJson(`/repos/${repository}/events?per_page=100&page=${page}`);
+    if (!Array.isArray(events)) throw new Error("REST repository events response is invalid");
+    const lastPusher = selectLastPusherEvent(events, headSha, headRef);
+    if (lastPusher) return { ...lastPusher, source: "repository-push-event" };
+    if (events.length < 100) break;
+  }
+  throw new Error("no authoritative PushEvent identifies the actual last pusher");
 }
 
 async function createCommitStatus({ sha, state, targetUrl }) {
@@ -227,7 +233,7 @@ let lastPusher = null;
 let lastPusherError = null;
 if (pullRequest.user.login !== policy.leader) {
   try {
-    lastPusher = await lastPusherMetadata(repository, pullRequestNumber, headSha);
+    lastPusher = await lastPusherMetadata(repository, headSha, pullRequest.head.ref);
   } catch (error) {
     lastPusherError = error instanceof Error ? error.message : String(error);
   }
