@@ -17,6 +17,8 @@ Dependabot 的自动化依赖升级是一个窄化的低风险例外：当作者
 
 `governance-review` 是 required status，也是唯一的 author-aware approval authority；它只读取 trusted base 上的治理脚本、PR 文件、current-head reviews 和显式 reviewer allowlist，不读取组织成员清单。Ruleset 的每个 required status 都绑定 GitHub Actions integration `15368`，并且 trusted workflow 在写入前验证仓库 Actions 默认权限为 read-only、禁止批准 PR，防止同一 Actions app 的不受信任 workflow 伪造状态。工作流并发组按事件类型隔离，同一 PR 的 `pull_request_target` 与 `pull_request_review` 不会互相取消而留下 required failure；同类事件仍按 PR 去重。原生 Ruleset 的 required approving review count 为 0、`required_reviewers=[]`、`require_code_owner_review=false`、`require_last_push_approval=false`，以避免 Team/CODEOWNER/last-push reviewer 阻断 Leader 自审；治理状态对所有非 Leader 作者执行 current-head 审批和实际最后 push 者排除，对低风险 Dependabot 还要求 Leader 不是实际最后 push 者。实际 push 身份优先从 trusted `governance-review-pusher` commit status 恢复，首次运行再来自 trusted `pull_request_target` 的 synchronize sender 或匹配 head/branch 的 head 仓库 `PushEvent` actor，无法证明时直接失败；PR opened opener 不作为 push 证据。签名、线性历史、线程解决和 required status 仍由 Ruleset 强制。不得创建或配置 Misaka 专用 bypass actor。只有确实无法满足非 Leader/社区作者的独立成员审批时，才可使用已登记的 `piwork-leads` PR-only bypass，并记录原因、范围、跟踪 Issue 和复盘期限。
 
+单人阶段使用显式 `.governance/github-policy.json` `bootstrap`：只有非 Leader Core 作者路径受 `leader-only` Bootstrap 约束；Leader 作者、社区作者和低风险 Dependabot 规则不变。`governance-bootstrap-audit` 从 trusted `main` 只读审计起始日、90 天期限、三名显式 Core 身份阈值、Ruleset/旧保护 readback 和 workflow 权限。超过期限、达到阈值或发生范围/配置漂移时 fail-closed；切换只能由 Leader 以 Good signature 提交策略 PR，机器人不修改 policy、Team、Ruleset、Issue 或 PR。
+
 紧急修复仍必须通过 PR。只有 `piwork-leads` 可以使用 Ruleset 的 PR-only bypass；PR 必须写明原因、影响、回滚方式和跟踪 Issue，并在两个工作日内完成复盘。
 
 ## 变更与成员

@@ -11,6 +11,11 @@ reviewer allowlist 计算 0/2/1 审批；Leader 对所有其他 PR（包括自�
 线程解决与全部 required checks，且状态只接受 GitHub Actions integration `15368`，因此状态缺失、
 allowlist 漂移或未知 reviewer 都 fail-closed。
 
+`governance-bootstrap-audit` 是独立的只读审计状态：它在 PR、merge group、main push、定时和
+显式 dispatch 上读取 trusted `main` 的 Bootstrap 策略及 Ruleset readback；merge group 和
+docs-only PR 均产生确定的 no-op/审计状态。Bootstrap 只约束非 Leader Core 路径，超过 90 天
+或显式 Core allowlist 达到 3 人时 fail-closed 并要求签名策略 PR，不提供 bypass 或自动改写。
+
 主分支保持可发布。Release Please 使用 SemVer 标签和根 CHANGELOG；Landing 构建一次并部署同一 artifact。OnlyOffice 的候选、生产身份和 Promotion 规则继续由现有 manifest 和独立仓治理。
 
 生产 Environment 由 `make github-governance-apply -- --apply` 幂等配置为仅接受 `main`，不设置人工审批；仓库 Actions 默认只读且不得批准 PR。`v*` 标签 Ruleset 只允许 GitHub Actions Release automation 或 `piwork-leads` 创建，更新和删除均被禁止。新 Ruleset 完成 API readback 与 `gh ruleset check` 后，才可使用 `--retire-legacy` 移除旧保护。

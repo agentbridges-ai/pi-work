@@ -148,9 +148,20 @@ jobs:
             echo "Expected a two-parent synthetic PR merge commit: $head" >&2
             exit 1
           fi
-          if [[ "$base" != "$PR_BASE_SHA" || "$pr_head" != "$PR_HEAD_SHA" ]]; then
-            echo "Synthetic merge parents do not match PR base/head: $base $pr_head" >&2
+          if [[ "$pr_head" != "$PR_HEAD_SHA" ]]; then
+            echo "Synthetic merge head does not match PR head: $pr_head $PR_HEAD_SHA" >&2
             exit 1
+          fi
+          # GitHub may advance main between dispatching the PR event and
+          # materialising the synthetic merge commit. The merge parent is the
+          # exact base that was tested; accept a stale event base only when it
+          # remains an ancestor, and fail closed on rebases or unrelated refs.
+          if [[ "$base" != "$PR_BASE_SHA" ]]; then
+            if ! git merge-base --is-ancestor "$PR_BASE_SHA" "$base"; then
+              echo "Synthetic merge base is not a descendant of the PR event base: $base $PR_BASE_SHA" >&2
+              exit 1
+            fi
+            echo "PR event base advanced from $PR_BASE_SHA to tested synthetic base $base; using the tested parent."
           fi
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"

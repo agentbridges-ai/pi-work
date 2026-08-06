@@ -284,7 +284,9 @@ dry-check:
 	cd $(WEB_DIR) && bun run dry:check
 governance-check: worktree-check
 	node ./scripts/governance/check-governance.mjs
+	node ./scripts/governance/bootstrap-audit.mjs --offline
 	node ./scripts/governance/governance-fixtures.mjs
+	node ./scripts/governance/bootstrap-audit-fixtures.mjs
 	node ./scripts/governance/dependabot-fixtures.mjs
 	node ./scripts/verify-github-actions-pinning.mjs
 	node ./scripts/governance/merge-queue-workflows.mjs

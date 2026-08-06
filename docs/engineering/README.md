@@ -21,6 +21,7 @@ Piwork 的工程治理采用“基线 + ratchet”。`.governance/controls.json`
 - [运行、日志、指标与恢复](operations.md)
 - [文档、RFC 与变更管理](change-management.md)
 - [Worktree Harness 并行开发与里程碑收口](worktree-harness.md)
+- [Leader-only Bootstrap 审计](change-management.md#单人-leader-only-bootstrap)
 
 ## 例外与债务
 

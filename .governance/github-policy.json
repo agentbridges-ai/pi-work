@@ -5,6 +5,16 @@
   "leader": "Misakago",
   "coreTeam": "piwork-core",
   "leadsTeam": "piwork-leads",
+  "bootstrap": {
+    "enabled": true,
+    "state": "leader-only",
+    "scope": "non-leader-core-review",
+    "startsAt": "2026-08-06",
+    "expiresAfterDays": 90,
+    "activateFullCoreReviewersAt": 3,
+    "expiredBehavior": "fail-closed",
+    "transitionBehavior": "signed-policy-pr"
+  },
   "ordinaryApprovals": 1,
   "highRiskApprovals": 1,
   "leaderApprovals": 0,
@@ -130,6 +140,7 @@
       ".github/workflows/release-evidence.yml",
       ".github/workflows/dependency-review.yml",
       ".github/workflows/governance.yml",
+      ".github/workflows/governance-bootstrap-audit.yml",
       ".github/workflows/deep-verify.yml",
       ".github/workflows/leader-review.yml"
     ],
@@ -161,6 +172,7 @@
       ".github/workflows/release-evidence.yml",
       ".github/workflows/dependency-review.yml",
       ".github/workflows/governance.yml",
+      ".github/workflows/governance-bootstrap-audit.yml",
       ".github/workflows/deep-verify.yml",
       ".github/workflows/leader-review.yml"
     ],
@@ -215,7 +227,6 @@
     "bun.lock",
     "**/bun.lock"
   ],
-  "bootstrapBypassDays": 90,
   "stackedPullRequests": {
     "status": "private-preview-not-enabled",
     "dependencyOrder": ["mise", "feature", "release"],

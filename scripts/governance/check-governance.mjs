@@ -27,6 +27,9 @@ for (const file of [
   "LICENSE",
   ".github/CODEOWNERS",
   ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/workflows/governance-bootstrap-audit.yml",
+  "scripts/governance/bootstrap-audit.mjs",
+  "scripts/governance/bootstrap-audit-fixtures.mjs",
   ".governance/controls.json",
   ".governance/github-policy.json",
   ".governance/license-policy.json",
@@ -88,6 +91,28 @@ if (policy) {
   }
   if (policy.requiredStatusCheckIntegrationId !== 15368) {
     fail.push("github-policy.json: required status checks must be bound to GitHub Actions (15368)");
+  }
+  const bootstrap = policy.bootstrap;
+  const explicitCoreReviewers = policy.reviewEnforcement?.coreReviewerLogins;
+  const bootstrapStateValid =
+    (bootstrap?.enabled === true && bootstrap?.state === "leader-only") ||
+    (bootstrap?.enabled === false &&
+      bootstrap?.state === "full-core" &&
+      Array.isArray(explicitCoreReviewers) &&
+      explicitCoreReviewers.length >= 3);
+  if (
+    !bootstrap ||
+    !bootstrapStateValid ||
+    bootstrap.scope !== "non-leader-core-review" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(bootstrap.startsAt || "") ||
+    bootstrap.expiresAfterDays !== 90 ||
+    bootstrap.activateFullCoreReviewersAt !== 3 ||
+    bootstrap.expiredBehavior !== "fail-closed" ||
+    bootstrap.transitionBehavior !== "signed-policy-pr"
+  ) {
+    fail.push(
+      "github-policy.json: Leader-only Bootstrap must be explicit, scoped to non-Leader Core review, and expire after 90 days with signed-PR transition",
+    );
   }
   if (!Array.isArray(policy.securityFeatures) || policy.securityFeatures.length < 5) {
     fail.push("github-policy.json: security feature policy is incomplete");
@@ -236,6 +261,10 @@ const leaderReviewWorkflow = readFileSync(
   join(root, ".github/workflows/leader-review.yml"),
   "utf8",
 );
+const bootstrapAuditWorkflow = readFileSync(
+  join(root, ".github/workflows/governance-bootstrap-audit.yml"),
+  "utf8",
+);
 if (/^\s*workflow_dispatch\s*:/m.test(leaderReviewWorkflow)) {
   fail.push("leader-review workflow must not expose workflow_dispatch");
 }
@@ -254,6 +283,35 @@ if (
 ) {
   fail.push(
     "leader-review workflow must isolate concurrency by event type to avoid cancelling required status runs",
+  );
+}
+if (
+  !/^\s*pull_request_target:/m.test(bootstrapAuditWorkflow) ||
+  !/^\s*merge_group:/m.test(bootstrapAuditWorkflow) ||
+  !/^\s*schedule:/m.test(bootstrapAuditWorkflow) ||
+  !/^\s*workflow_dispatch:/m.test(bootstrapAuditWorkflow) ||
+  !/ref:\s*refs\/heads\/main\s*$/m.test(bootstrapAuditWorkflow) ||
+  !/actions:\s*read/m.test(bootstrapAuditWorkflow) ||
+  !/contents:\s*read/m.test(bootstrapAuditWorkflow) ||
+  !/pull-requests:\s*read/m.test(bootstrapAuditWorkflow) ||
+  !/statuses:\s*read/m.test(bootstrapAuditWorkflow) ||
+  !/node scripts\/governance\/bootstrap-audit\.mjs/.test(bootstrapAuditWorkflow) ||
+  !/docs-only PR no-op/.test(
+    readFileSync(join(root, "scripts/governance/bootstrap-audit.mjs"), "utf8"),
+  ) ||
+  /(?:contents|pull-requests|issues|actions):\s*write/m.test(bootstrapAuditWorkflow)
+) {
+  fail.push(
+    "governance-bootstrap-audit workflow must be a trusted-main, read-only schedule/dispatch/PR audit with deterministic docs-only no-op",
+  );
+}
+const deepVerifyWorkflow = readFileSync(join(root, ".github/workflows/deep-verify.yml"), "utf8");
+if (
+  !/git merge-base --is-ancestor "\$PR_BASE_SHA" "\$base"/.test(deepVerifyWorkflow) ||
+  /\[\[ "\$base" != "\$PR_BASE_SHA" \|\|/.test(deepVerifyWorkflow)
+) {
+  fail.push(
+    "deep-verify coverage range must use the tested synthetic merge parent and reject unrelated stale PR bases",
   );
 }
 if (
