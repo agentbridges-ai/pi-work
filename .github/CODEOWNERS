@@ -1,5 +1,5 @@
 # Default ownership. Team membership, not this file, is the source of Core membership.
-* @agentbridges-ai/piwork-core @Misakago
+* @agentbridges-ai/piwork-core
 
 # Governance, CI, release and security changes require Core plus Leads visibility.
 /.github/ @agentbridges-ai/piwork-core @agentbridges-ai/piwork-leads
@@ -7,4 +7,4 @@
 /Makefile @agentbridges-ai/piwork-core @agentbridges-ai/piwork-leads
 /release/ @agentbridges-ai/piwork-core @agentbridges-ai/piwork-leads
 /SECURITY.md @agentbridges-ai/piwork-core @agentbridges-ai/piwork-leads
-/GOVERNANCE.md @agentbridges-ai/piwork-core @Misakago
+/GOVERNANCE.md @agentbridges-ai/piwork-core @agentbridges-ai/piwork-leads

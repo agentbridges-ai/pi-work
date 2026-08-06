@@ -9,24 +9,16 @@ for schemas and protocol types; Piwork owns all MCP transports.
 ## Reference authority
 
 The sole normative guide for Pi Agent and RPC development is the official
-`earendil-works/pi` repository pinned as the read-only Git submodule at
-[`docs/upstream/pi`](upstream/pi). It includes the complete upstream
-documentation and the implementation context needed to interpret it; do not
-copy only one page into a second Piwork authority. Start RPC work from
-[`packages/coding-agent/docs/rpc.md`](upstream/pi/packages/coding-agent/docs/rpc.md).
+[`earendil-works/pi`](https://github.com/earendil-works/pi) repository. Do not
+vendor a second copy of the upstream documentation in Piwork. Start RPC work
+from
+[`packages/coding-agent/docs/rpc.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
+and inspect the surrounding implementation when needed.
 The [published Pi RPC page](https://pi.dev/docs/latest/rpc) is a convenient
 rendering of that upstream documentation.
 
-Initialize, update, and verify the reference with:
-
-```bash
-git submodule update --init docs/upstream/pi
-make sync-pi-upstream
-make verify-pi-upstream
-```
-
-Do not edit the submodule from Piwork. An upstream update changes the
-superproject gitlink and is reviewed like a dependency pin. The exact
+Review the upstream revision used for a compatibility change in the pull
+request. The exact
 `@earendil-works/pi-coding-agent@0.82.1` package installed by Piwork is used to
 test compatibility with the pinned guide, not as a competing product-design
 authority. A documented feature that is absent from 0.82.1 remains unavailable

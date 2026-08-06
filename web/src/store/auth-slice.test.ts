@@ -51,10 +51,10 @@ vi.hoisted(() => {
 import { useStore } from "../store.js";
 import * as userSpaceLifecycle from "../user-space-runtime-lifecycle.js";
 
-const misakaUser = {
-  userId: "misaka.mikoto",
+const testuserUser = {
+  userId: "testuser.mikoto",
   uuid: "0bf8be70-f8fc-1040-9f90-2d72fd78b284",
-  username: "misaka.mikoto",
+  username: "testuser.mikoto",
   displayName: "御坂美琴",
   orgId: "tokiwadai",
   orgName: "常盘台中学",
@@ -104,7 +104,7 @@ describe("Auth actions", () => {
 
   it("logout: clears local workspace state without writing a browser session bucket", () => {
     useStore.getState().setAuthToken("token-123");
-    useStore.getState().setCurrentUser(misakaUser, "local");
+    useStore.getState().setCurrentUser(testuserUser, "local");
     useStore.getState().setCurrentSession("old-session");
     useStore.getState().setRuntimeSessions([
       {
@@ -141,9 +141,9 @@ describe("Auth actions", () => {
   });
 
   it("setCurrentUser: switching local users avoids restoring browser session buckets", () => {
-    useStore.getState().setCurrentUser(misakaUser, "local");
-    useStore.getState().setCurrentSession("misaka-session");
-    useStore.getState().bindSessionToAgent("agent", "misaka-session");
+    useStore.getState().setCurrentUser(testuserUser, "local");
+    useStore.getState().setCurrentSession("testuser-session");
+    useStore.getState().bindSessionToAgent("agent", "testuser-session");
 
     useStore.getState().setCurrentUser(shiraiUser, "local");
     expect(useStore.getState().currentSessionId).toBeNull();
@@ -152,7 +152,7 @@ describe("Auth actions", () => {
     useStore.getState().setCurrentSession("shirai-session");
     useStore.getState().bindSessionToAgent("agent", "shirai-session");
 
-    useStore.getState().setCurrentUser(misakaUser, "local");
+    useStore.getState().setCurrentUser(testuserUser, "local");
     expect(useStore.getState().currentSessionId).toBeNull();
     expect(useStore.getState().agentSessionIds.agent).toBe("");
 
@@ -163,8 +163,8 @@ describe("Auth actions", () => {
 
   it("setCurrentUser: switching tenants for the same user clears the previous tenant runtime", () => {
     const disposeUserSpace = vi.spyOn(userSpaceLifecycle, "disposeLoadedUserSpaceRuntimeState");
-    const tenantA = { ...misakaUser, tenantId: "tenant-a", tenantName: "Tenant A" };
-    const tenantB = { ...misakaUser, tenantId: "tenant-b", tenantName: "Tenant B" };
+    const tenantA = { ...testuserUser, tenantId: "tenant-a", tenantName: "Tenant A" };
+    const tenantB = { ...testuserUser, tenantId: "tenant-b", tenantName: "Tenant B" };
     useStore.getState().setCurrentUser(tenantA, "local");
     useStore.getState().setCurrentSession("tenant-a-session");
     useStore.getState().bindSessionToAgent("agent", "tenant-a-session");
@@ -188,9 +188,9 @@ describe("Auth actions", () => {
   });
 
   it("setCurrentUser: local mode waits for server-side workspace state instead of localStorage", () => {
-    useStore.getState().setCurrentUser(misakaUser, "local");
-    useStore.getState().setCurrentSession("misaka-session");
-    useStore.getState().bindSessionToAgent("agent", "misaka-session");
+    useStore.getState().setCurrentUser(testuserUser, "local");
+    useStore.getState().setCurrentSession("testuser-session");
+    useStore.getState().bindSessionToAgent("agent", "testuser-session");
 
     useStore.getState().setCurrentUser(shiraiUser, "local");
     expect(useStore.getState().currentSessionId).toBeNull();
@@ -199,7 +199,7 @@ describe("Auth actions", () => {
     useStore.getState().setCurrentSession("shirai-session");
     useStore.getState().bindSessionToAgent("agent", "shirai-session");
 
-    useStore.getState().setCurrentUser(misakaUser, "local");
+    useStore.getState().setCurrentUser(testuserUser, "local");
     expect(useStore.getState().currentSessionId).toBeNull();
     expect(useStore.getState().agentSessionIds.agent).toBe("");
   });

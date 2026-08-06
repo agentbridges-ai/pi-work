@@ -1,31 +1,53 @@
-# 贡献指南
+# Contributing to Piwork
 
-Piwork 由 `@Misakago` 作为 Leader/Owner，配合约五人的 Core Team 维护，并接受社区 Fork/PR 贡献。产品不把 Git、Worktree 或 Pull Request 当作用户功能；本文件只描述仓库协作流程。
+Piwork follows the small-core, extension-friendly contribution model used by
+[Pi](https://github.com/earendil-works/pi). Read the change you submit and be
+able to explain its behavior, tests, and operational impact. AI assistance is
+allowed; unreviewed generated output is not.
 
-## 开始贡献
+## Before opening a pull request
 
-1. 从 `origin/main` 创建分支，分支名使用 `misakago/<简短描述>`。
-2. 小改动直接提交 PR；影响认证、租户隔离、凭据、Pi RPC/SRT、User Space、迁移、协议、CI 或发布的改动，先创建 RFC 或在 PR 中链接既有 RFC。
-3. PR 标题使用 `type(scope?): 中文摘要`。允许的 type 为 `feat`、`fix`、`perf`、`refactor`、`docs`、`test`、`build`、`ci`、`chore`、`revert`。
-4. 所有 PR 使用 Squash Merge；提交必须通过现有签名和 CI 门禁。不要把密钥、`.env`、数据目录、构建产物或其他仓库内容提交进来。
-5. PR 描述必须说明动机、改动、风险等级、测试结果、迁移/回滚影响以及文档、i18n 和 a11y 影响。
+1. Read `AGENTS.md` and [Development](docs/development.md).
+2. Start from `origin/main` in an isolated worktree. The main checkout is
+   read-only and must remain clean.
+3. Keep the change focused. Product code belongs in the product; repository
+   automation belongs in `.github/` or `scripts/`.
+4. Run the smallest relevant local checks first, then `make check` when the
+   change is ready.
+5. Do not commit credentials, `.env` files, user data, recordings, build
+   output, or another repository.
 
-## 评审与发布
+The worktree harness is a local coordination aid, not a product feature. It
+records task scope and prevents concurrent tasks from claiming the same files.
 
-- 普通改动需要一名最新提交后的 Core Team 非作者批准。
-- 高风险改动需要两名 Core Team 非作者批准，并需要 `@Misakago` 作为作者或批准者参与。
-- 社区贡献者默认通过 Fork 提交；持续贡献、能处理安全边界并参与评审后，由 Owner 邀请加入 Core Team。
-- `main` 保持可发布；Release Please 负责 SemVer 标签和 GitHub Release，Piwork 不发布 npm 包。Landing Page 在 `main` 通过门禁后连续部署。
+## Pull requests
 
-## 本地检查
+- Use an English Conventional Commit title:
+  `type(scope?): short summary`.
+- Describe the problem, the change, risk, tests, migration or rollback impact,
+  and any documentation or accessibility impact.
+- Link an ADR, RFC, issue, or runbook when the change affects a public
+  contract, authentication, isolation, credentials, runtime boundaries,
+  migrations, CI, security, or release behavior.
+- Use squash merging. Do not bypass required checks or rewrite another
+  contributor's history.
+
+The current review policy is machine-readable in
+`.governance/github-policy.json`. In summary, ordinary changes require one
+Core approval and high-risk changes require two independent Core approvals.
+Signatures, required checks, thread resolution, and the latest-head rule always
+remain enforced.
+
+## Local checks
 
 ```bash
 make install
-make check
-make test
 make governance-check
 make security-check
 make landing-check
+make check
 ```
 
-产品不接受通过绕过检查来“修绿”的提交。若确有临时例外，必须登记在 `.governance/exceptions.json`，包含 Owner、跟踪 Issue 和到期日。
+If a check cannot run locally, record the reason and the corresponding CI
+evidence in the pull request. Exceptions are explicit, scoped, owned, and
+time-limited in `.governance/exceptions.json`.

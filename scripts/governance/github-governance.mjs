@@ -85,7 +85,7 @@ function highRiskRuleset(coreId, leadsId) {
           dismiss_stale_reviews_on_push: true,
           require_code_owner_review: true,
           require_last_push_approval: true,
-          required_approving_review_count: policy.ordinaryApprovals,
+          required_approving_review_count: policy.highRiskApprovals,
           required_review_thread_resolution: true,
           required_reviewers: requiredReviewers(
             coreId,
@@ -229,7 +229,7 @@ function readbackDrift() {
     drift.push(`${policy.productionEnvironment} environment is missing or unreadable`);
   }
 
-  for (const slug of [policy.coreTeam, policy.leadsTeam]) {
+  for (const slug of [policy.maintainerTeam, policy.releaseTeam]) {
     try {
       gh("GET", `/orgs/${org}/teams/${slug}`);
     } catch {
@@ -303,8 +303,8 @@ function reportReadback() {
 try {
   const teams = {};
   for (const [slug, description, permission] of [
-    [policy.coreTeam, "Piwork Core Team", "push"],
-    [policy.leadsTeam, "Piwork Leads and governance bypass", "maintain"],
+    [policy.maintainerTeam, "Piwork maintainers", "push"],
+    [policy.releaseTeam, "Piwork release maintainers", "maintain"],
   ]) {
     let team;
     try {
@@ -315,7 +315,6 @@ try {
           name: slug,
           description,
           privacy: "closed",
-          maintainers: [policy.leader],
         }),
       );
     }
@@ -324,12 +323,9 @@ try {
     applyOrReport(`grant ${permission} on ${repository} to ${slug}`, () =>
       gh("PUT", `/orgs/${org}/teams/${slug}/repos/${repository}`, { permission }),
     );
-    applyOrReport(`ensure ${policy.leader} is maintainer of ${slug}`, () =>
-      gh("PUT", `/orgs/${org}/teams/${slug}/memberships/${policy.leader}`, { role: "maintainer" }),
-    );
   }
 
-  if (!teams[policy.coreTeam] || !teams[policy.leadsTeam]) {
+  if (!teams[policy.maintainerTeam] || !teams[policy.releaseTeam]) {
     if (!apply) {
       console.log("[github-governance] apply would create/resolve both teams before rulesets");
       reportReadback();
@@ -378,9 +374,9 @@ try {
     "[github-governance] GitHub Actions cannot be added as a repository ruleset bypass actor on this Free organization; release tag creation remains workflow-compatible while update/deletion protection is enforced.",
   );
   for (const desired of [
-    mainRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
-    highRiskRuleset(teams[policy.coreTeam].id, teams[policy.leadsTeam].id),
-    releaseTagRuleset(teams[policy.leadsTeam].id),
+    mainRuleset(teams[policy.maintainerTeam].id, teams[policy.releaseTeam].id),
+    highRiskRuleset(teams[policy.maintainerTeam].id, teams[policy.releaseTeam].id),
+    releaseTagRuleset(teams[policy.releaseTeam].id),
   ]) {
     const existing = rulesets.find((item) => item.name === desired.name);
     applyOrReport(`${existing ? "update" : "create"} ruleset ${desired.name}`, () =>

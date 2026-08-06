@@ -15,7 +15,6 @@ const requiredWorkflowJobs = {
   verify: [".github/workflows/deep-verify.yml", "verify"],
   "landing-quality": [".github/workflows/landing-quality.yml", "landing-quality"],
   "dependency-review": [".github/workflows/dependency-review.yml", "dependency-review"],
-  "governance-review": [".github/workflows/leader-review.yml", "governance-review"],
 };
 
 function readWorkflow(file) {
@@ -156,20 +155,6 @@ requirePattern(
   "non-PR dependency-review no-op must not duplicate the merge_group branch",
 );
 
-const leaderReview = readWorkflow(".github/workflows/leader-review.yml");
-requirePattern(
-  ".github/workflows/leader-review.yml",
-  leaderReview,
-  /Governance review no-op for merge group/,
-  "merge_group must not execute author-aware PR review without PR metadata",
-);
-requirePattern(
-  ".github/workflows/leader-review.yml",
-  leaderReview,
-  /event_name != 'merge_group'/,
-  "author-aware leader review must be skipped only for the merge_group boundary",
-);
-
 for (const file of [".github/workflows/deploy.yml", ".github/workflows/release-please.yml"]) {
   const text = readWorkflow(file);
   if (/^  merge_group:\s*$/m.test(text)) {
@@ -182,11 +167,11 @@ if (policy.mergeQueue?.enabled !== false) {
     "github-policy.json: mergeQueue.enabled must remain false until the deferred apply gate is satisfied",
   );
 }
-if (policy.mergeQueue?.recommendedConfiguration?.mergingStrategy !== "ALLGREEN") {
-  failures.push("github-policy.json: merge queue recommendation must use ALLGREEN");
+if (policy.mergeQueue?.strategy !== "ALLGREEN") {
+  failures.push("github-policy.json: merge queue strategy must use ALLGREEN");
 }
-if (policy.mergeQueue?.recommendedConfiguration?.mergeMethod !== "SQUASH") {
-  failures.push("github-policy.json: merge queue recommendation must use SQUASH");
+if (policy.mergeQueue?.method !== "SQUASH") {
+  failures.push("github-policy.json: merge queue method must use SQUASH");
 }
 if (policy.stackedPullRequests?.dependencyOrder?.join("->") !== "mise->feature->release") {
   failures.push(
@@ -200,5 +185,5 @@ if (failures.length) {
 }
 
 console.log(
-  "[merge-queue-workflows] required statuses, merge_group metadata boundaries, production guards, and policy fixtures passed",
+  "[merge-queue-workflows] required statuses, merge_group boundaries, production guards, and policy fixtures passed",
 );

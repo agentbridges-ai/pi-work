@@ -151,8 +151,12 @@ export function validatePolicy(policy) {
   if (policy.root?.readOnly !== true || policy.root?.mustRemainClean !== true) {
     fail("worktree policy must enforce a clean, read-only root checkout");
   }
-  if (policy.branch?.prefix !== "misakago/" || typeof policy.branch?.pattern !== "string") {
-    fail("worktree policy must use the misakago/ branch prefix and a branch pattern");
+  if (
+    typeof policy.branch?.prefix !== "string" ||
+    !/^[a-z][a-z0-9-]*\/$/.test(policy.branch.prefix) ||
+    typeof policy.branch?.pattern !== "string"
+  ) {
+    fail("worktree policy must declare a valid branch prefix and pattern");
   }
   if (
     !Number.isInteger(policy.branch?.maxLength) ||
@@ -238,6 +242,53 @@ export function validatePolicy(policy) {
   ) {
     fail(
       "worktree policy must enforce root coordination, milestone evidence, handoff, and human review",
+    );
+  }
+  const ciOrchestration = policy.ciOrchestration;
+  const gateIds = ["gate-0", "gate-1", "gate-2", "gate-3"];
+  if (
+    ciOrchestration?.riskFirst !== true ||
+    ciOrchestration.localPreflightRequired !== true ||
+    ciOrchestration.dynamicOrdering?.enabled !== true ||
+    ciOrchestration.dynamicOrdering.selection !== "highest-risk-first" ||
+    ciOrchestration.dynamicOrdering.failFast !== true ||
+    ciOrchestration.dynamicOrdering.gatesCannotBeRemoved !== true ||
+    ciOrchestration.requiredStatuses?.alwaysEmit !== true ||
+    ciOrchestration.requiredStatuses.unrelatedChange !== "deterministic-no-op" ||
+    ciOrchestration.requiredStatuses.relatedChange !== "real-check" ||
+    ciOrchestration.requiredStatuses.noSilentBypass !== true ||
+    !Array.isArray(ciOrchestration.gates) ||
+    ciOrchestration.gates.length !== gateIds.length ||
+    ciOrchestration.gates.some(
+      (gate, index) =>
+        !gate ||
+        gate.id !== gateIds[index] ||
+        typeof gate.name !== "string" ||
+        gate.local !== index < 2 ||
+        gate.failFast !== true ||
+        !Array.isArray(gate.checks) ||
+        gate.checks.length === 0,
+    ) ||
+    ciOrchestration.supersededCommitCancellation?.enabled !== true ||
+    ciOrchestration.supersededCommitCancellation.sameScopeOnly !== true ||
+    ciOrchestration.supersededCommitCancellation.neverCancelsRequiredEvidence !== true ||
+    ciOrchestration.stackedPr?.enabled !== true ||
+    ciOrchestration.stackedPr.order !== "dependency-order-only" ||
+    JSON.stringify(ciOrchestration.stackedPr.sequence) !==
+      JSON.stringify(["mise", "feature", "release"]) ||
+    ciOrchestration.stackedPr.eachLayerChecksIndependently !== true ||
+    ciOrchestration.stackedPr.reviewBypass !== false ||
+    ciOrchestration.mergeQueue?.enabledWhenAvailable !== true ||
+    ciOrchestration.mergeQueue.purpose !== "combined-validation-only" ||
+    ciOrchestration.mergeQueue.requiredMergeGroupEvent !== true ||
+    ciOrchestration.mergeQueue.reviewBypass !== false ||
+    ciOrchestration.finalAudit?.modelSource !== "runtime" ||
+    ciOrchestration.finalAudit.minimumReasoning !== "ultra" ||
+    ciOrchestration.finalAudit.humanInTheLoop !== true ||
+    ciOrchestration.finalAudit.reviewBypass !== false
+  ) {
+    fail(
+      "worktree policy must enforce risk-first Gate 0-3 orchestration, deterministic required statuses, and final human audit",
     );
   }
   if (!Array.isArray(policy.milestones) || !policy.milestones.length) {
@@ -441,7 +492,7 @@ function validateMetadata(entry, label = "worktree metadata", policy) {
     fail(`${label} taskId, threadId, and owner must be strings`);
   }
   if (typeof entry.branch !== "string" || !branchMatchesPolicy(entry.branch, policy)) {
-    fail(`${label} branch must use the misakago/ prefix`);
+    fail(`${label} branch must use the ${policy.branch.prefix} prefix`);
   }
   if (typeof entry.worktreePath !== "string" || !isAbsolute(entry.worktreePath)) {
     fail(`${label} worktreePath must be absolute`);
@@ -999,7 +1050,7 @@ function candidateFromOptions(repository, policy, options, now) {
     .filter(Boolean);
   if (!evidence.length) fail("claim/plan requires --evidence for the current milestone");
   if (options.handoffTo && options.handoffTo !== "root-coordinator") {
-    fail("execution-thread handoff must target the root-coordinator");
+    fail("execution-thread handoff must target the root coordinator");
   }
   if (!milestone) fail(`unknown coordination milestone: ${options.milestone}`);
   const trackerIssue = resolveTrackerIssue(policy, options.trackerIssue);
@@ -1200,7 +1251,7 @@ function runtimeLockMetadata(repository, policy, options, now) {
     taskId: options.taskId || `harness-${process.pid}`,
     threadId: options.threadId || "worktree-harness",
     owner: options.owner || "worktree-harness",
-    branch: branch.startsWith("misakago/") ? branch : `misakago/${branch}`,
+    branch: branch.startsWith(policy.branch.prefix) ? branch : `${policy.branch.prefix}${branch}`,
     worktreePath: repository.mainRoot,
     baseSha,
     scope: { paths: [".git/worktree-harness-runtime"], highRisk: false },
@@ -1680,7 +1731,7 @@ export function parseCliArgs(argv) {
 export function runHarness(argv = process.argv.slice(2), cwd = process.cwd(), clock = Date.now()) {
   const options = parseCliArgs(argv);
   if (["merge", "close-milestone", "complete-milestone"].includes(options.command)) {
-    fail("execution-thread cannot merge or close milestones; handoff to the root-coordinator");
+    fail("execution-thread cannot merge or close milestones; handoff to the root coordinator");
   }
   if (!["plan", "check", "claim", "release", "cleanup"].includes(options.command)) {
     fail(`unknown command: ${options.command}; expected plan, check, claim, release, or cleanup`);

@@ -1,24 +1,40 @@
-# 项目治理
+# Governance
 
-## 角色
+Piwork uses a small maintainer model and keeps policy close to the code. The
+`@agentbridges-ai/piwork-core` team owns day-to-day maintenance; contributors
+participate through public issues and pull requests. The
+`@agentbridges-ai/piwork-leads` team is reserved for release and emergency
+administration.
 
-- `@Misakago`：项目 Leader/Owner，负责产品方向、发布、安全升级、最终争议裁决和 Core Team 任命。
-- `@agentbridges-ai/piwork-core`：约五名具有 Write 权限的核心开发者，负责日常维护、代码评审、事故响应和社区协作。
-- 社区贡献者：通过 Fork/PR 提交改动，不默认拥有仓库写权限。
-- `@agentbridges-ai/piwork-leads`：Leader 与后续指定的 Leads，用于发布、规则维护和审计式 PR-only bypass。
+## Principles
 
-## 决策流程
+- Keep the product core small and prefer extensions or focused follow-up
+  changes for optional behavior.
+- Treat authentication, tenant isolation, credentials, Pi RPC/SRT, User Space,
+  shared protocols, migrations, CI, security, and release automation as
+  high-risk paths.
+- Keep the main branch releasable. Every merge must have real or deterministic
+  no-op required checks; a no-op is never a bypass.
+- Use GitHub milestones and tracker issues for work that spans multiple pull
+  requests. Stacked pull requests express dependency order; Merge Queue, when
+  enabled, validates the combined result. Neither changes review requirements.
 
-普通实现采用 PR 共识；影响公共协议、权限/隔离、数据迁移、Pi 运行时、供应链或发布的改动必须在 PR 中链接 RFC，并遵循高风险评审规则。出现无法解决的产品或安全分歧时由 Owner 作最终裁决。
+## Review and decisions
 
-评审计数按 PR 作者动态执行：`@Misakago` 作为作者时使用 `self-or-exempt` 治理模式，额外治理审批要求为 0；若 API 返回当前 head 的 Leader self-review，仅可显示，绝不创建或伪造 Review。其他 Core 作者需要至少 2 个针对最新提交的非作者 Core 审批；社区作者沿用普通改动的 1 个 Core CODEOWNER 基础门禁。高风险路径在此基础上仍要求 Leader 作为作者或最新提交批准者参与。`governance-review` 只读取 PR 元数据与评审，不读取组织成员清单，并使用 GitHub 的作者关联类型识别 Core 作者。
+The source of truth for review counts, risk paths, teams, required statuses,
+and exceptions is `.governance/github-policy.json`. Ordinary pull requests
+require one Core approval. High-risk pull requests require two independent Core
+approvals. GitHub signatures, required checks, resolved conversations, and
+latest-head evidence remain mandatory for every author.
 
-该条件策略只影响 `governance-review` 的机器计数，不改变 GitHub CODEOWNERS、Ruleset、required approving review、last-push approval 或平台禁止作者自审的限制。GitHub 原生 Ruleset 无法按作者条件表达 0/2/1 时，以治理状态作为条件策略权威；不得创建或配置 Misaka 专用 bypass actor。只有确实无法满足非 Leader/社区作者的独立成员审批时，才可使用已登记的 `piwork-leads` PR-only bypass，并记录原因、范围、跟踪 Issue 和复盘期限。
+Architecture and security decisions belong in an ADR or RFC. Operational
+procedures belong in `docs/runbooks/`. The machine checks validate policy,
+ownership, links, exceptions, and action pinning; they do not infer authority
+from usernames or organization membership.
 
-紧急修复仍必须通过 PR。只有 `piwork-leads` 可以使用 Ruleset 的 PR-only bypass；PR 必须写明原因、影响、回滚方式和跟踪 Issue，并在两个工作日内完成复盘。
+## Changes to governance
 
-## 变更与成员
-
-Core Team 成员通过 GitHub Team 管理，不通过 CODEOWNERS 文件逐人维护。新增成员需要能独立处理测试、权限和安全边界，并得到 Owner 的任命；移除成员应立即撤销 Team 权限并复查其未合并分支。
-
-所有规范控制项、例外和延期事项以 `.governance/` 为机器权威，以 `docs/engineering/` 为人类入口。新增缓存、队列、托管服务、对象存储、IaC 或 hosted SLO 前必须先提交 RFC。
+Governance changes are normal signed pull requests. They must update the
+machine policy and its documentation together, include focused fixtures, and
+pass the same required checks as product changes. No workflow may silently
+modify teams, rulesets, milestones, or policy files.

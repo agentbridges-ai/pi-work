@@ -1,3 +1,7 @@
-# 事故响应与复盘
+# Incident response
 
-先确认影响范围和是否涉及跨用户数据、认证绕过或凭据；高风险事件立即由 `@Misakago` 接管，冻结相关发布并保留脱敏证据。恢复服务后两个工作日内完成复盘，包含时间线、根因、检测缺口、用户影响、修复项、Owner、到期日和是否需要 RFC。
+Confirm impact and whether the incident involves cross-user data, an
+authentication bypass, or credentials. Freeze related releases and preserve
+redacted evidence. After recovery, complete a review within two business days
+with a timeline, root cause, detection gap, user impact, corrective actions,
+owners, due dates, and any required RFC.

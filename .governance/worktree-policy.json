@@ -6,8 +6,8 @@
     "resolve": "main-worktree"
   },
   "branch": {
-    "prefix": "misakago/",
-    "pattern": "^misakago/[a-z0-9][a-z0-9._/-]{0,80}$",
+    "prefix": "piwork/",
+    "pattern": "^piwork/[a-z0-9][a-z0-9._/-]{0,80}$",
     "maxLength": 96
   },
   "paths": {
@@ -98,6 +98,76 @@
     ],
     "parallelScopesMustBeDisjoint": true,
     "localSimulationPrecedesRemoteChecks": true,
+    "finalAudit": {
+      "modelSource": "runtime",
+      "minimumReasoning": "ultra",
+      "humanInTheLoop": true,
+      "reviewBypass": false
+    }
+  },
+  "ciOrchestration": {
+    "riskFirst": true,
+    "localPreflightRequired": true,
+    "dynamicOrdering": {
+      "enabled": true,
+      "selection": "highest-risk-first",
+      "failFast": true,
+      "gatesCannotBeRemoved": true
+    },
+    "requiredStatuses": {
+      "alwaysEmit": true,
+      "unrelatedChange": "deterministic-no-op",
+      "relatedChange": "real-check",
+      "noSilentBypass": true
+    },
+    "gates": [
+      {
+        "id": "gate-0",
+        "name": "scope-and-risk",
+        "local": true,
+        "failFast": true,
+        "checks": ["manifest", "worktree-check", "risk-classification", "changed-files"]
+      },
+      {
+        "id": "gate-1",
+        "name": "local-fast-fail",
+        "local": true,
+        "failFast": true,
+        "checks": ["format", "lint", "typecheck", "targeted-tests", "security-fixtures"]
+      },
+      {
+        "id": "gate-2",
+        "name": "remote-required-checks",
+        "local": false,
+        "failFast": true,
+        "checks": ["governance", "quality", "dependency-review", "verify", "domain-canaries"]
+      },
+      {
+        "id": "gate-3",
+        "name": "combined-closeout",
+        "local": false,
+        "failFast": true,
+        "checks": ["stacked-dependency-order", "merge-group", "release-evidence", "human-review"]
+      }
+    ],
+    "supersededCommitCancellation": {
+      "enabled": true,
+      "sameScopeOnly": true,
+      "neverCancelsRequiredEvidence": true
+    },
+    "stackedPr": {
+      "enabled": true,
+      "order": "dependency-order-only",
+      "sequence": ["mise", "feature", "release"],
+      "eachLayerChecksIndependently": true,
+      "reviewBypass": false
+    },
+    "mergeQueue": {
+      "enabledWhenAvailable": true,
+      "purpose": "combined-validation-only",
+      "requiredMergeGroupEvent": true,
+      "reviewBypass": false
+    },
     "finalAudit": {
       "modelSource": "runtime",
       "minimumReasoning": "ultra",

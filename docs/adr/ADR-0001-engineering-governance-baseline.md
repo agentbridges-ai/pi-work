@@ -1,20 +1,37 @@
----
-owner: Misakago
-status: accepted
-last_reviewed: 2026-08-04
-review_cycle_days: 90
----
+# ADR-0001: Engineering governance baseline
 
-# ADR-0001：工程治理基线
+- Status: accepted
+- Review cycle: 90 days
+- Owner: maintainers
 
 ## Context
 
-Piwork 由 Leader/Owner、约五人的 Core Team 和社区贡献者共同维护；认证、隔离、原生 Pi 和 User Space 边界需要高于普通 UI/文档改动的审查强度。
+Piwork is a public local-first product with a native Pi runtime, Better Auth,
+Postgres, browser User Space, and external OnlyOffice assets. The repository
+needs strong security and release boundaries without turning contribution into
+a collection of bespoke documents or opaque automation.
 
 ## Decision
 
-普通改动需要一名 Core 审批；高风险改动需要两名 Core 审批和 Leader 参与。现有技术债使用机器化例外和 ratchet 管理，持续交付使用可审计的 Squash、SemVer 和 Release evidence。
+Use a small, English-first governance surface modeled on Pi:
+
+- Keep product and repository invariants in `AGENTS.md` and
+  `docs/engineering/README.md`.
+- Keep machine policy in `.governance/` and enforce it with focused scripts.
+- Use GitHub CODEOWNERS, ordinary and high-risk native review rules, signed
+  commits, required checks, and resolved conversations.
+- Keep workflows deterministic and read-only by default. A path-independent
+  job reports a no-op instead of disappearing.
+- Use isolated worktrees for concurrent development and GitHub milestones for
+  multi-PR delivery. Execution tasks return evidence; merge authority remains
+  with the repository maintainers.
+- Treat stacked pull requests as dependency metadata and Merge Queue as a
+  combined validation tool, never as an approval bypass.
 
 ## Consequences
 
-初期 Core 人数不足时高风险 PR 可能需要临时 PR-only bypass；该 bypass 必须有原因和短期跟踪项。后续核心成员通过 GitHub Team 增加，不修改每条 CODEOWNER。
+The public rules are shorter and role-based. Product-specific security checks,
+runtime canaries, release evidence, and deferred RFCs remain explicit because
+they protect real boundaries. A future change to authentication, isolation,
+runtime, migration, deployment, or release behavior must update the relevant
+machine policy and focused evidence in the same pull request.

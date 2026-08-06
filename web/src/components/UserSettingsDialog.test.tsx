@@ -133,11 +133,11 @@ vi.mock("../office-runtime-resources.js", () => ({
 const user: CurrentUser = {
   userId: "user-a",
   username: "login-handle",
-  displayName: "misaka",
+  displayName: "testuser",
   orgId: "org-a",
   orgName: "Org A",
   roles: [],
-  email: "misaka@example.com",
+  email: "testuser@example.com",
 };
 
 const archivedAt = Date.UTC(2026, 6, 15, 14, 5);
@@ -402,7 +402,7 @@ describe("UserSettingsDialog", () => {
   it("shows the display name as the single username field", () => {
     renderDialog("en-US");
 
-    expect(screen.getByText("misaka")).toBeInTheDocument();
+    expect(screen.getByText("testuser")).toBeInTheDocument();
     expect(screen.queryByText("login-handle")).not.toBeInTheDocument();
     expect(screen.getAllByText("Username")).toHaveLength(1);
     expect(screen.queryByText("Name")).not.toBeInTheDocument();

@@ -1,22 +1,22 @@
-## 改动
+## Summary
 
-<!-- 说明做了什么，以及为什么。 -->
+<!-- State the problem and the smallest useful change. -->
 
-## 风险与治理
+## Risk and scope
 
-- 风险等级：`ordinary` / `high-risk`
-- [ ] 认证、租户隔离、凭据、Pi RPC/SRT、User Space、协议、迁移、CI、发布或安全路径已按需链接 RFC/Runbook
-- [ ] 没有提交 `.env`、密钥、用户数据、录制或构建产物
-- [ ] 已更新相关文档、CHANGELOG 或 debt/RFC
+- Risk: `ordinary` / `high-risk`
+- [ ] I linked an ADR, RFC, issue, or runbook when required.
+- [ ] I did not add credentials, `.env` files, user data, recordings, or build output.
+- [ ] I checked the affected ownership, security, compatibility, and release boundaries.
 
-## 验证
+## Verification
 
-- 命令：
-- 结果：
-- [ ] i18n/a11y（如涉及 UI）
-- [ ] 迁移/回滚方式已说明（如适用）
+- Commands:
+- Results:
+- [ ] i18n/a11y checks passed when UI changed.
+- [ ] Migration and rollback impact is documented when applicable.
 
-## 发布
+## Release
 
-- [ ] 需要 release note
-- [ ] 不需要 release note（原因：）
+- [ ] This change needs a release note.
+- [ ] This change does not need a release note because:

@@ -7,8 +7,8 @@ CRITICAL_TESTS_FILE := scripts/critical-tests.txt
 COVERAGE_THRESHOLD ?= 80
 VERIFY_SRT ?= 1
 AUTH_CLI := npx --yes auth@1.6.20
-PI_UPSTREAM_DIR := docs/upstream/pi
 PI_UPSTREAM_REPO := https://github.com/earendil-works/pi.git
+PI_UPSTREAM_REF ?= main
 
 ifeq ($(VERIFY_SRT),1)
 VERIFY_SRT_TARGETS := test-pi-rpc-contract test-srt-isolation test-srt-pi test-srt-user-space-transport test-srt-user-space-ipc
@@ -54,7 +54,7 @@ help:
 	  '  make test-pi-rpc-contract Run the native Pi JSONL RPC contract probe and tests' \
 	  '  make test-srt-pi          Run real native Pi rpc-entry inside Linux SRT' \
 	  '  make verify-pi-versions   Verify exact Pi and MCP SDK dependency pins' \
-	  '  make verify-pi-upstream   Verify the pinned official Pi Git reference' \
+	  '  make verify-pi-upstream   Verify that the official Pi reference is reachable' \
 	  '  make verify-pi-only-runtime  Reject legacy Agent runtime surfaces' \
 	  '  make verify-actions-pinning  Reject mutable external GitHub Action references' \
 	  '  make verify-onlyoffice-release  Verify the pinned OnlyOffice descriptor' \
@@ -81,7 +81,6 @@ help:
 	  '  make backup               Create a locked Postgres + durable data backup' \
 	  '  make backup-verify BACKUP=/path  Verify a backup without restoring it' \
 	  '  make clean-runtime        Remove local runtime logs and pids' \
-	  '  make sync-pi-upstream     Update the official Pi Git reference from main' \
 	  '  make pi-reset-legacy-sessions  Dry-run the explicit legacy session reset' \
 	  '  make dev-reset-sessions-hard  Hard-delete local data/ session state'
 
@@ -227,10 +226,10 @@ verify-pi-versions:
 	node ./scripts/verify-native-pi-dependencies.mjs
 
 verify-pi-upstream:
-	@test -e "$(PI_UPSTREAM_DIR)/.git" || (echo 'Initialize the Pi docs reference with: git submodule update --init $(PI_UPSTREAM_DIR)' >&2; exit 1)
-	@test "$$(git -C "$(PI_UPSTREAM_DIR)" remote get-url origin)" = "$(PI_UPSTREAM_REPO)" || (echo 'Unexpected Pi upstream remote.' >&2; exit 1)
-	@test "$$(git -C "$(PI_UPSTREAM_DIR)" rev-parse HEAD)" = "$$(git rev-parse ":$(PI_UPSTREAM_DIR)")" || (echo 'Pi upstream checkout does not match the superproject gitlink.' >&2; exit 1)
-	@test -z "$$(git -C "$(PI_UPSTREAM_DIR)" status --porcelain)" || (echo 'Pi upstream checkout contains local changes.' >&2; exit 1)
+	@command -v git >/dev/null 2>&1 || (echo 'git is required to verify the Pi reference.' >&2; exit 1)
+	@commit="$$(git ls-remote --heads "$(PI_UPSTREAM_REPO)" "refs/heads/$(PI_UPSTREAM_REF)" | awk 'NR==1 {print $$1}')"; \
+	test -n "$$commit" || (echo 'Unable to resolve the official Pi reference.' >&2; exit 1); \
+	echo "Pi upstream $(PI_UPSTREAM_REF): $$commit"
 
 verify-pi-only-runtime:
 	./scripts/verify-pi-only-runtime.sh
@@ -312,7 +311,7 @@ landing-lint:
 build:
 	cd $(WEB_DIR) && bun run build
 
-.PHONY: backup backup-verify clean-runtime sync-pi-upstream pi-reset-legacy-sessions dev-reset-sessions-hard
+.PHONY: backup backup-verify clean-runtime pi-reset-legacy-sessions dev-reset-sessions-hard
 backup:
 	./scripts/backup-local.sh
 
@@ -345,9 +344,6 @@ backup-verify:
 
 clean-runtime:
 	rm -rf $(RUNTIME_DIR)
-
-sync-pi-upstream:
-	git submodule update --init --remote --checkout "$(PI_UPSTREAM_DIR)"
 
 pi-reset-legacy-sessions:
 	./scripts/pi-reset-legacy-sessions.sh
