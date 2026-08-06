@@ -8,6 +8,14 @@ updates:
     groups:
       patch-and-minor:
         update-types: [patch, minor]
+    ignore:
+      # Piwork's native Runtime and SRT surface is intentionally pinned as a
+      # coordinated compatibility set. Upgrade it only through an RFC and a
+      # focused canary, never as an unrelated Dependabot batch.
+      - dependency-name: "@anthropic-ai/sandbox-runtime"
+      - dependency-name: "@earendil-works/pi-ai"
+      - dependency-name: "@earendil-works/pi-coding-agent"
+      - dependency-name: "@modelcontextprotocol/sdk"
   - package-ecosystem: bun
     directory: /landing-page
     schedule:
