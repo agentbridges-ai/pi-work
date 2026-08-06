@@ -325,14 +325,17 @@ async function main() {
     console.log(`[governance-bootstrap-audit] ${eventName} audit has no PR scope`);
   }
 
-  if (!token) {
-    if (!offline) {
-      throw new Error(
-        "GITHUB_TOKEN is required for Ruleset readback; use --offline only for local fixtures",
-      );
-    }
+  // `GITHUB_TOKEN` is injected automatically on Actions runners. The explicit
+  // offline flag must therefore short-circuit before any remote read rather
+  // than merely treating a missing token as offline.
+  if (offline) {
     if (!local.ok) process.exitCode = 1;
     return;
+  }
+  if (!token) {
+    throw new Error(
+      "GITHUB_TOKEN is required for Ruleset readback; use --offline only for local fixtures",
+    );
   }
   const [rulesets, branchProtection, workflowPermissions] = await Promise.all([
     readRulesets(),
