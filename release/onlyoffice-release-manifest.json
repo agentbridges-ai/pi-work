@@ -11,34 +11,34 @@
     },
     "onlyoffice-browser": {
       "url": "https://github.com/agentbridges-ai/onlyoffice-browser.git",
-      "version": "0.5.16",
-      "commitSha": "15f3b21e7ed93a80541f935ee62d49e048c877a9"
+      "version": "0.5.17",
+      "commitSha": "0f7efb20ce59aac074a2d895f1bee04203455825"
     },
     "Piwork": {
       "url": "https://github.com/agentbridges-ai/pi-work.git",
       "version": "0.95.0",
-      "integrationBaseCommit": "f9dcacfaa013207f236b3d48331ca587a67d3721"
+      "integrationBaseCommit": "ba4aa2a1da8b044e763151b7f3c0155027bdfcc4"
     }
   },
   "npmPackage": {
     "name": "@agentbridges-ai/onlyoffice-browser",
-    "version": "0.5.16",
+    "version": "0.5.17",
     "publish": true,
-    "integrity": "sha512-e4RLHt6zHoo6zsvrRkGL7YjE1uDDRSZU4FPOor82da9RrPK2m+6PHpfhyzQsxgm/tWKmL8w7tVoHEUuvuM1Swg==",
-    "gitHead": "15f3b21e7ed93a80541f935ee62d49e048c877a9",
-    "sourceCommit": "15f3b21e7ed93a80541f935ee62d49e048c877a9"
+    "integrity": "sha512-stiOTaE2aLAUlRBjOSVtNEyerdLYuAq35/t4iXHoRkBbUWFvnIKNBmBl92a+a7vQOM0H4vatXPkoDCKDMPBQQQ==",
+    "gitHead": "0f7efb20ce59aac074a2d895f1bee04203455825",
+    "sourceCommit": "0f7efb20ce59aac074a2d895f1bee04203455825"
   },
   "runtimeIdentity": {
-    "packageVersion": "0.5.16",
-    "sourceCommit": "15f3b21e7ed93a80541f935ee62d49e048c877a9",
-    "hostBuildId": "office-host-0.5.16-r1",
-    "assetManifestDigest": "6d77aa327936e31853ae338bc0b371a9f1c2b230744cc8f24eca9dca04972182"
+    "packageVersion": "0.5.17",
+    "sourceCommit": "0f7efb20ce59aac074a2d895f1bee04203455825",
+    "hostBuildId": "office-host-0.5.17-r1",
+    "assetManifestDigest": "aa12e56b9c2cfa1c477c217cb9b8ca29573c9232f3e55327e7c40b05a66000ff"
   },
   "releaseManifest": {
     "version": 5,
-    "releaseId": "v0.5.16-c0b3221cbda4d204",
-    "sha256": "61f6e956867e831d9fa660ed0b368d680ec701b5a3f0d38407aa4e4fe6e8f248",
-    "hostBuildId": "f48817338bb2c2ba5b5fa41a6510a4cce8a1ac204619465d46ed7dfb884c38b0",
+    "releaseId": "v0.5.17-4b22c982521b03ae",
+    "sha256": "6ec90d66369ee2e32b6332f4a2168d77f833c25a8bf5f62c60b396ae137659a6",
+    "hostBuildId": "1ee4700aadd2b62c91029412e76a29d17b818863b627219969b270493606ffa4",
     "channel": "stable-v5"
   },
   "lifecycle": "candidate",
@@ -50,7 +50,7 @@
     {
       "repository": "Piwork",
       "path": "web/bun.lock",
-      "sha256": "285c2565372dccf44a081cce1ee125c663c956583d511f7d87490e0fbb800715"
+      "sha256": "7c504a7830794ace6a0293803d66d24ffb8180cd75236c01c86940f33320d347"
     },
     {
       "repository": "onlyoffice-browser",
@@ -63,19 +63,19 @@
       "repository": "onlyoffice-browser",
       "kind": "npm-proxy-api",
       "path": "dist/npm/public-api.js",
-      "sha256": "b90c4aa7a5053c31d21a399932aaa5349b8ad0d396df0a2ed555e2137d35c362"
+      "sha256": "45d8db898ed917717fd4dc7f0a1223c466329fb995c6c21d281d643c11f06a38"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "editor-host-bundle",
-      "path": "dist/assets/officeHost-v0.5.16-BSpUF93w.js",
-      "sha256": "33d848b2171990c73942607f1b85c743497fd63834f6577adfd95b285e68eeb2"
+      "path": "dist/assets/officeHost-v0.5.17-BIVO06mn.js",
+      "sha256": "2148ad3f051982781b90f77cb55371eac699eb1f9c6fc72c266f8b78b90bd6b1"
     },
     {
       "repository": "onlyoffice-browser",
       "kind": "compact-asset-manifest",
       "path": "dist/onlyoffice-runtime-assets.json",
-      "sha256": "6d77aa327936e31853ae338bc0b371a9f1c2b230744cc8f24eca9dca04972182"
+      "sha256": "aa12e56b9c2cfa1c477c217cb9b8ca29573c9232f3e55327e7c40b05a66000ff"
     },
     {
       "repository": "onlyoffice-browser",
